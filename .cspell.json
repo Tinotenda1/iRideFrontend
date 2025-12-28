@@ -1,0 +1,43 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "Chitungwiza",
+    "Mutare",
+    "Gweru",
+    "Epworth",
+    "Kwekwe",
+    "Kadoma",
+    "Masvingo",
+    "Chinhoyi",
+    "Marondera",
+    "Chegutu",
+    "Bindura",
+    "Zvishavane",
+    "Redcliffe",
+    "Rusape",
+    "Chiredzi",
+    "Beitbridge",
+    "Kariba",
+    "Karoi",
+    "Hwange",
+    "Gwanda",
+    "Shurugwi",
+    "Mazowe",
+    "Lupane",
+    "Plumtree",
+    "Murewa",
+    "Mutoko",
+    "Nyanga",
+    "Chimanimani",
+    "iRide"
+  ],
+  "ignoreWords": [],
+  "patterns": [
+    {
+      "name": "Markdown links",
+      "pattern": "\\([^)]*\\)",
+      "description": "Markdown links"
+    }
+  ]
+}
