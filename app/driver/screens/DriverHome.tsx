@@ -2,11 +2,35 @@
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  FlatList,
+  LayoutAnimation,
+  Platform,
+  StyleSheet,
+  Text,
+  UIManager,
+  View
+} from 'react-native';
+import RideRequestCard from '../components/RideRequestCard';
+
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 
 interface Props {
   online: boolean;
   isConnecting: boolean;
+
+  incomingRides?: any[]; // multiple rides
+  onRideAccept?: (ride: any) => void;
+  onRideDecline?: (ride: any) => void;
+  onRideSelect?: (ride: any) => void;
 }
 
 /* ---------------------------------------------
@@ -16,7 +40,14 @@ const PULSE_COUNT = 3;
 const PULSE_DURATION = 2500;
 const POINT_COUNT = 8;
 
-const DriverHome: React.FC<Props> = ({ online, isConnecting }) => {
+const DriverHome: React.FC<Props> = ({
+  online,
+  isConnecting,
+  incomingRides,
+  onRideAccept,
+  onRideDecline,
+  onRideSelect,
+}) => {
   /* ---------------------------------------------
    * Animation refs
    * ------------------------------------------- */
@@ -42,11 +73,9 @@ const DriverHome: React.FC<Props> = ({ online, isConnecting }) => {
    * Animation controller
    * ------------------------------------------- */
   useEffect(() => {
-    // Fully online → radar mode
     if (online && !isConnecting) {
       fadeAnim.setValue(0);
 
-      // Radar pulses
       pulseLoops.length = 0;
       pulses.forEach((pulse, index) => {
         const loop = Animated.loop(
@@ -69,7 +98,6 @@ const DriverHome: React.FC<Props> = ({ online, isConnecting }) => {
         loop.start();
       });
 
-      // Text breathing
       Animated.loop(
         Animated.sequence([
           Animated.timing(textAnim, {
@@ -85,7 +113,6 @@ const DriverHome: React.FC<Props> = ({ online, isConnecting }) => {
         ])
       ).start();
 
-      // Glowing points
       points.forEach((p) => {
         Animated.loop(
           Animated.sequence([
@@ -103,7 +130,6 @@ const DriverHome: React.FC<Props> = ({ online, isConnecting }) => {
         ).start();
       });
     } else {
-      // Connecting or Offline → stop animations
       pulseLoops.forEach((l) => l.stop());
       pulses.forEach((p) => p.setValue(0));
       textAnim.setValue(0);
@@ -116,6 +142,32 @@ const DriverHome: React.FC<Props> = ({ online, isConnecting }) => {
       }).start();
     }
   }, [online, isConnecting, fadeAnim, pulseLoops, points, pulses, textAnim]);
+
+  // ---------------------------------------------
+  // Smoothly animate incoming rides layout changes
+  // ---------------------------------------------
+  useEffect(() => {
+    if (incomingRides && incomingRides.length > 0) {
+      LayoutAnimation.configureNext({
+        duration: 500,
+        create: {
+          type: LayoutAnimation.Types.spring,
+          property: LayoutAnimation.Properties.scaleXY,
+          springDamping: 0.9,
+        },
+        update: {
+          type: LayoutAnimation.Types.spring,
+          springDamping: 0.9,
+        },
+        delete: {
+          type: LayoutAnimation.Types.linear,
+          property: LayoutAnimation.Properties.opacity,
+          duration: 200,
+        },
+      });
+    }
+  }, [incomingRides]);
+
 
   /* ---------------------------------------------
    * Render helpers
@@ -134,10 +186,7 @@ const DriverHome: React.FC<Props> = ({ online, isConnecting }) => {
       return (
         <Animated.View
           key={i}
-          style={[
-            styles.radarCircle,
-            { transform: [{ scale }], opacity },
-          ]}
+          style={[styles.radarCircle, { transform: [{ scale }], opacity }]}
         />
       );
     });
@@ -192,7 +241,7 @@ const DriverHome: React.FC<Props> = ({ online, isConnecting }) => {
   }
 
   /* ---------------------------------------------
-   * Radar (online)
+   * Radar + Incoming rides
    * ------------------------------------------- */
   return (
     <View style={styles.container}>
@@ -205,6 +254,32 @@ const DriverHome: React.FC<Props> = ({ online, isConnecting }) => {
       <Animated.View style={{ opacity: textOpacity }}>
         <Text style={styles.searchText}>Searching for riders…</Text>
       </Animated.View>
+
+      {/* ---------------------------------------------
+          Incoming Ride Requests (stack + scroll)
+      --------------------------------------------- */}
+      {incomingRides && incomingRides.length > 0 && (
+        <View style={styles.rideStackContainer}>
+          <FlatList
+            data={[...incomingRides].reverse()}
+            keyExtractor={(item) => item.rideId} // CRITICAL: Must be a unique ID
+            removeClippedSubviews={false} // Prevents "flashing" during layout shifts
+            renderItem={({ item }) => (
+              <View style={{ marginVertical: 5 }}> 
+                <RideRequestCard
+                  ride={item}
+                  onAccept={onRideAccept}
+                  onDecline={onRideDecline}
+                  onSelect={onRideSelect}
+                  onExpire={onRideDecline}
+                />
+              </View>
+            )}
+            contentContainerStyle={{ paddingVertical: 10, paddingBottom: 40 }}
+            showsVerticalScrollIndicator={false}
+          />
+        </View>
+      )}
     </View>
   );
 };
@@ -268,5 +343,13 @@ const styles = StyleSheet.create({
     marginTop: 40,
     fontSize: 22,
     fontWeight: '700',
+  },
+  rideStackContainer: {
+    position: 'absolute',
+    top: 0, // adjust to appear below radar
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 10,
   },
 });

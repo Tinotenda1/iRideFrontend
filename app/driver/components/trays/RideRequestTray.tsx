@@ -1,12 +1,14 @@
 // app/driver/components/trays/RideRequestTray.tsx
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
 import {
-    BackHandler,
-    Dimensions,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  BackHandler,
+  Dimensions,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { IRButton } from '../../../../components/IRButton';
 import { theme } from '../../../../constants/theme';
@@ -15,16 +17,19 @@ const { height: windowHeight } = Dimensions.get('window');
 const OPEN_HEIGHT = windowHeight * 0.9;
 
 interface RideInfo {
-  additionalInfo?: string;
-  pickup: { address: string; latitude: number; longitude: number; name?: string };
-  destination?: { address?: string; latitude?: number; longitude?: number; name?: string };
-  offer?: number;
-  paymentMethod?: string;
-  vehicleType?: string;
-  timestamp?: string;
   rideId?: string;
   passengerId?: string;
   passengerName?: string;
+  passengerPic?: string;
+  pickup: { address: string; latitude: number; longitude: number; name?: string };
+  destination?: { address?: string; latitude?: number; longitude?: number; name?: string };
+  offer?: number;
+  offerType?: string;
+  paymentMethod?: string;
+  vehicleType?: string;
+  distanceKm?: number;
+  additionalInfo?: string;
+  timestamp?: string;
 }
 
 interface Props {
@@ -41,7 +46,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(({ onClose, driver
   const [isOpen, setIsOpen] = useState(false);
   const [ride, setRide] = useState<RideInfo | null>(null);
 
-  // Handle close with useCallback to prevent infinite re-renders
+  // Handle close
   const handleClose = useCallback(() => {
     setIsOpen(false);
     setRide(null);
@@ -63,40 +68,41 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(({ onClose, driver
   // Expose open/close for parent
   useImperativeHandle(ref, () => ({
     open: (rideData: RideInfo) => {
-      console.log('[RideRequestTray] Opening with ride:', rideData, 'for driver:', driverId);
+      console.log('[RideRequestTray] Opening ride:', rideData, 'for driver:', driverId);
       setRide(rideData);
       setIsOpen(true);
     },
     close: () => handleClose(),
   }), [driverId, handleClose]);
 
-  const handleAccept = () => {
-    console.log('[RideRequestTray] Accepted ride:', ride, 'by driver:', driverId);
-    // Here you would typically make an API call to accept the ride
-    // For example: acceptRide(ride.rideId, driverId);
-    
-    // Show acceptance message
-    if (ride?.rideId) {
-      console.log(`Driver ${driverId} accepted ride ${ride.rideId}`);
-      // You can add API call here:
-      // await socketService.acceptRide(ride.rideId, driverId);
+  // Accept ride
+  const handleAccept = async () => {
+    if (!ride?.rideId) return;
+    try {
+      console.log(`[RideRequestTray] Accepting ride ${ride.rideId} by driver ${driverId}`);
+      //await acceptRideAPI(ride.rideId, driverId);
+      Alert.alert('Ride Accepted', `You accepted ride ${ride.rideId}`);
+    } catch (err) {
+      console.error('Error accepting ride:', err);
+      Alert.alert('Error', 'Failed to accept ride');
+    } finally {
+      handleClose();
     }
-    
-    handleClose();
   };
 
-  const handleDecline = () => {
-    console.log('[RideRequestTray] Declined ride:', ride, 'by driver:', driverId);
-    // Here you would typically make an API call to decline the ride
-    // For example: declineRide(ride.rideId, driverId);
-    
-    if (ride?.rideId) {
-      console.log(`Driver ${driverId} declined ride ${ride.rideId}`);
-      // You can add API call here:
-      // await socketService.declineRide(ride.rideId, driverId);
+  // Decline ride
+  const handleDecline = async () => {
+    if (!ride?.rideId) return;
+    try {
+      console.log(`[RideRequestTray] Declining ride ${ride.rideId} by driver ${driverId}`);
+      //await declineRideAPI(ride.rideId, driverId);
+      Alert.alert('Ride Declined', `You declined ride ${ride.rideId}`);
+    } catch (err) {
+      console.error('Error declining ride:', err);
+      Alert.alert('Error', 'Failed to decline ride');
+    } finally {
+      handleClose();
     }
-    
-    handleClose();
   };
 
   if (!isOpen || !ride) return null;
@@ -104,47 +110,43 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(({ onClose, driver
   return (
     <>
       {/* Backdrop */}
-      <TouchableOpacity
-        style={styles.backdrop}
-        activeOpacity={1}
-        onPress={handleClose}
-      />
+      <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={handleClose} />
 
       {/* Tray */}
       <View style={styles.container}>
         <Text style={styles.title}>New Ride Request</Text>
-        
+
+        {/* Passenger Info */}
+        {ride.passengerPic && (
+          <Image
+            source={{ uri: ride.passengerPic }}
+            style={styles.passengerPic}
+          />
+        )}
         {ride.passengerName && (
           <>
             <Text style={styles.fieldLabel}>Passenger:</Text>
             <Text style={styles.fieldValue}>{ride.passengerName}</Text>
           </>
         )}
-        
+
+        {/* Pickup */}
         <Text style={styles.fieldLabel}>Pickup:</Text>
         <Text style={styles.fieldValue}>
-          {ride.pickup.address || ride.pickup.name || 'Location not specified'}
+          {ride.pickup.address || ride.pickup.name || 'Not specified'}
         </Text>
 
-        <Text style={styles.fieldLabel}>Destination:</Text>
-        <Text style={styles.fieldValue}>
-          {ride.destination?.address || ride.destination?.name || 'Not specified'}
-        </Text>
-
-        {ride.offer && (
+        {/* Destination */}
+        {ride.destination && (
           <>
-            <Text style={styles.fieldLabel}>Offer:</Text>
-            <Text style={styles.fieldValue}>${ride.offer.toFixed(2)}</Text>
+            <Text style={styles.fieldLabel}>Destination:</Text>
+            <Text style={styles.fieldValue}>
+              {ride.destination.address || ride.destination.name || 'Not specified'}
+            </Text>
           </>
         )}
 
-        {ride.paymentMethod && (
-          <>
-            <Text style={styles.fieldLabel}>Payment Method:</Text>
-            <Text style={styles.fieldValue}>{ride.paymentMethod}</Text>
-          </>
-        )}
-
+        {/* Vehicle Type */}
         {ride.vehicleType && (
           <>
             <Text style={styles.fieldLabel}>Vehicle Type:</Text>
@@ -152,6 +154,39 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(({ onClose, driver
           </>
         )}
 
+        {/* Payment */}
+        {ride.paymentMethod && (
+          <>
+            <Text style={styles.fieldLabel}>Payment Method:</Text>
+            <Text style={styles.fieldValue}>{ride.paymentMethod}</Text>
+          </>
+        )}
+
+        {/* Offer */}
+        {ride.offer !== undefined && (
+          <>
+            <Text style={styles.fieldLabel}>Offer:</Text>
+            <Text style={styles.fieldValue}>${ride.offer.toFixed(2)}</Text>
+          </>
+        )}
+
+        {/* Offer Type */}
+        {ride.offerType !== undefined && (
+          <>
+            <Text style={styles.fieldLabel}>Offer Type:</Text>
+            <Text style={styles.fieldValue}>{ride.offerType}</Text>
+          </>
+        )}
+
+        {/* Distance */}
+        {ride.distanceKm !== undefined && (
+          <>
+            <Text style={styles.fieldLabel}>Distance:</Text>
+            <Text style={styles.fieldValue}>{ride.distanceKm.toFixed(2)} km</Text>
+          </>
+        )}
+
+        {/* Additional Info */}
         {ride.additionalInfo && (
           <>
             <Text style={styles.fieldLabel}>Additional Info:</Text>
@@ -159,20 +194,13 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(({ onClose, driver
           </>
         )}
 
+        {/* Buttons */}
         <View style={styles.buttonContainer}>
-          <IRButton 
-            title="Accept Ride" 
-            onPress={handleAccept} 
-            style={styles.acceptButton}
-          />
-          <IRButton
-            title="Decline"
-            onPress={handleDecline}
-            variant="secondary"
-            style={styles.declineButton}
-          />
+          <IRButton title="Accept Ride" onPress={handleAccept} style={styles.acceptButton} />
+          <IRButton title="Decline" onPress={handleDecline} variant="secondary" style={styles.declineButton} />
         </View>
-        
+
+        {/* Timestamp */}
         {ride.timestamp && (
           <Text style={styles.timestamp}>
             Requested: {new Date(ride.timestamp).toLocaleTimeString()}
@@ -188,13 +216,8 @@ export default RideRequestTray;
 
 const styles = StyleSheet.create({
   backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    zIndex: 998,
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 998,
   },
   container: {
     position: 'absolute',
@@ -202,44 +225,20 @@ const styles = StyleSheet.create({
     width: '100%',
     height: OPEN_HEIGHT,
     backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: 24, // Assuming theme.borderRadius.xl = 24
+    borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 16, // Assuming theme.spacing.md = 16
+    padding: 16,
     zIndex: 999,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-    color: theme.colors.text,
-    textAlign: 'center',
+    fontSize: 18, fontWeight: '700', marginBottom: 16,
+    color: theme.colors.text, textAlign: 'center',
   },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-    marginTop: 8, // theme.spacing.sm
-  },
-  fieldValue: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: theme.colors.text,
-    marginBottom: 8,
-  },
-  buttonContainer: {
-    marginTop: 24,
-    gap: 12,
-  },
-  acceptButton: {
-    marginBottom: 8,
-  },
-  declineButton: {
-    marginBottom: 8,
-  },
-  timestamp: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 16,
-  },
+  passengerPic: { width: 60, height: 60, borderRadius: 30, marginBottom: 12, alignSelf: 'center' },
+  fieldLabel: { fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary, marginTop: 8 },
+  fieldValue: { fontSize: 16, fontWeight: '500', color: theme.colors.text, marginBottom: 8 },
+  buttonContainer: { marginTop: 24, gap: 12 },
+  acceptButton: { marginBottom: 8 },
+  declineButton: { marginBottom: 8 },
+  timestamp: { fontSize: 12, color: theme.colors.textSecondary, textAlign: 'center', marginTop: 16 },
 });

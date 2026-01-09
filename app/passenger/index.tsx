@@ -1,8 +1,15 @@
-// app/passenger/index.tsx
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, TouchableOpacity, View } from 'react-native';
+import {
+  Animated,
+  AppState,
+  AppStateStatus,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+
 import MapContainer from '../../components/map/MapContainer';
 import Sidebar from '../../components/Sidebar';
 import NotificationsTab from '../../components/tabs/NotificationsTab';
@@ -13,12 +20,19 @@ import WalletTab from '../../components/tabs/WalletTab';
 import AdditionalInfoTray from '../../components/trays/AdditionalInfoTray';
 import InputTray from '../../components/trays/InputTray';
 
+// 🔌 Passenger Socket Service
+import {
+  connectPassenger,
+  disconnectPassenger,
+} from './socketConnectionUtility/passengerSocketService';
+
 const PassengerScreen: React.FC = () => {
   const trayRef = useRef<any>(null);
   const inputTrayRef = useRef<any>(null);
-  const infoTrayRef = useRef<any>(null);   // ⭐ NEW
+  const infoTrayRef = useRef<any>(null);
   const sidebarRef = useRef<any>(null);
 
+  const appState = useRef<AppStateStatus>(AppState.currentState);
 
   const [trayHeight, setTrayHeight] = useState(0);
   const [isTrayOpen, setIsTrayOpen] = useState(false);
@@ -28,16 +42,54 @@ const PassengerScreen: React.FC = () => {
 
   const searchCardBottomAnim = useRef(new Animated.Value(0)).current;
 
+  /* -------------------------------------------------
+   * AUTO-CONNECT PASSENGER SOCKET + APP STATE CONTROL
+   * ------------------------------------------------- */
   useEffect(() => {
-  setTimeout(() => {
-      trayRef.current?.openTrayFromOutside('ride');
-    }, 200); // small delay to ensure layout is ready
+    // 🔌 Connect passenger socket on app open
+    connectPassenger();
+
+    const subscription = AppState.addEventListener('change', nextState => {
+      const prevState = appState.current;
+      appState.current = nextState;
+
+      // ⏸️ App goes background
+      if (
+        prevState === 'active' &&
+        (nextState === 'inactive' || nextState === 'background')
+      ) {
+        console.log('📴 Passenger app backgrounded → disconnect socket');
+        disconnectPassenger();
+      }
+
+      // 🔄 App comes foreground
+      if (
+        (prevState === 'inactive' || prevState === 'background') &&
+        nextState === 'active'
+      ) {
+        console.log('📡 Passenger app foregrounded → reconnect socket');
+        connectPassenger();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      disconnectPassenger();
+    };
   }, []);
 
+  /* -------------------------------------------------
+   * OPEN DEFAULT TRAY ON LOAD
+   * ------------------------------------------------- */
+  useEffect(() => {
+    setTimeout(() => {
+      trayRef.current?.openTrayFromOutside('ride');
+    }, 200);
+  }, []);
 
-  // -------------------------
-  // Handle tray height changes
-  // -------------------------
+  /* -------------------------------------------------
+   * TRAY HEIGHT HANDLING
+   * ------------------------------------------------- */
   const handleTrayHeightChange = useCallback(
     (height: number) => {
       setTrayHeight(height);
@@ -62,11 +114,11 @@ const PassengerScreen: React.FC = () => {
   useEffect(() => {
     const initialClosedTrayHeight = 80;
     searchCardBottomAnim.setValue(initialClosedTrayHeight + 10);
-  }, []);
+  }, [searchCardBottomAnim]);
 
-  // -------------------------
-  // INPUT TRAY OPEN (Pickup/Destination)
-  // -------------------------
+  /* -------------------------------------------------
+   * INPUT TRAY (PICKUP / DESTINATION)
+   * ------------------------------------------------- */
   const handleLocationInputFocus = useCallback(
     (field: 'pickup' | 'destination') => {
       setActiveInputField(field);
@@ -75,17 +127,16 @@ const PassengerScreen: React.FC = () => {
     []
   );
 
-  // -------------------------
-  // INFO TRAY OPEN
-  // Called from inside RideTab (More Info button)
-  // -------------------------
+  /* -------------------------------------------------
+   * ADDITIONAL INFO TRAY
+   * ------------------------------------------------- */
   const openInfoTray = useCallback(() => {
-    infoTrayRef.current?.open();   // ⭐ Same method as input tray
+    infoTrayRef.current?.open();
   }, []);
 
-    return (
+  return (
     <View style={styles.container}>
-      {/* MAP + MENU BUTTON + OTHER CONTENT */}
+      {/* MAP + MENU */}
       <View style={styles.contentArea}>
         <MapContainer trayHeight={trayHeight} />
 
@@ -106,27 +157,26 @@ const PassengerScreen: React.FC = () => {
         onLocationInputFocus={handleLocationInputFocus}
         onOpenAdditionalInfo={openInfoTray}
       >
-        <RideTab id="ride" onOpenAdditionalInfo={openInfoTray} /> 
+        <RideTab id="ride" onOpenAdditionalInfo={openInfoTray} />
         <WalletTab id="wallet" />
         <RewardsTab id="rewards" />
         <NotificationsTab id="notifications" />
       </Tray>
 
       {/* INPUT TRAY */}
-      <InputTray ref={inputTrayRef} activeField={activeInputField} onClose={() => {}} />
-
-      {/* ADDITIONAL INFO TRAY */}
-     <AdditionalInfoTray
-        ref={infoTrayRef}
+      <InputTray
+        ref={inputTrayRef}
+        activeField={activeInputField}
         onClose={() => {}}
       />
 
+      {/* ADDITIONAL INFO TRAY */}
+      <AdditionalInfoTray ref={infoTrayRef} onClose={() => {}} />
 
-      {/* 🔥 SIDEBAR LAST TO ENSURE TOP LAYER */}
+      {/* SIDEBAR */}
       <Sidebar ref={sidebarRef} userType="passenger" />
     </View>
   );
-
 };
 
 export default PassengerScreen;
@@ -134,7 +184,7 @@ export default PassengerScreen;
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   contentArea: { flex: 1, backgroundColor: '#f5f5f5', overflow: 'hidden' },
-  
+
   menuButton: {
     position: 'absolute',
     top: 40,
@@ -142,13 +192,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 1)',
     padding: 8,
     borderRadius: theme.borderRadius.full,
-    zIndex: 99999,  // still below sidebar
+    zIndex: 99999,
   },
-
-  // Sidebar overlay handled inside Sidebar.tsx:
-  // Make sure it uses:
-  // zIndex: 1000000
-  // elevation: 1000000
-  // pointerEvents: isOpen ? 'auto' : 'none'
 });
-

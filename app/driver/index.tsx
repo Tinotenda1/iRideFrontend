@@ -23,12 +23,9 @@ import DriverNotifications from './screens/DriverNotifications';
 import DriverRevenue from './screens/DriverRevenue';
 
 /* ---------------------------------------------
- * Socket service (single source of truth)
+ * Socket service
  * ------------------------------------------- */
-import {
-  getDriverSocketStatus,
-  isDriverOnline,
-} from './socketConnectionUtility/driverSocketService';
+import { getDriverSocket, getDriverSocketStatus, isDriverOnline } from './socketConnectionUtility/driverSocketService';
 
 type Screen = 'home' | 'wallet' | 'revenue' | 'notifications';
 
@@ -48,15 +45,16 @@ const DriverDashboard: React.FC = () => {
   const [driverInfo, setDriverInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeScreen, setActiveScreen] = useState<Screen>('home');
+  const [incomingRides, setIncomingRides] = useState<any[]>([]); // allow multiple rides
 
   /* ---------------------------------------------
-   * Socket-derived UI state (READ ONLY)
+   * Socket-derived UI state
    * ------------------------------------------- */
   const [online, setOnline] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
 
   /* ---------------------------------------------
-   * Load driver info (once)
+   * Load driver info
    * ------------------------------------------- */
   useEffect(() => {
     const loadDriver = async () => {
@@ -82,18 +80,63 @@ const DriverDashboard: React.FC = () => {
   }, [router]);
 
   /* ---------------------------------------------
-   * Observe socket status (simple & safe polling)
+   * Observe socket status
    * ------------------------------------------- */
   useEffect(() => {
     const interval = setInterval(() => {
       const status = getDriverSocketStatus();
-
       setOnline(isDriverOnline());
       setIsConnecting(status === 'connecting' || status === 'reconnecting');
-    }, 500); // lightweight polling, UI-only
+    }, 500);
 
     return () => clearInterval(interval);
   }, []);
+
+  /* ---------------------------------------------
+   * Socket event handlers
+   * ------------------------------------------- */
+  useEffect(() => {
+    const socket = getDriverSocket();
+    if (!socket) {
+      console.log("[Dashboard] Socket not ready");
+      return;
+    }
+
+    console.log("[Dashboard] Attaching 'ride:new_request' listener");
+
+    const handleRideRequest = (rideData: any) => {
+      console.log('🚨 [SOCKET EVENT] ride:new_request received:', rideData);
+      if (rideData) {
+        setIncomingRides((prev) => [...prev, rideData]);
+        //rideTrayRef.current?.open(rideData);
+      }
+    };
+
+    socket.on('ride:new_request', handleRideRequest);
+
+    return () => {
+      console.log("[Dashboard] Removing 'ride:new_request' listener");
+      socket.off('ride:new_request', handleRideRequest);
+    };
+  }, [online, driverInfo]);
+
+  /* ---------------------------------------------
+   * Ride request handlers
+   * ------------------------------------------- */
+  const handleAccept = (ride: any) => {
+    console.log('Ride accepted:', ride);
+    setIncomingRides((prev) => prev.filter(r => r.rideId !== ride.rideId));
+  };
+
+  const handleDecline = (ride: any) => {
+    console.log('Ride declined:', ride);
+    setIncomingRides((prev) => prev.filter(r => r.rideId !== ride.rideId));
+  };
+
+  const handleSelect = (ride: any) => {
+    console.log('Ride selected:', ride);
+    rideTrayRef.current?.open(ride);
+  };
 
   /* ---------------------------------------------
    * Screen renderer
@@ -115,6 +158,10 @@ const DriverDashboard: React.FC = () => {
           <DriverHome
             online={online}
             isConnecting={isConnecting}
+            incomingRides={incomingRides}
+            onRideAccept={handleAccept}
+            onRideDecline={handleDecline}
+            onRideSelect={handleSelect}
           />
         );
     }
@@ -132,9 +179,6 @@ const DriverDashboard: React.FC = () => {
     );
   }
 
-  /* ---------------------------------------------
-   * Driver not found
-   * ------------------------------------------- */
   if (!driverInfo) {
     return (
       <View style={styles.center}>
@@ -155,7 +199,6 @@ const DriverDashboard: React.FC = () => {
       <DriverHeader
         onMenuPress={() => sidebarRef.current?.open()}
         onOpenSettings={() => settingsTrayRef.current?.open()}
-        /* Header controls socket, dashboard only reflects state */
         setOnline={setOnline}
         setIsConnecting={setIsConnecting}
       />
@@ -170,19 +213,13 @@ const DriverDashboard: React.FC = () => {
         onClose={() => {}}
       />
 
-      <DriverFooterNav
-        active={activeScreen}
-        onChange={setActiveScreen}
-      />
+      <DriverFooterNav active={activeScreen} onChange={setActiveScreen} />
     </View>
   );
 };
 
 export default DriverDashboard;
 
-/* ---------------------------------------------
- * Styles
- * ------------------------------------------- */
 const styles = StyleSheet.create({
   container: {
     flex: 1,

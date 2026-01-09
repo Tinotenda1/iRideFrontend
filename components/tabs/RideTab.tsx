@@ -53,7 +53,12 @@ const rideTypes = [
 
   // ⭐ Auto-set current location ONCE
   useEffect(() => {
-    (async () => {
+    let mounted = true;
+
+    const setInitialLocation = async () => {
+      // ✅ Guard: do nothing if pickup already set
+      if (rideData.pickupLocation) return;
+
       setLoadingCurrentLocation(true);
 
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -65,6 +70,8 @@ const rideTypes = [
 
       try {
         const current = await Location.getCurrentPositionAsync({});
+        if (!mounted) return;
+
         const place: Place = {
           id: 'current',
           name: 'Here',
@@ -76,12 +83,20 @@ const rideTypes = [
         updateRideData({ pickupLocation: place });
         setPickupText('Here');
       } catch (error) {
+        console.error('❌ Error getting current location:', error);
         setPickupText('Unable to get location');
       } finally {
         setLoadingCurrentLocation(false);
       }
-    })();
-  }, []);
+    };
+
+    setInitialLocation();
+
+    return () => {
+      mounted = false;
+    };
+  }, []); // ✅ EMPTY DEP ARRAY
+
 
   const handleFindRides = () => {
     submitRideBooking();

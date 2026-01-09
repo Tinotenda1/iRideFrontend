@@ -10,8 +10,6 @@ import { api } from "../../utils/api";
 import { ROUTES } from "../../utils/routes";
 import { createUserInfoFromResponse, getOrCreateDeviceId, storeAuthToken, storeUserInfo } from "../../utils/storage";
 import { createStyles, typedTypography } from "../../utils/styles";
- 
-
 
 export default function Verify() {
   const router = useRouter();
@@ -40,30 +38,32 @@ export default function Verify() {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  // ✅ Verify OTP
   const verifyOTP = async (code: string) => {
     if (!code || code.length !== 6) return;
+
     setIsVerifying(true);
+
     try {
       const deviceId = await getOrCreateDeviceId();
-      const response = await api.post("/auth/verify", { phone, code, deviceId });
-      const { token, user, nextStep } = response.data;
+
+      const { data } = await api.post("/auth/verify", { phone, code, deviceId });
+      const { token, user, nextStep } = data;
 
       if (!token) throw new Error("No authentication token received");
 
-      // Store auth token
+      // Store token & user info
       await storeAuthToken(token);
-
-      // Create user info
       const userInfo = createUserInfoFromResponse(user, phone);
 
-      // Add userId and phone explicitly to local storage
-      await storeUserInfo({ 
-        ...userInfo, 
-        deviceId, 
-        id: user.id || user._id,  // make sure you save the backend id
-        phone: phone                  // store the phone locally too
+      await storeUserInfo({
+        ...userInfo,
+        deviceId,
+        id: user.id || user._id,
+        phone,
       });
 
+      // Navigate to next step
       if (nextStep === "dashboard" || user?.profileCompleted) {
         const userType = user?.userType || userInfo.userType;
         router.replace(userType === "driver" ? ROUTES.DRIVER.HOME : ROUTES.PASSENGER.HOME);
@@ -71,26 +71,27 @@ export default function Verify() {
         router.replace(ROUTES.ONBOARDING.WELCOME);
       }
     } catch (error: any) {
-      let errorMessage = error?.response?.data?.message || error?.message || "Invalid verification code";
-      Alert.alert("Verification Failed", errorMessage);
-      setOtpResetKey((prev) => prev + 1);
+      const message = error?.response?.data?.message || error?.message || "Invalid verification code";
+      Alert.alert("Verification Failed", message);
+      setOtpResetKey(prev => prev + 1); // reset OTP input
     } finally {
       setIsVerifying(false);
     }
   };
 
-
+  // ✅ Resend OTP
   const handleResendCode = async () => {
     if (!canResend || !phone || !method) return;
+
     try {
       await api.post("/auth/request-code", { phone, method });
       setTimeLeft(60);
       setCanResend(false);
-      setOtpResetKey((prev) => prev + 1);
+      setOtpResetKey(prev => prev + 1);
       Alert.alert("Success", "Verification code has been resent.");
     } catch (error: any) {
-      const errorMessage = error?.response?.data?.message || error?.message || "Failed to resend code.";
-      Alert.alert("Error", errorMessage);
+      const message = error?.response?.data?.message || error?.message || "Failed to resend code.";
+      Alert.alert("Error", message);
     }
   };
 
@@ -104,17 +105,25 @@ export default function Verify() {
           />
 
           <OTPInput key={otpResetKey} length={6} onComplete={verifyOTP} autoFocus resetKey={otpResetKey} />
+
           {isVerifying && (
             <View style={{ alignItems: "center", marginVertical: theme.spacing.lg }}>
               <ActivityIndicator size="large" color={theme.colors.primary} />
               <Text style={{ marginTop: 8, color: theme.colors.textSecondary }}>Verifying...</Text>
             </View>
           )}
+
           <View style={styles.timerContainer}>
             {!canResend ? (
               <Text style={styles.timerText}>Resend code in {formatTime(timeLeft)}</Text>
             ) : (
-              <IRButton title="Send another code" onPress={handleResendCode} variant="outline" size="sm" fullWidth={false} />
+              <IRButton
+                title="Send another code"
+                onPress={handleResendCode}
+                variant="outline"
+                size="sm"
+                fullWidth={false}
+              />
             )}
           </View>
         </ScrollView>

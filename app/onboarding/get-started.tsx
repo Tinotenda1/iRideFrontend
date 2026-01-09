@@ -19,38 +19,32 @@ import { createStyles, typedTypography } from "../../utils/styles";
 
 export default function GetStarted() {
   const router = useRouter();
-
   const [phoneNumber, setPhoneNumber] = useState("");
   const [countryCode, setCountryCode] = useState("+263");
   const [loading, setLoading] = useState<"whatsapp" | "sms" | null>(null);
 
-  const handleVerify = async (method: "sms" | "whatsapp"): Promise<void> => {
+  const handleVerify = async (method: "sms" | "whatsapp") => {
     if (!phoneNumber.trim()) {
       Alert.alert("Error", "Please enter your phone number");
       return;
     }
 
     const cleanPhone = `${countryCode}${phoneNumber.replace(/\s/g, "")}`;
-
     setLoading(method);
 
     try {
       await api.post("/auth/request-code", {
         phone: cleanPhone,
-        method: method,
+        method,
       });
 
       router.push(
-        `/onboarding/verify?phone=${encodeURIComponent(
-          cleanPhone
-        )}&method=${method}`
+        `/onboarding/verify?phone=${encodeURIComponent(cleanPhone)}&method=${method}`
       );
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to send verification code.";
-      Alert.alert("Error", errorMessage);
+    } catch (error: any) {
+      const message =
+        error.response?.data?.message || error.message || "Failed to send verification code.";
+      Alert.alert("Error", message);
     } finally {
       setLoading(null);
     }
@@ -58,7 +52,6 @@ export default function GetStarted() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* KEYBOARD HANDLER ADDED */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -68,7 +61,6 @@ export default function GetStarted() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Get started with iRide</Text>
             <Text style={styles.subtitle}>
@@ -76,7 +68,6 @@ export default function GetStarted() {
             </Text>
           </View>
 
-          {/* Phone Input */}
           <View style={styles.inputContainer}>
             <PhoneInput
               value={phoneNumber}
@@ -87,44 +78,28 @@ export default function GetStarted() {
           </View>
         </ScrollView>
 
-        {/* NEW: STICKY BOTTOM BUTTONS */}
         <View style={{ padding: theme.spacing.lg }}>
           <IRButton
             title="Verify Using WhatsApp"
             onPress={() => handleVerify("whatsapp")}
             variant="primary"
             loading={loading === "whatsapp"}
-            disabled={loading !== null}
-            leftIcon={
-              <Ionicons
-                name="logo-whatsapp"
-                size={22}
-                color={theme.colors.surface}
-              />
-            }
+            disabled={!!loading}
+            leftIcon={<Ionicons name="logo-whatsapp" size={22} color={theme.colors.surface} />}
             fullWidth
           />
-
           <View style={{ height: theme.spacing.md }} />
-
           <IRButton
             title="Verify Using SMS"
             onPress={() => handleVerify("sms")}
             variant="secondary"
             loading={loading === "sms"}
-            disabled={loading !== null}
-            leftIcon={
-              <Ionicons
-                name="paper-plane"
-                size={22}
-                color={theme.colors.surface}
-              />
-            }
+            disabled={!!loading}
+            leftIcon={<Ionicons name="paper-plane" size={22} color={theme.colors.surface} />}
             fullWidth
           />
         </View>
 
-        {/* Disclaimer */}
         <View style={styles.disclaimerContainer}>
           <Text style={styles.disclaimerText}>
             By continuing, you agree to iRide{"'"}s{" "}
@@ -138,51 +113,13 @@ export default function GetStarted() {
 }
 
 const styles = createStyles({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: theme.spacing.lg,
-    paddingTop: theme.spacing.xxl,
-  },
-  header: {
-    marginBottom: theme.spacing.xl,
-    alignItems: "center",
-  },
-  title: {
-    ...typedTypography.h1,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-    textAlign: "center",
-  },
-  subtitle: {
-    ...typedTypography.body,
-    color: theme.colors.textSecondary,
-    textAlign: "center",
-  },
-  inputContainer: {
-    marginBottom: theme.spacing.xl,
-    boarderRadius: theme.borderRadius.full,
-  },
-  buttonContainer: {
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-  },
-  disclaimerContainer: {
-    marginTop: "auto",
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.lg,
-  },
-  disclaimerText: {
-    ...typedTypography.caption,
-    color: theme.colors.textSecondary,
-    textAlign: "center",
-    lineHeight: 18,
-  },
-  disclaimerLink: {
-    color: theme.colors.primary,
-    fontWeight: "700",
-  },
+  container: { flex: 1, backgroundColor: theme.colors.background },
+  scrollContent: { flexGrow: 1, padding: theme.spacing.lg, paddingTop: theme.spacing.xxl },
+  header: { marginBottom: theme.spacing.xl, alignItems: "center" },
+  title: { ...typedTypography.h1, color: theme.colors.text, marginBottom: theme.spacing.sm, textAlign: "center" },
+  subtitle: { ...typedTypography.body, color: theme.colors.textSecondary, textAlign: "center" },
+  inputContainer: { marginBottom: theme.spacing.xl },
+  disclaimerContainer: { marginTop: "auto", paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.lg },
+  disclaimerText: { ...typedTypography.caption, color: theme.colors.textSecondary, textAlign: "center", lineHeight: 18 },
+  disclaimerLink: { color: theme.colors.primary, fontWeight: "700" },
 });
