@@ -1,4 +1,3 @@
-// app/driver/index.tsx
 import { theme } from '@/constants/theme';
 import { getUserInfo } from '@/utils/storage';
 import { useRouter } from 'expo-router';
@@ -23,9 +22,14 @@ import DriverNotifications from './screens/DriverNotifications';
 import DriverRevenue from './screens/DriverRevenue';
 
 /* ---------------------------------------------
- * Socket service
+ * Socket service (CORRECTED API)
  * ------------------------------------------- */
-import { getDriverSocket, getDriverSocketStatus, isDriverOnline } from './socketConnectionUtility/driverSocketService';
+import {
+  disconnectDriver,
+  getDriverSocket,
+  getDriverSocketStatus,
+  isDriverOnline
+} from './socketConnectionUtility/driverSocketService';
 
 type Screen = 'home' | 'wallet' | 'revenue' | 'notifications';
 
@@ -45,7 +49,7 @@ const DriverDashboard: React.FC = () => {
   const [driverInfo, setDriverInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeScreen, setActiveScreen] = useState<Screen>('home');
-  const [incomingRides, setIncomingRides] = useState<any[]>([]); // allow multiple rides
+  const [incomingRides, setIncomingRides] = useState<any[]>([]);
 
   /* ---------------------------------------------
    * Socket-derived UI state
@@ -80,6 +84,21 @@ const DriverDashboard: React.FC = () => {
   }, [router]);
 
   /* ---------------------------------------------
+   * CONNECT SOCKET ON MOUNT
+   * ------------------------------------------- */
+  useEffect(() => {
+    if (!driverInfo) return;
+
+    //console.log('[Dashboard] Connecting driver socket...');
+    //connectDriver();
+
+    return () => {
+      console.log('[Dashboard] Disconnecting driver socket...');
+      disconnectDriver();
+    };
+  }, [driverInfo]);
+
+  /* ---------------------------------------------
    * Observe socket status
    * ------------------------------------------- */
   useEffect(() => {
@@ -96,46 +115,52 @@ const DriverDashboard: React.FC = () => {
    * Socket event handlers
    * ------------------------------------------- */
   useEffect(() => {
+    if (!online) return;
+
     const socket = getDriverSocket();
     if (!socket) {
-      console.log("[Dashboard] Socket not ready");
+      console.log('[Dashboard] Socket not ready yet');
       return;
     }
 
-    console.log("[Dashboard] Attaching 'ride:new_request' listener");
+    console.log('[Dashboard] Listening for ride:new_request');
 
     const handleRideRequest = (rideData: any) => {
-      console.log('🚨 [SOCKET EVENT] ride:new_request received:', rideData);
-      if (rideData) {
-        setIncomingRides((prev) => [...prev, rideData]);
-        //rideTrayRef.current?.open(rideData);
-      }
+      console.log('🚨 [SOCKET] ride:new_request:', rideData);
+      setIncomingRides(prev => [...prev, rideData]);
     };
 
     socket.on('ride:new_request', handleRideRequest);
 
     return () => {
-      console.log("[Dashboard] Removing 'ride:new_request' listener");
       socket.off('ride:new_request', handleRideRequest);
     };
-  }, [online, driverInfo]);
+  }, [online]);
 
   /* ---------------------------------------------
-   * Ride request handlers
+   * Ride handlers
    * ------------------------------------------- */
   const handleAccept = (ride: any) => {
-    console.log('Ride accepted:', ride);
-    setIncomingRides((prev) => prev.filter(r => r.rideId !== ride.rideId));
+    setIncomingRides(prev =>
+      prev.filter(r => r.rideId !== ride.rideId)
+    );
   };
 
   const handleDecline = (ride: any) => {
     console.log('Ride declined:', ride);
-    setIncomingRides((prev) => prev.filter(r => r.rideId !== ride.rideId));
+    setIncomingRides(prev =>
+      prev.filter(r => r.rideId !== ride.rideId)
+    );
   };
 
-  const handleSelect = (ride: any) => {
-    console.log('Ride selected:', ride);
-    rideTrayRef.current?.open(ride);
+  /**
+   * ⚡ Card → Tray sync handler
+   */
+  const handleSelect = (ride: any, progress: number, msLeft: number) => {
+    console.log(
+      `[Dashboard] Opening tray for ${ride.rideId} | progress=${progress} | msLeft=${msLeft}`
+    );
+    rideTrayRef.current?.open(ride, progress, msLeft);
   };
 
   /* ---------------------------------------------
@@ -213,7 +238,10 @@ const DriverDashboard: React.FC = () => {
         onClose={() => {}}
       />
 
-      <DriverFooterNav active={activeScreen} onChange={setActiveScreen} />
+      <DriverFooterNav
+        active={activeScreen}
+        onChange={setActiveScreen}
+      />
     </View>
   );
 };
@@ -227,7 +255,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.background || '#f8fafc',
   },
   center: {
     flex: 1,
@@ -238,11 +266,11 @@ const styles = StyleSheet.create({
   subText: {
     marginTop: 12,
     fontSize: 15,
-    color: theme.colors.textSecondary,
+    color: theme.colors.textSecondary || '#64748b',
   },
   errorText: {
     fontSize: 16,
-    color: theme.colors.error,
+    color: theme.colors.error || '#ef4444',
     textAlign: 'center',
     paddingHorizontal: 20,
   },

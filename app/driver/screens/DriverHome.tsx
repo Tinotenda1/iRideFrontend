@@ -30,7 +30,7 @@ interface Props {
   incomingRides?: any[]; // multiple rides
   onRideAccept?: (ride: any) => void;
   onRideDecline?: (ride: any) => void;
-  onRideSelect?: (ride: any) => void;
+  onRideSelect: (ride: any, progress: number, msLeft: number) => void;
 }
 
 /* ---------------------------------------------
@@ -268,8 +268,6 @@ const DriverHome: React.FC<Props> = ({
               <View style={{ marginVertical: 5 }}> 
                 <RideRequestCard
                   ride={item}
-                  onAccept={onRideAccept}
-                  onDecline={onRideDecline}
                   onSelect={onRideSelect}
                   onExpire={onRideDecline}
                 />

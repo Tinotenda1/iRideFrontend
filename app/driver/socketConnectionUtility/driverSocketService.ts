@@ -1,5 +1,5 @@
 /**
- * DRIVER SOCKET SERVICE - DEBUGGED
+ * DRIVER SOCKET SERVICE – BACKEND ALIGNED & HARDENED
  */
 
 import { disconnectSocket, initializeSocket } from "@/utils/sockets";
@@ -27,14 +27,12 @@ let shouldStayOnline = false;
 
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let locationTimer: ReturnType<typeof setInterval> | null = null;
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 /* ---------------------------------------------
  * Config
  * ------------------------------------------- */
 const LOCATION_INTERVAL = 3000;
 const HEARTBEAT_INTERVAL = 10000;
-const RECONNECT_DELAY = 5000;
 
 /* ---------------------------------------------
  * Helpers
@@ -45,69 +43,54 @@ const setStatus = (s: DriverSocketStatus) => {
 };
 
 const clearTimers = () => {
-  heartbeatTimer && clearInterval(heartbeatTimer);
-  locationTimer && clearInterval(locationTimer);
-  reconnectTimer && clearTimeout(reconnectTimer);
-
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  if (locationTimer) clearInterval(locationTimer);
   heartbeatTimer = null;
   locationTimer = null;
-  reconnectTimer = null;
 };
 
 const isNetworkOnline = async () => {
   const state = await Network.getNetworkStateAsync();
-  console.log("🌐 Network state:", state);
   return state.isConnected === true;
 };
 
 /* ---------------------------------------------
- * Heartbeat
+ * Heartbeat (MATCHES BACKEND)
  * ------------------------------------------- */
 const startHeartbeat = () => {
   stopHeartbeat();
-  console.log("💓 Starting heartbeat...");
+
   heartbeatTimer = setInterval(() => {
-    if (!socket || !socket.connected) {
-      console.warn("⚠️ Heartbeat skipped - socket not connected");
-      return;
-    }
-    try {
-      console.log("💓 Sending heartbeat ping");
-      socket.emit("heartbeat:ping", Date.now());
-    } catch (err) {
-      console.warn("⚠️ Heartbeat emit failed", err);
-    }
+    if (!socket?.connected) return;
+    socket.emit("user:ping");
   }, HEARTBEAT_INTERVAL);
 };
 
 const stopHeartbeat = () => {
-  heartbeatTimer && clearInterval(heartbeatTimer);
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = null;
 };
 
 /* ---------------------------------------------
- * Location Updates
+ * Location Updates (BACKEND MATCH)
  * ------------------------------------------- */
 const startLocationUpdates = () => {
   stopLocationUpdates();
-  console.log("📍 Starting location updates...");
+
   locationTimer = setInterval(async () => {
-    if (!socket || !socket.connected) {
+    const s = socket; // capture current socket
+    if (!s || !s.connected) {
       console.warn("⚠️ Location update skipped - socket not connected");
       return;
     }
 
     const result = await getDriverLocation();
-    if (!result.success) {
-      console.warn(`📍 Location fetch failed: ${result.error} - ${result.message}`);
-      return;
-    }
+    if (!result.success) return;
 
     const loc = result.location;
-    console.log(`📍 Location update: ${loc.latitude}, ${loc.longitude}`);
 
     try {
-      socket.emit("driver:location_update", {
+      s.emit("driver:location_update", {
         latitude: loc.latitude,
         longitude: loc.longitude,
         accuracy: loc.accuracy,
@@ -118,142 +101,95 @@ const startLocationUpdates = () => {
     } catch (err) {
       console.warn("⚠️ Location emit failed", err);
     }
+    console.log("📍 Driver location sent:", loc.latitude, loc.longitude, loc.speed, loc.heading, loc.accuracy);
   }, LOCATION_INTERVAL);
 };
 
+
 const stopLocationUpdates = () => {
-  locationTimer && clearInterval(locationTimer);
+  if (locationTimer) clearInterval(locationTimer);
   locationTimer = null;
 };
 
 /* ---------------------------------------------
- * Reconnection
- * ------------------------------------------- */
-const attemptReconnect = async () => {
-  if (reconnectTimer || !shouldStayOnline) return;
-  console.log("🔄 Attempting reconnect...");
-
-  const online = await isNetworkOnline();
-  if (!online) {
-    console.warn("🚫 Cannot reconnect - no network");
-    return;
-  }
-
-  setStatus("reconnecting");
-
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    console.log("🔄 Reconnecting now...");
-    connectDriver();
-  }, RECONNECT_DELAY);
-};
-
-const handleDisconnect = (reason: string) => {
-  console.warn("⚠️ Driver socket disconnected:", reason);
-
-  stopHeartbeat();
-  stopLocationUpdates();
-
-  if (!shouldStayOnline) {
-    setStatus("offline");
-    return;
-  }
-
-  attemptReconnect();
-};
-
-/* ---------------------------------------------
- * Public API
+ * Connect Driver (RACE SAFE)
  * ------------------------------------------- */
 export const connectDriver = async () => {
-  console.log("🚀 connectDriver called");
-
-  if (status === "connected" || status === "connecting") {
-    console.log("⚠️ Already connected or connecting, skipping...");
-    return;
-  }
+  if (status === "connected" || status === "connecting") return;
 
   const online = await isNetworkOnline();
   if (!online) {
-    console.warn("🚫 No network — cannot connect");
     setStatus("error");
     return;
   }
 
+  socket = initializeSocket();
   shouldStayOnline = true;
   setStatus("connecting");
 
   const user = await getUserInfo();
   const phone = user?.phone?.replace(/\D/g, "");
-  console.log("📱 User phone:", phone);
 
   const locationResult = await getDriverLocation();
   if (!phone || !locationResult.success) {
-    console.warn(`📍 Initial location failed: ${locationResult.success ? 'No phone' : locationResult.error}`);
     setStatus("error");
     return;
   }
 
-  const location = locationResult.location;
-  console.log(`📍 Initial location: ${location.latitude}, ${location.longitude}`);
+  const { latitude, longitude } = locationResult.location;
 
-  socket = initializeSocket();
+  /* ---------------------------------------------
+   * Register listeners BEFORE connect
+   * ------------------------------------------- */
+  socket.removeAllListeners();
 
   socket.on("connect", () => {
-    console.log("🔗 Socket connected, emitting user:connect...");
+    console.log("🔗 Connected → user:connect");
+
     socket?.emit("user:connect", {
       phone,
       userType: "driver",
-      location: {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        accuracy: location.accuracy,
-        timestamp: location.timestamp,
-      },
+      location: { latitude, longitude },
     });
   });
 
-  socket.on("user:connected", (data) => {
-    console.log("✅ user:connected received:", data);
+  socket.on("user:connected", () => {
+    console.log("✅ Driver authenticated");
     setStatus("connected");
     startHeartbeat();
     startLocationUpdates();
   });
 
-  socket.on("disconnect", handleDisconnect);
-  socket.on("connect_error", (err) => {
-    console.error("❌ connect_error:", err);
-    handleDisconnect("connect_error");
+  socket.on("disconnect", () => {
+    stopHeartbeat();
+    stopLocationUpdates();
+
+    if (shouldStayOnline) {
+      setStatus("reconnecting");
+      socket?.connect();
+    } else {
+      setStatus("offline");
+    }
   });
+
+  socket.on("connect_error", (err) => {
+    console.error("❌ Socket error:", err.message);
+    setStatus("error");
+  });
+
+  socket.connect();
 };
 
-/**
- * Return the current active driver socket instance
- * @returns {Socket | null} - connected socket or null
- */
-export const getDriverSocket = (): Socket | null => {
-  if (socket && socket.connected) {
-    return socket;
-  }
-  console.warn("⚠️ getDriverSocket: No active socket or socket not connected");
-  return null;
-};
-
-/* ------------------------------------------- 
-* Disconnect driver socket
-* --------------------------------------------- */
+/* ---------------------------------------------
+ * Disconnect Driver
+ * ------------------------------------------- */
 export const disconnectDriver = () => {
-  console.log("🛑 disconnectDriver called");
   shouldStayOnline = false;
   clearTimers();
 
   if (socket) {
-    try {
-      socket.removeAllListeners();
-      socket.disconnect();
-    } catch (err) {
-      console.warn("⚠️ Socket disconnect error", err);
-    }
+    socket.removeAllListeners();
+    socket.disconnect();
     socket = null;
   }
 
@@ -261,5 +197,29 @@ export const disconnectDriver = () => {
   setStatus("offline");
 };
 
+/* ---------------------------------------------
+ * Driver Ride Response
+ * ------------------------------------------- */
+export const handleDriverResponse = (
+  rideId: string,
+  driverId: string,
+  currentOffer: number,
+  responseType: "accept" | "counter"
+) => {
+  if (!socket || !socket.connected) return;
+
+  socket.emit("driver:respond_to_ride", {
+    rideId,
+    driverId,
+    currentOffer,
+    responseType,
+  });
+};
+
+
+/* ---------------------------------------------
+ * Status helpers
+ * ------------------------------------------- */
 export const getDriverSocketStatus = () => status;
 export const isDriverOnline = () => status === "connected";
+export const getDriverSocket = () => socket;

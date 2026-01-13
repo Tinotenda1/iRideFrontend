@@ -372,6 +372,7 @@ export const getUserInfo = async (): Promise<UserInfo | null> => {
     const userInfoString = await SecureStore.getItemAsync(USER_INFO_KEY);
     if (userInfoString) {
       const userInfo = JSON.parse(userInfoString) as UserInfo;
+     /*
       console.log('📱 Retrieved user info:', {
         id: userInfo.id,
         phone: userInfo.phone,
@@ -391,6 +392,7 @@ export const getUserInfo = async (): Promise<UserInfo | null> => {
         deviceId: userInfo.currentDeviceId || userInfo.deviceId,
         exists: userInfo.exists
       });
+      */
       return userInfo;
     }
     return null;
