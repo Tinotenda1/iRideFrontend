@@ -101,7 +101,7 @@ const startLocationUpdates = () => {
     } catch (err) {
       console.warn("⚠️ Location emit failed", err);
     }
-    console.log("📍 Driver location sent:", loc.latitude, loc.longitude, loc.speed, loc.heading, loc.accuracy);
+   //console.log("📍 Driver location sent:", loc.latitude, loc.longitude, loc.speed, loc.heading, loc.accuracy);
   }, LOCATION_INTERVAL);
 };
 

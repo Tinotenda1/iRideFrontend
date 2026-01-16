@@ -1,13 +1,12 @@
+// app/driver/index.tsx
 import { theme } from '@/constants/theme';
 import { getUserInfo } from '@/utils/storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   StyleSheet,
-  Text,
-  View,
+  View
 } from 'react-native';
 
 import DriverFooterNav from './components/DriverFooterNav';
@@ -21,162 +20,156 @@ import DriverIWallet from './screens/DriverIWallet';
 import DriverNotifications from './screens/DriverNotifications';
 import DriverRevenue from './screens/DriverRevenue';
 
-/* ---------------------------------------------
- * Socket service (CORRECTED API)
- * ------------------------------------------- */
 import {
   disconnectDriver,
   getDriverSocket,
   getDriverSocketStatus,
+  handleDriverResponse,
   isDriverOnline
 } from './socketConnectionUtility/driverSocketService';
 
 type Screen = 'home' | 'wallet' | 'revenue' | 'notifications';
+export type SubmissionState = 'idle' | 'submitting' | 'submitted';
 
 const DriverDashboard: React.FC = () => {
   const router = useRouter();
-
-  /* ---------------------------------------------
-   * UI refs
-   * ------------------------------------------- */
   const sidebarRef = useRef<any>(null);
   const settingsTrayRef = useRef<any>(null);
   const rideTrayRef = useRef<any>(null);
 
-  /* ---------------------------------------------
-   * State
-   * ------------------------------------------- */
   const [driverInfo, setDriverInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeScreen, setActiveScreen] = useState<Screen>('home');
   const [incomingRides, setIncomingRides] = useState<any[]>([]);
-
-  /* ---------------------------------------------
-   * Socket-derived UI state
-   * ------------------------------------------- */
   const [online, setOnline] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
 
-  /* ---------------------------------------------
-   * Load driver info
-   * ------------------------------------------- */
+  // Stores the state of every unique ride ID
+  const [submissionStates, setSubmissionStates] = useState<Record<string, SubmissionState>>({});
+  const [submittedOffers, setSubmittedOffers] = useState<Record<string, number>>({});
+ 
   useEffect(() => {
     const loadDriver = async () => {
       try {
         const user = await getUserInfo();
-
         if (!user) {
-          Alert.alert('Session expired', 'Please login again');
           router.replace('/auth/login' as any);
           return;
         }
-
         setDriverInfo(user);
       } catch (err) {
         console.error('❌ Failed to load driver info:', err);
-        Alert.alert('Error', 'Unable to load driver information');
       } finally {
         setLoading(false);
       }
     };
-
     loadDriver();
   }, [router]);
 
-  /* ---------------------------------------------
-   * CONNECT SOCKET ON MOUNT
-   * ------------------------------------------- */
   useEffect(() => {
-    if (!driverInfo) return;
+    return () => disconnectDriver();
+  }, []);
 
-    //console.log('[Dashboard] Connecting driver socket...');
-    //connectDriver();
-
-    return () => {
-      console.log('[Dashboard] Disconnecting driver socket...');
-      disconnectDriver();
-    };
-  }, [driverInfo]);
-
-  /* ---------------------------------------------
-   * Observe socket status
-   * ------------------------------------------- */
   useEffect(() => {
     const interval = setInterval(() => {
       const status = getDriverSocketStatus();
       setOnline(isDriverOnline());
       setIsConnecting(status === 'connecting' || status === 'reconnecting');
     }, 500);
-
     return () => clearInterval(interval);
   }, []);
 
-  /* ---------------------------------------------
-   * Socket event handlers
-   * ------------------------------------------- */
   useEffect(() => {
     if (!online) return;
-
     const socket = getDriverSocket();
-    if (!socket) {
-      console.log('[Dashboard] Socket not ready yet');
-      return;
-    }
-
-    console.log('[Dashboard] Listening for ride:new_request');
+    if (!socket) return;
 
     const handleRideRequest = (rideData: any) => {
-      console.log('🚨 [SOCKET] ride:new_request:', rideData);
-      setIncomingRides(prev => [...prev, rideData]);
+      // ✅ FIX: Ensure we have a valid ID. Backend might send 'id' or '_id'.
+      // If we don't normalize this, 'rideId' is undefined and all rides share the same status.
+      const validRideId = rideData.rideId || rideData.id || rideData._id || `temp_${Date.now()}`;
+      
+      console.log('🚖 New Request ID:', validRideId);
+
+      // If this is a new request, ensure we don't have stale "submitted" state for this ID 
+      // (This helps during testing if you reuse IDs)
+      setSubmissionStates(prev => {
+        if (prev[validRideId]) {
+          const newState = { ...prev };
+          delete newState[validRideId];
+          return newState;
+        }
+        return prev;
+      });
+
+      // Add to list with the Normalized 'rideId'
+      setIncomingRides(prev => [
+        ...prev, 
+        { ...rideData, rideId: validRideId, status: 'pending' }
+      ]);
     };
 
     socket.on('ride:new_request', handleRideRequest);
-
     return () => {
       socket.off('ride:new_request', handleRideRequest);
     };
   }, [online]);
 
-  /* ---------------------------------------------
-   * Ride handlers
-   * ------------------------------------------- */
-  const handleAccept = (ride: any) => {
-    setIncomingRides(prev =>
-      prev.filter(r => r.rideId !== ride.rideId)
-    );
-  };
-
   const handleDecline = (ride: any) => {
-    console.log('Ride declined:', ride);
     setIncomingRides(prev =>
       prev.filter(r => r.rideId !== ride.rideId)
     );
   };
 
-  /**
-   * ⚡ Card → Tray sync handler
-   */
-  const handleSelect = (ride: any, progress: number, msLeft: number) => {
-    console.log(
-      `[Dashboard] Opening tray for ${ride.rideId} | progress=${progress} | msLeft=${msLeft}`
-    );
-    rideTrayRef.current?.open(ride, progress, msLeft);
+  // Centralized submission handler
+  const handleOfferSubmission = async (rideId: string, offer: number, baseOffer: number) => {
+    if (!rideId) {
+      console.error("❌ Error: Attempted to submit offer with missing rideId");
+      return;
+    }
+
+    // 1. Set to submitting
+    setSubmissionStates(prev => ({ ...prev, [rideId]: 'submitting' }));
+
+    try {
+      const responseType = offer === baseOffer ? 'accept' : 'counter';
+      
+      // Execute socket call
+      await handleDriverResponse(rideId, driverInfo?.id, offer, responseType);
+
+      // 2. Success: Update both states
+      setSubmittedOffers(prev => ({ ...prev, [rideId]: offer }));
+      setSubmissionStates(prev => ({ ...prev, [rideId]: 'submitted' }));
+      
+      // Update the ride list status for the Home screen UI
+      setIncomingRides(prev =>
+        prev.map(r => r.rideId === rideId ? { ...r, status: 'submitted' } : r)
+      );
+    } catch (error) {
+      console.error('Submission failed:', error);
+      // Revert to idle on failure so they can try again
+      setSubmissionStates(prev => ({ ...prev, [rideId]: 'idle' }));
+    }
   };
 
-  /* ---------------------------------------------
-   * Screen renderer
-   * ------------------------------------------- */
+  const handleSelect = (rideId: string, progress: number, msLeft: number, rideData: any) => {
+    console.log(`👀 Opening Ride: ${rideId} | Status: ${submissionStates[rideId] ?? 'idle'}`);
+    
+    rideTrayRef.current?.open(
+      rideId,
+      progress,
+      msLeft,
+      submittedOffers[rideId] ?? null, // existingOffer
+      submissionStates[rideId] ?? 'idle', // status
+      rideData
+    );
+  };
+
   const renderScreen = () => {
     switch (activeScreen) {
-      case 'wallet':
-        return <DriverIWallet title="DriverIWallet" />;
-
-      case 'revenue':
-        return <DriverRevenue title="DriverRevenue" />;
-
-      case 'notifications':
-        return <DriverNotifications title="DriverNotifications" />;
-
+      case 'wallet': return <DriverIWallet title="DriverIWallet" />;
+      case 'revenue': return <DriverRevenue title="DriverRevenue" />;
+      case 'notifications': return <DriverNotifications title="DriverNotifications" />;
       case 'home':
       default:
         return (
@@ -184,64 +177,35 @@ const DriverDashboard: React.FC = () => {
             online={online}
             isConnecting={isConnecting}
             incomingRides={incomingRides}
-            onRideAccept={handleAccept}
-            onRideDecline={handleDecline}
+            submittedOffers={submittedOffers}
             onRideSelect={handleSelect}
+            onRideExpire={handleDecline}
           />
         );
     }
   };
 
-  /* ---------------------------------------------
-   * Loading state
-   * ------------------------------------------- */
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={styles.subText}>Loading driver...</Text>
-      </View>
-    );
-  }
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.primary} /></View>;
 
-  if (!driverInfo) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>
-          Driver not found. Please login again.
-        </Text>
-      </View>
-    );
-  }
-
-  /* ---------------------------------------------
-   * Dashboard layout
-   * ------------------------------------------- */
   return (
     <View style={styles.container}>
       <Sidebar ref={sidebarRef} userType="driver" />
-
       <DriverHeader
         onMenuPress={() => sidebarRef.current?.open()}
         onOpenSettings={() => settingsTrayRef.current?.open()}
         setOnline={setOnline}
         setIsConnecting={setIsConnecting}
       />
-
       <View style={styles.content}>{renderScreen()}</View>
-
       <DriverSettingsTray ref={settingsTrayRef} onClose={() => {}} />
-
       <RideRequestTray
         ref={rideTrayRef}
-        driverId={driverInfo.id}
+        driverId={driverInfo?.id}
+        // Pass the function that handles the logic
+        onOfferSubmitted={handleOfferSubmission} 
         onClose={() => {}}
       />
-
-      <DriverFooterNav
-        active={activeScreen}
-        onChange={setActiveScreen}
-      />
+      <DriverFooterNav active={activeScreen} onChange={setActiveScreen} />
     </View>
   );
 };
@@ -249,29 +213,7 @@ const DriverDashboard: React.FC = () => {
 export default DriverDashboard;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  content: {
-    flex: 1,
-    backgroundColor: theme.colors.background || '#f8fafc',
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  subText: {
-    marginTop: 12,
-    fontSize: 15,
-    color: theme.colors.textSecondary || '#64748b',
-  },
-  errorText: {
-    fontSize: 16,
-    color: theme.colors.error || '#ef4444',
-    textAlign: 'center',
-    paddingHorizontal: 20,
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  content: { flex: 1, backgroundColor: theme.colors.background || '#f8fafc' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });

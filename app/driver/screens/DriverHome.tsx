@@ -1,7 +1,7 @@
 // app/driver/screens/DriverHome.tsx
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -15,51 +15,47 @@ import {
 } from 'react-native';
 import RideRequestCard from '../components/RideRequestCard';
 
-if (
-  Platform.OS === 'android' &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+interface RideState {
+  rideId: string;
+  expiresAt: number; // Unix timestamp in milliseconds
+  data: any;
+}
 
 interface Props {
   online: boolean;
   isConnecting: boolean;
-
-  incomingRides?: any[]; // multiple rides
-  onRideAccept?: (ride: any) => void;
-  onRideDecline?: (ride: any) => void;
-  onRideSelect: (ride: any, progress: number, msLeft: number) => void;
+  incomingRides?: any[];
+  submittedOffers: { [rideId: string]: number };
+  onRideSelect: (ride: any, progress: number, msLeft: number, rideData: any) => void;
+  onRideExpire: (ride: any) => void;
 }
 
-/* ---------------------------------------------
- * Animation constants
- * ------------------------------------------- */
 const PULSE_COUNT = 3;
 const PULSE_DURATION = 2500;
 const POINT_COUNT = 8;
+const DEFAULT_EXPIRE_TIME = 10000; // 60 seconds
 
 const DriverHome: React.FC<Props> = ({
   online,
   isConnecting,
-  incomingRides,
-  onRideAccept,
-  onRideDecline,
+  incomingRides = [],
+  submittedOffers,
   onRideSelect,
+  onRideExpire,
 }) => {
-  /* ---------------------------------------------
-   * Animation refs
-   * ------------------------------------------- */
+  const [rides, setRides] = useState<RideState[]>([]);
+  const lastProcessedRidesRef = useRef<Set<string>>(new Set());
+
   const pulses = useRef(
     Array.from({ length: PULSE_COUNT }, () => new Animated.Value(0))
   ).current;
-
   const textAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-
   const pulseLoops = useRef<Animated.CompositeAnimation[]>([]).current;
-
   const points = useRef(
     Array.from({ length: POINT_COUNT }, () => ({
       x: Math.random() * 200 - 100,
@@ -69,14 +65,95 @@ const DriverHome: React.FC<Props> = ({
     }))
   ).current;
 
-  /* ---------------------------------------------
-   * Animation controller
-   * ------------------------------------------- */
+  // Calculate expiresAt for each incoming ride when it's first received
+  useEffect(() => {
+    if (!incomingRides || incomingRides.length === 0) {
+      setRides([]);
+      lastProcessedRidesRef.current.clear();
+      return;
+    }
+
+    // Get current ride IDs
+    const currentRideIds = new Set(incomingRides.map(ride => ride.rideId));
+    
+    // Find new rides that haven't been processed yet
+    const newRides: RideState[] = [];
+    incomingRides.forEach(ride => {
+      if (!lastProcessedRidesRef.current.has(ride.rideId)) {
+        const expiresIn = ride.expiresIn || DEFAULT_EXPIRE_TIME;
+        const expiresAt = Date.now() + expiresIn;
+        
+        newRides.push({
+          rideId: ride.rideId,
+          expiresAt,
+          data: ride,
+        });
+        
+        lastProcessedRidesRef.current.add(ride.rideId);
+      }
+    });
+
+    // Update rides state
+    setRides(prev => {
+      // Remove rides that are no longer in incomingRides
+      const filteredPrev = prev.filter(ride => currentRideIds.has(ride.rideId));
+      
+      // Update existing rides with new data (like status changes)
+      const updatedPrev = filteredPrev.map(prevRide => {
+        const currentData = incomingRides.find(r => r.rideId === prevRide.rideId);
+        return currentData ? { ...prevRide, data: currentData } : prevRide;
+      });
+
+      // Add new rides
+      return [...updatedPrev, ...newRides];
+    });
+
+  }, [incomingRides]);
+
+  // Clean up rides that are no longer in incomingRides
+  useEffect(() => {
+    if (incomingRides && incomingRides.length > 0) {
+      const currentRideIds = new Set(incomingRides.map(ride => ride.rideId));
+      
+      setRides(prev => {
+        const updated = prev.filter(ride => currentRideIds.has(ride.rideId));
+        
+        // Clean up the ref for removed rides
+        lastProcessedRidesRef.current.forEach(rideId => {
+          if (!currentRideIds.has(rideId)) {
+            lastProcessedRidesRef.current.delete(rideId);
+          }
+        });
+        
+        return updated;
+      });
+    }
+  }, [incomingRides]);
+
+  // Layout animation for ride changes
+  useEffect(() => {
+    if (rides.length > 0) {
+      LayoutAnimation.configureNext({
+        duration: 500,
+        create: {
+          type: LayoutAnimation.Types.spring,
+          property: LayoutAnimation.Properties.scaleXY,
+          springDamping: 0.9,
+        },
+        update: {
+          type: LayoutAnimation.Types.spring,
+          springDamping: 0.9,
+        },
+      });
+    }
+  }, [rides]);
+
+  // Animation controller
   useEffect(() => {
     if (online && !isConnecting) {
       fadeAnim.setValue(0);
-
       pulseLoops.length = 0;
+      
       pulses.forEach((pulse, index) => {
         const loop = Animated.loop(
           Animated.sequence([
@@ -143,35 +220,20 @@ const DriverHome: React.FC<Props> = ({
     }
   }, [online, isConnecting, fadeAnim, pulseLoops, points, pulses, textAnim]);
 
-  // ---------------------------------------------
-  // Smoothly animate incoming rides layout changes
-  // ---------------------------------------------
-  useEffect(() => {
-    if (incomingRides && incomingRides.length > 0) {
-      LayoutAnimation.configureNext({
-        duration: 500,
-        create: {
-          type: LayoutAnimation.Types.spring,
-          property: LayoutAnimation.Properties.scaleXY,
-          springDamping: 0.9,
-        },
-        update: {
-          type: LayoutAnimation.Types.spring,
-          springDamping: 0.9,
-        },
-        delete: {
-          type: LayoutAnimation.Types.linear,
-          property: LayoutAnimation.Properties.opacity,
-          duration: 200,
-        },
-      });
+  const handleCardSelect = (rideId: string, progress: number, msLeft: number, rideData: any) => {
+    const rideState = rides.find(r => r.rideId === rideId);
+   
+      onRideSelect(rideId, progress, msLeft, rideData);
+    
+  };
+
+  const handleCardExpire = (rideId: string) => {
+    const rideState = rides.find(r => r.rideId === rideId);
+    if (rideState) {
+      onRideExpire(rideState.data);
     }
-  }, [incomingRides]);
+  };
 
-
-  /* ---------------------------------------------
-   * Render helpers
-   * ------------------------------------------- */
   const renderPulses = () =>
     pulses.map((pulse, i) => {
       const scale = pulse.interpolate({
@@ -213,9 +275,6 @@ const DriverHome: React.FC<Props> = ({
     outputRange: [0.4, 1],
   });
 
-  /* ---------------------------------------------
-   * UI states
-   * ------------------------------------------- */
   if (!online) {
     return (
       <View style={styles.center}>
@@ -233,16 +292,13 @@ const DriverHome: React.FC<Props> = ({
       <View style={styles.center}>
         <Ionicons name="wifi-outline" size={120} color={theme.colors.warning} />
         <Text style={styles.title}>Connecting…</Text>
-        <Text style={styles.subtitle}>
+        <Text style={[styles.subtitle]}>
           Checking network and syncing with server
         </Text>
       </View>
     );
   }
 
-  /* ---------------------------------------------
-   * Radar + Incoming rides
-   * ------------------------------------------- */
   return (
     <View style={styles.container}>
       <View style={styles.radar} pointerEvents="none">
@@ -255,21 +311,21 @@ const DriverHome: React.FC<Props> = ({
         <Text style={styles.searchText}>Searching for riders…</Text>
       </Animated.View>
 
-      {/* ---------------------------------------------
-          Incoming Ride Requests (stack + scroll)
-      --------------------------------------------- */}
-      {incomingRides && incomingRides.length > 0 && (
+      {rides.length > 0 && (
         <View style={styles.rideStackContainer}>
           <FlatList
-            data={[...incomingRides].reverse()}
-            keyExtractor={(item) => item.rideId} // CRITICAL: Must be a unique ID
-            removeClippedSubviews={false} // Prevents "flashing" during layout shifts
+            data={[...rides].reverse()}
+            keyExtractor={(item) => item.rideId}
+            removeClippedSubviews={false}
             renderItem={({ item }) => (
-              <View style={{ marginVertical: 5 }}> 
+              <View style={{ marginVertical: 5 }}>
                 <RideRequestCard
-                  ride={item}
-                  onSelect={onRideSelect}
-                  onExpire={onRideDecline}
+                  rideId={item.rideId}
+                  rideData={item.data}
+                  expiresAt={item.expiresAt}
+                  submittedOffer={submittedOffers[item.rideId]}
+                  onSelect={handleCardSelect}
+                  onExpire={handleCardExpire}
                 />
               </View>
             )}
@@ -284,9 +340,6 @@ const DriverHome: React.FC<Props> = ({
 
 export default DriverHome;
 
-/* ---------------------------------------------
- * Styles
- * ------------------------------------------- */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -344,7 +397,7 @@ const styles = StyleSheet.create({
   },
   rideStackContainer: {
     position: 'absolute',
-    top: 0, // adjust to appear below radar
+    top: 0,
     bottom: 0,
     left: 0,
     right: 0,
