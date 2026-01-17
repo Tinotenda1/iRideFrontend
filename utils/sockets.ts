@@ -1,4 +1,3 @@
-// utils/sockets.ts
 import { io, Socket } from "socket.io-client";
 
 /* ---------------------------------------------
@@ -6,32 +5,30 @@ import { io, Socket } from "socket.io-client";
  * ------------------------------------------- */
 let socket: Socket | null = null;
 
-/* ---------------------------------------------
- * Server URL
- * ------------------------------------------- */
 const SERVER_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ||
   "https://unhaggled-aja-intercolonial.ngrok-free.dev";
 
 /* ---------------------------------------------
- * Initialize socket (NO autoConnect)
+ * Initialize socket (Reuse instance)
  * ------------------------------------------- */
 export const initializeSocket = (): Socket => {
   if (socket) {
-    console.log("🌐 Reusing existing socket:", socket.id);
     return socket;
   }
 
-  console.log("🌐 Creating new socket connection to", SERVER_URL);
+  console.log("🌐 Creating persistent socket instance to", SERVER_URL);
 
   socket = io(SERVER_URL, {
     path: "/socket.io",
-    transports: ["polling", "websocket"],
-    autoConnect: false, // 🚨 CRITICAL FIX
+    // Prioritize websocket for better background stability
+    transports: ["websocket", "polling"], 
+    autoConnect: false,
     reconnection: true,
-    reconnectionAttempts: 10,
-    reconnectionDelay: 3000,
-    timeout: 60000,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 2000,
+    reconnectionDelayMax: 5000,
+    timeout: 20000,
   });
 
   /* ---------------------------------------------
@@ -46,15 +43,7 @@ export const initializeSocket = (): Socket => {
   });
 
   socket.on("connect_error", (err) => {
-    console.error("❌ Socket connect_error:", err);
-  });
-
-  socket.io.on("reconnect_attempt", (attempt) => {
-    console.log(`🔄 Socket reconnect attempt #${attempt}`);
-  });
-
-  socket.io.on("reconnect_failed", () => {
-    console.error("❌ Socket reconnect failed");
+    console.error("❌ Socket connect_error:", err.message);
   });
 
   return socket;
@@ -66,13 +55,12 @@ export const initializeSocket = (): Socket => {
 export const getSocket = (): Socket | null => socket;
 
 /* ---------------------------------------------
- * Disconnect socket completely
+ * Disconnect socket (Soft disconnect)
  * ------------------------------------------- */
 export const disconnectSocket = (): void => {
   if (socket) {
-    console.log("🛑 Disconnecting socket:", socket.id);
-    socket.removeAllListeners();
+    console.log("🛑 Soft-disconnecting socket:", socket.id);
     socket.disconnect();
-    socket = null;
+    // Note: We do NOT set socket = null to keep the instance for reuse
   }
 };

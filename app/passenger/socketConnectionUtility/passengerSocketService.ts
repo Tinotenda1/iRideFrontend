@@ -1,11 +1,4 @@
-/**
- * PASSENGER SOCKET SERVICE – FINAL FIXED VERSION
- * ----------------------------------------------------
- * Lightweight, phone-based connection with optional location.
- * Heartbeat, reconnect, and ride request support included.
- */
-
-import { disconnectSocket, initializeSocket } from "@/utils/sockets";
+import { initializeSocket } from "@/utils/sockets";
 import { getUserInfo } from "@/utils/storage";
 import * as Location from "expo-location";
 import * as Network from "expo-network";
@@ -22,21 +15,15 @@ export type PassengerSocketStatus =
   | "error";
 
 /* ---------------------------------------------
- * Internal State (Singleton)
+ * Internal State (Singleton Instance)
  * ------------------------------------------- */
 let socket: Socket | null = null;
 let status: PassengerSocketStatus = "offline";
 let shouldStayOnline = false;
 
-/* Timers */
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-/* ---------------------------------------------
- * Config
- * ------------------------------------------- */
 const HEARTBEAT_INTERVAL = 10000;
-const RECONNECT_DELAY = 5000;
 
 /* ---------------------------------------------
  * Helpers
@@ -47,10 +34,8 @@ const setStatus = (s: PassengerSocketStatus) => {
 };
 
 const clearTimers = () => {
-  heartbeatTimer && clearInterval(heartbeatTimer);
-  reconnectTimer && clearTimeout(reconnectTimer);
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = null;
-  reconnectTimer = null;
 };
 
 const isNetworkOnline = async () => {
@@ -62,20 +47,16 @@ const isNetworkOnline = async () => {
  * Heartbeat
  * ------------------------------------------- */
 const startHeartbeat = () => {
-  stopHeartbeat();
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(() => {
-    if (!socket?.connected) return;
-    socket.emit("user:ping"); // ✅ Backend-aligned
+    if (socket?.connected) {
+      socket.emit("user:ping");
+    }
   }, HEARTBEAT_INTERVAL);
 };
 
-const stopHeartbeat = () => {
-  heartbeatTimer && clearInterval(heartbeatTimer);
-  heartbeatTimer = null;
-};
-
 /* ---------------------------------------------
- * Location helper
+ * Location helper (Foreground Only)
  * ------------------------------------------- */
 const getPassengerLocation = async () => {
   const { status } = await Location.requestForegroundPermissionsAsync();
@@ -92,41 +73,17 @@ const getPassengerLocation = async () => {
 };
 
 /* ---------------------------------------------
- * Reconnection Logic
- * ------------------------------------------- */
-const attemptReconnect = async () => {
-  if (reconnectTimer || !shouldStayOnline) return;
-
-  const online = await isNetworkOnline();
-  if (!online) return;
-
-  setStatus("reconnecting");
-
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    connectPassenger();
-  }, RECONNECT_DELAY);
-};
-
-const handleDisconnect = (reason: string) => {
-  console.warn("⚠️ Passenger socket disconnected:", reason);
-  stopHeartbeat();
-  if (!shouldStayOnline) {
-    setStatus("offline");
-    return;
-  }
-  attemptReconnect();
-};
-
-/* ---------------------------------------------
  * Public API
  * ------------------------------------------- */
 export const connectPassenger = async () => {
-  if (status === "connected" || status === "connecting") return;
+  socket = initializeSocket();
+
+  // If already connected and authenticated, skip
+  if (socket.connected && status === "connected") return;
 
   const online = await isNetworkOnline();
   if (!online) {
-    console.warn("🚫 No network — cannot connect passenger");
+    setStatus("error");
     return;
   }
 
@@ -138,13 +95,17 @@ export const connectPassenger = async () => {
   const location = await getPassengerLocation();
 
   if (!phone) {
-    console.warn("📵 Passenger phone missing");
     setStatus("error");
     return;
   }
 
-  socket = initializeSocket();
-  socket.removeAllListeners();
+  /* ---------------------------------------------
+   * Register listeners (CLEAN SLATE via .off)
+   * ------------------------------------------- */
+  socket.off("connect");
+  socket.off("user:connected");
+  socket.off("disconnect");
+  socket.off("connect_error");
 
   socket.on("connect", () => {
     socket?.emit("user:connect", {
@@ -159,10 +120,31 @@ export const connectPassenger = async () => {
     startHeartbeat();
   });
 
-  socket.on("disconnect", () => handleDisconnect("disconnect"));
-  socket.on("connect_error", () => handleDisconnect("connect_error"));
+  socket.on("disconnect", (reason) => {
+    if (reason === "io client disconnect" || !shouldStayOnline) {
+      clearTimers();
+      setStatus("offline");
+    } else {
+      // Internal Socket.io reconnection is happening
+      setStatus("reconnecting");
+    }
+  });
 
-  socket.connect();
+  socket.on("connect_error", () => {
+    setStatus("error");
+  });
+
+  // Trigger connection
+  if (!socket.connected) {
+    socket.connect();
+  } else {
+    // If socket was already physically connected, just re-authenticate
+    socket.emit("user:connect", {
+      phone,
+      userType: "passenger",
+      ...(location && { location }),
+    });
+  }
 };
 
 export const disconnectPassenger = () => {
@@ -170,15 +152,11 @@ export const disconnectPassenger = () => {
   clearTimers();
 
   if (socket) {
-    socket.removeAllListeners();
-    socket.disconnect();
-    socket = null;
+    socket.disconnect(); // Soft disconnect (instance remains)
   }
 
-  disconnectSocket();
   setStatus("offline");
 };
-
 
 /* ---------------------------------------------
  * Status helpers

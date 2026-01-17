@@ -1,12 +1,37 @@
-/**
- * DRIVER SOCKET SERVICE – BACKEND ALIGNED & HARDENED
- */
-
-import { disconnectSocket, initializeSocket } from "@/utils/sockets";
+import { getSocket, initializeSocket } from "@/utils/sockets";
 import { getUserInfo } from "@/utils/storage";
+import * as Location from 'expo-location';
 import * as Network from "expo-network";
+import * as TaskManager from 'expo-task-manager';
 import { Socket } from "socket.io-client";
-import { getDriverLocation } from "../driverLocationUtility/driverLocation";
+
+/* ---------------------------------------------
+ * Background Task Definition
+ * ------------------------------------------- */
+const LOCATION_TRACKING_TASK = 'background-location-tracking';
+
+TaskManager.defineTask(LOCATION_TRACKING_TASK, async ({ data, error }: any) => {
+  if (error) {
+    console.error("❌ Background Location Task Error:", error);
+    return;
+  }
+  if (data) {
+    const { locations } = data;
+    const loc = locations[0];
+    const socketInstance = getSocket();
+
+    if (socketInstance?.connected) {
+      socketInstance.emit("driver:location_update", {
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        accuracy: loc.coords.accuracy,
+        heading: loc.coords.heading,
+        speed: loc.coords.speed,
+        timestamp: loc.timestamp,
+      });
+    }
+  }
+});
 
 /* ---------------------------------------------
  * Types
@@ -23,15 +48,10 @@ export type DriverSocketStatus =
  * ------------------------------------------- */
 let socket: Socket | null = null;
 let status: DriverSocketStatus = "offline";
-let shouldStayOnline = false;
+let shouldStayOnline = false; // Now used in disconnect logic
 
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-let locationTimer: ReturnType<typeof setInterval> | null = null;
 
-/* ---------------------------------------------
- * Config
- * ------------------------------------------- */
-const LOCATION_INTERVAL = 3000;
 const HEARTBEAT_INTERVAL = 10000;
 
 /* ---------------------------------------------
@@ -44,9 +64,7 @@ const setStatus = (s: DriverSocketStatus) => {
 
 const clearTimers = () => {
   if (heartbeatTimer) clearInterval(heartbeatTimer);
-  if (locationTimer) clearInterval(locationTimer);
   heartbeatTimer = null;
-  locationTimer = null;
 };
 
 const isNetworkOnline = async () => {
@@ -55,67 +73,57 @@ const isNetworkOnline = async () => {
 };
 
 /* ---------------------------------------------
- * Heartbeat (MATCHES BACKEND)
+ * Heartbeat & Location Emitters
  * ------------------------------------------- */
 const startHeartbeat = () => {
-  stopHeartbeat();
-
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(() => {
-    if (!socket?.connected) return;
-    socket.emit("user:ping");
+    if (socket?.connected) {
+      socket.emit("user:ping");
+    }
   }, HEARTBEAT_INTERVAL);
 };
 
-const stopHeartbeat = () => {
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
-  heartbeatTimer = null;
+const startLocationUpdates = async () => {
+  const { status: foreground } = await Location.requestForegroundPermissionsAsync();
+  const { status: background } = await Location.requestBackgroundPermissionsAsync();
+
+  if (foreground !== 'granted' || background !== 'granted') {
+    console.warn("⚠️ Location permissions not fully granted");
+    return;
+  }
+
+  const isStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING_TASK);
+  if (isStarted) return;
+
+  await Location.startLocationUpdatesAsync(LOCATION_TRACKING_TASK, {
+    accuracy: Location.Accuracy.High,
+    timeInterval: 3000,
+    distanceInterval: 5,
+    foregroundService: {
+      notificationTitle: "UnHaggled Online",
+      notificationBody: "Your location is being shared with passengers.",
+      notificationColor: "#00FF00",
+    },
+    // FIX: Correct property name for TypeScript
+    pausesUpdatesAutomatically: false, 
+  });
+};
+
+const stopLocationUpdates = async () => {
+  const isStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING_TASK);
+  if (isStarted) {
+    await Location.stopLocationUpdatesAsync(LOCATION_TRACKING_TASK);
+  }
 };
 
 /* ---------------------------------------------
- * Location Updates (BACKEND MATCH)
- * ------------------------------------------- */
-const startLocationUpdates = () => {
-  stopLocationUpdates();
-
-  locationTimer = setInterval(async () => {
-    const s = socket; // capture current socket
-    if (!s || !s.connected) {
-      console.warn("⚠️ Location update skipped - socket not connected");
-      return;
-    }
-
-    const result = await getDriverLocation();
-    if (!result.success) return;
-
-    const loc = result.location;
-
-    try {
-      s.emit("driver:location_update", {
-        latitude: loc.latitude,
-        longitude: loc.longitude,
-        accuracy: loc.accuracy,
-        heading: loc.heading,
-        speed: loc.speed,
-        timestamp: loc.timestamp,
-      });
-    } catch (err) {
-      console.warn("⚠️ Location emit failed", err);
-    }
-   //console.log("📍 Driver location sent:", loc.latitude, loc.longitude, loc.speed, loc.heading, loc.accuracy);
-  }, LOCATION_INTERVAL);
-};
-
-
-const stopLocationUpdates = () => {
-  if (locationTimer) clearInterval(locationTimer);
-  locationTimer = null;
-};
-
-/* ---------------------------------------------
- * Connect Driver (RACE SAFE)
+ * Connect Driver
  * ------------------------------------------- */
 export const connectDriver = async () => {
-  if (status === "connected" || status === "connecting") return;
+  socket = initializeSocket();
+
+  if (socket.connected && status === "connected") return;
 
   const online = await isNetworkOnline();
   if (!online) {
@@ -123,77 +131,82 @@ export const connectDriver = async () => {
     return;
   }
 
-  socket = initializeSocket();
-  shouldStayOnline = true;
+  shouldStayOnline = true; // Mark that the driver intends to be online
   setStatus("connecting");
 
   const user = await getUserInfo();
   const phone = user?.phone?.replace(/\D/g, "");
 
-  const locationResult = await getDriverLocation();
-  if (!phone || !locationResult.success) {
+  if (!phone) {
     setStatus("error");
     return;
   }
 
-  const { latitude, longitude } = locationResult.location;
+  const currentLoc = await Location.getCurrentPositionAsync({});
 
-  /* ---------------------------------------------
-   * Register listeners BEFORE connect
-   * ------------------------------------------- */
-  socket.removeAllListeners();
+  socket.off("connect");
+  socket.off("user:connected");
+  socket.off("disconnect");
+  socket.off("connect_error");
 
   socket.on("connect", () => {
-    console.log("🔗 Connected → user:connect");
-
     socket?.emit("user:connect", {
       phone,
       userType: "driver",
-      location: { latitude, longitude },
+      location: { 
+        latitude: currentLoc.coords.latitude, 
+        longitude: currentLoc.coords.longitude 
+      },
     });
   });
 
   socket.on("user:connected", () => {
-    console.log("✅ Driver authenticated");
     setStatus("connected");
     startHeartbeat();
     startLocationUpdates();
   });
 
-  socket.on("disconnect", () => {
-    stopHeartbeat();
-    stopLocationUpdates();
-
-    if (shouldStayOnline) {
-      setStatus("reconnecting");
-      socket?.connect();
-    } else {
+  socket.on("disconnect", (reason) => {
+    if (reason === "io client disconnect" || !shouldStayOnline) {
+      clearTimers();
+      stopLocationUpdates();
       setStatus("offline");
+    } else {
+      setStatus("reconnecting");
     }
   });
 
   socket.on("connect_error", (err) => {
-    console.error("❌ Socket error:", err.message);
+    console.error("❌ Driver connect error:", err.message);
     setStatus("error");
   });
 
-  socket.connect();
+  if (!socket.connected) {
+    socket.connect();
+  } else {
+    socket.emit("user:connect", {
+      phone,
+      userType: "driver",
+      location: { 
+        latitude: currentLoc.coords.latitude, 
+        longitude: currentLoc.coords.longitude 
+      },
+    });
+  }
 };
 
 /* ---------------------------------------------
  * Disconnect Driver
  * ------------------------------------------- */
 export const disconnectDriver = () => {
-  shouldStayOnline = false;
+  shouldStayOnline = false; // Ensures disconnect logic knows this is intentional
   clearTimers();
+  stopLocationUpdates();
 
   if (socket) {
-    socket.removeAllListeners();
     socket.disconnect();
-    socket = null;
   }
 
-  disconnectSocket();
   setStatus("offline");
 };
 
@@ -206,7 +219,7 @@ export const handleDriverResponse = (
   currentOffer: number,
   responseType: "accept" | "counter"
 ) => {
-  if (!socket || !socket.connected) return;
+  if (!socket?.connected) return;
 
   socket.emit("driver:respond_to_ride", {
     rideId,
@@ -216,10 +229,6 @@ export const handleDriverResponse = (
   });
 };
 
-
-/* ---------------------------------------------
- * Status helpers
- * ------------------------------------------- */
 export const getDriverSocketStatus = () => status;
 export const isDriverOnline = () => status === "connected";
 export const getDriverSocket = () => socket;
