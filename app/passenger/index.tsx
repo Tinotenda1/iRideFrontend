@@ -1,3 +1,4 @@
+// app/passenger/index.tsx
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -10,15 +11,11 @@ import {
   View,
 } from 'react-native';
 
-import MapContainer from '../../components/map/MapContainer';
-import Sidebar from '../../components/Sidebar';
-import NotificationsTab from '../../components/tabs/NotificationsTab';
-import RewardsTab from '../../components/tabs/RewardsTab';
-import RideTab from '../../components/tabs/RideTab';
-import Tray from '../../components/tabs/Tray';
-import WalletTab from '../../components/tabs/WalletTab';
-import AdditionalInfoTray from '../../components/trays/AdditionalInfoTray';
-import InputTray from '../../components/trays/InputTray';
+import MapContainer from './components/map/MapContainer';
+import Sidebar from './components/passengerSidebar';
+import Tray from './components/tabs/Tray';
+import AdditionalInfoTray from './components/trays/AdditionalInfoTray';
+import InputTray from './components/trays/InputTray';
 
 // 🔌 Passenger Socket Service
 import {
@@ -83,7 +80,7 @@ const PassengerScreen: React.FC = () => {
    * ------------------------------------------------- */
   useEffect(() => {
     setTimeout(() => {
-      trayRef.current?.openTrayFromOutside('ride');
+      trayRef.current?.openTray();
     }, 200);
   }, []);
 
@@ -117,7 +114,7 @@ const PassengerScreen: React.FC = () => {
   }, [searchCardBottomAnim]);
 
   /* -------------------------------------------------
-   * INPUT TRAY (PICKUP / DESTINATION)
+   * LOCATION INPUT (PICKUP / DESTINATION)
    * ------------------------------------------------- */
   const handleLocationInputFocus = useCallback(
     (field: 'pickup' | 'destination') => {
@@ -157,10 +154,6 @@ const PassengerScreen: React.FC = () => {
         onLocationInputFocus={handleLocationInputFocus}
         onOpenAdditionalInfo={openInfoTray}
       >
-        <RideTab id="ride" onOpenAdditionalInfo={openInfoTray} />
-        <WalletTab id="wallet" />
-        <RewardsTab id="rewards" />
-        <NotificationsTab id="notifications" />
       </Tray>
 
       {/* INPUT TRAY */}

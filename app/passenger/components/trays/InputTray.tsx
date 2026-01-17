@@ -1,8 +1,8 @@
 // components/trays/InputTray.tsx
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { BackHandler, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useRideBooking } from '../../app/context/RideBookingContext';
-import { theme } from '../../constants/theme';
+import { useRideBooking } from '../../../../app/context/RideBookingContext';
+import { theme } from '../../../../constants/theme';
 import LocationSearch, { Place } from '../map/LocationSearch';
 
 const { height: windowHeight } = Dimensions.get('window');
@@ -16,9 +16,6 @@ interface InputTrayProps {
 const InputTray = forwardRef<any, InputTrayProps>(({ activeField, onClose }, ref) => {
   const { rideData, updateRideData } = useRideBooking();
   const [isOpen, setIsOpen] = useState(false);
-
-  // NEW: We track when tray opens so we can autofocus
-  const [autoFocusFlag, setAutoFocusFlag] = useState(false);
 
   // Input text
   const [inputText, setInputText] = useState(
@@ -47,7 +44,6 @@ const InputTray = forwardRef<any, InputTrayProps>(({ activeField, onClose }, ref
     open: () => {
       setInputText('');     // clear field
       setIsOpen(true);      // show tray
-      setAutoFocusFlag(true); // NEW: trigger autofocus
     },
     close: () => {
       handleClose();
@@ -56,7 +52,6 @@ const InputTray = forwardRef<any, InputTrayProps>(({ activeField, onClose }, ref
 
   const handleClose = () => {
     setIsOpen(false);
-    setAutoFocusFlag(false); // stop autofocus
     onClose?.();
   };
 

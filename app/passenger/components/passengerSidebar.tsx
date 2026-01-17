@@ -4,12 +4,12 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { Animated, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../constants/theme';
-import { ROUTES } from '../utils/routes';
-import { createStyles, typedTypography } from '../utils/styles';
-import { IRButton } from './IRButton';
-import { LogoutButton } from './Logout';
-import { ProfileHeader } from './ProfileHeader';
+import { IRButton } from '../../../components/IRButton';
+import { LogoutButton } from '../../../components/Logout';
+import { ProfileHeader } from '../../../components/ProfileHeader';
+import { theme } from '../../../constants/theme';
+import { ROUTES } from '../../../utils/routes';
+import { createStyles, typedTypography } from '../../../utils/styles';
 
 interface SidebarProps {
   userType: 'passenger' | 'driver';

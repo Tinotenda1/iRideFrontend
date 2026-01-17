@@ -1,8 +1,8 @@
 // app/context/RideBookingContext.tsx
 import React, { createContext, ReactNode, useContext, useState } from 'react';
-import { Place } from '../../components/map/LocationSearch';
 import { api } from '../../utils/api';
 import { getUserInfo } from '../../utils/storage';
+import { Place } from '../passenger/components/map/LocationSearch';
 
 /**
  * Interface for the ride booking data (form state)

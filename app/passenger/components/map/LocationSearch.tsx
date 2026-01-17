@@ -2,8 +2,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { theme } from '../../constants/theme';
-import { createStyles, typedTypography } from '../../utils/styles';
+import { theme } from '../../../../constants/theme';
+import { createStyles, typedTypography } from '../../../../utils/styles';
 
 export interface Place {
   id: string;

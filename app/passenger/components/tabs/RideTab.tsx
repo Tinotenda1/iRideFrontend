@@ -3,11 +3,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { useRideBooking } from '../../app/context/RideBookingContext';
-import { theme } from '../../constants/theme';
-import { createStyles, typedTypography } from '../../utils/styles';
-import { IRButton } from '../IRButton';
-import { Place } from '../map/PickupInput';
+import { useRideBooking } from '../../../../app/context/RideBookingContext';
+import { IRButton } from '../../../../components/IRButton';
+import { theme } from '../../../../constants/theme';
+import { createStyles, typedTypography } from '../../../../utils/styles';
 import RideTypeCard from '../RideTypeCard';
 
 interface TabProps {
@@ -24,21 +23,21 @@ const RideTab: React.FC<TabProps> = ({ id, onOpenAdditionalInfo }) => {
 const rideTypes = [
   {
     id: '4seater',
-    icon: require('../../assets/cars/4seat.png'),
+    icon: require('../../../../assets/cars/4seat.png'),
     title: '4 Seater',
     seats: 4,
     price: 3.50,
   },
   { 
     id: '7seater',
-    icon: require('../../assets/cars/7seat.png'),
+    icon: require('../../../../assets/cars/7seat.png'),
     title: '7 Seater',
     seats: 7,
     price: 5.50,
   },
   {
     id: 'pickup',
-    icon: require('../../assets/cars/pickup.png'),
+    icon: require('../../../../assets/cars/pickup.png'),
     title: 'Pickup',
     seats: 3,
     price: 6,
@@ -72,7 +71,7 @@ const rideTypes = [
         const current = await Location.getCurrentPositionAsync({});
         if (!mounted) return;
 
-        const place: Place = {
+        const place = {
           id: 'current',
           name: 'Here',
           address: 'Current Location',
@@ -95,7 +94,7 @@ const rideTypes = [
     return () => {
       mounted = false;
     };
-  }, []); // ✅ EMPTY DEP ARRAY
+  }, [ rideData.pickupLocation, updateRideData ]); // ✅ EMPTY DEP ARRAY
 
 
   const handleFindRides = () => {

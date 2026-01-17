@@ -8,9 +8,9 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { useRideBooking } from '../../app/context/RideBookingContext';
-import { theme } from '../../constants/theme';
-import { IRButton } from '../IRButton';
+import { useRideBooking } from '../../../../app/context/RideBookingContext';
+import { IRButton } from '../../../../components/IRButton';
+import { theme } from '../../../../constants/theme';
 
 const { height: windowHeight } = Dimensions.get('window');
 const OPEN_HEIGHT = windowHeight * 0.9; // same height as InputTray

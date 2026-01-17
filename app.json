@@ -11,7 +11,10 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "UIBackgroundModes": ["location", "fetch"]
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
       }
     },
     "android": {
@@ -55,7 +58,9 @@
           "locationAlwaysPermission": "Allow iRideApp to access your location even when the app is in the background to connect you with nearby rides.",
           "isAndroidBackgroundLocationEnabled": true
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

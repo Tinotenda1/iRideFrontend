@@ -2,8 +2,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { theme } from '../../constants/theme';
-import { createStyles, typedTypography } from '../../utils/styles';
+import { theme } from '../../../../constants/theme';
+import { createStyles, typedTypography } from '../../../../utils/styles';
 
 interface TabProps {
   id: string;
