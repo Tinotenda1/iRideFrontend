@@ -1,3 +1,4 @@
+// app/driver/socketConnectionUtility/driverSocketService.ts
 import { getSocket, initializeSocket } from "@/utils/sockets";
 import { getUserInfo } from "@/utils/storage";
 import * as Location from 'expo-location';
@@ -121,7 +122,19 @@ const stopLocationUpdates = async () => {
  * Connect Driver
  * ------------------------------------------- */
 export const connectDriver = async () => {
-  socket = initializeSocket();
+  // 1. Fetch user info FIRST
+  const user = await getUserInfo();
+  // Ensure we have the phone number
+  const phone = user?.phone; 
+
+  if (!phone) {
+    console.error("❌ Cannot connect: No phone number found in storage");
+    setStatus("error");
+    return;
+  }
+
+  // 2. Initialize with the phone number (This sets socket.auth)
+  socket = initializeSocket(phone);
 
   if (socket.connected && status === "connected") return;
 
@@ -131,27 +144,22 @@ export const connectDriver = async () => {
     return;
   }
 
-  shouldStayOnline = true; // Mark that the driver intends to be online
+  shouldStayOnline = true;
   setStatus("connecting");
 
-  const user = await getUserInfo();
-  const phone = user?.phone?.replace(/\D/g, "");
-
-  if (!phone) {
-    setStatus("error");
-    return;
-  }
-
+  // 3. Prepare location for the manual join event
   const currentLoc = await Location.getCurrentPositionAsync({});
 
+  // Clean listeners to avoid duplicates
   socket.off("connect");
   socket.off("user:connected");
   socket.off("disconnect");
   socket.off("connect_error");
 
   socket.on("connect", () => {
+    // This runs AFTER the middleware approves the handshake
     socket?.emit("user:connect", {
-      phone,
+      phone: phone.replace(/\D/g, ""), // Keep formatted for your logic
       userType: "driver",
       location: { 
         latitude: currentLoc.coords.latitude, 
@@ -181,11 +189,13 @@ export const connectDriver = async () => {
     setStatus("error");
   });
 
+  // 4. Trigger connection
   if (!socket.connected) {
-    socket.connect();
+    socket.connect(); 
   } else {
+    // If already connected, just sync the user state
     socket.emit("user:connect", {
-      phone,
+      phone: phone.replace(/\D/g, ""),
       userType: "driver",
       location: { 
         latitude: currentLoc.coords.latitude, 
@@ -215,7 +225,7 @@ export const disconnectDriver = () => {
  * ------------------------------------------- */
 export const handleDriverResponse = (
   rideId: string,
-  driverId: string,
+  driverPhone: string,
   currentOffer: number,
   responseType: "accept" | "counter"
 ) => {
@@ -223,7 +233,7 @@ export const handleDriverResponse = (
 
   socket.emit("driver:respond_to_ride", {
     rideId,
-    driverId,
+    driverPhone,
     currentOffer,
     responseType,
   });

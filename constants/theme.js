@@ -1,7 +1,7 @@
 // WhatsApp-inspired theme colors and styles
 export const theme = {
   colors: {
-    primary: '#25D366', // WhatsApp green
+    primary: '#34d35cff', // bolt green
     primaryDark: '#128C7E',
     secondary: '#218AFF', // SMS/Telegram blue
     background: '#f6f6f6ff',

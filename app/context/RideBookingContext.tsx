@@ -3,6 +3,7 @@ import React, { createContext, ReactNode, useContext, useState } from 'react';
 import { api } from '../../utils/api';
 import { getUserInfo } from '../../utils/storage';
 import { Place } from '../passenger/components/map/LocationSearch';
+import { getPassengerSocket } from '../passenger/socketConnectionUtility/passengerSocketService';
 
 /**
  * Interface for the ride booking data (form state)
@@ -14,8 +15,13 @@ export interface RideBookingData {
   vehicleType: string;
   paymentMethod: string;
   additionalInfo?: string;
-  offer?: number; // Passenger offer amount
+  offer?: number; 
   offerType?: 'poor' | 'fair' | 'good';
+  vehiclePrices?: Record<string, number>; 
+  
+  // ✅ ADD THESE TWO FIELDS
+  status?: 'idle' | 'searching' | 'matched' | 'completed';
+  activeTrip?: any; // You can replace 'any' with a Trip interface later
 }
 
 /**
@@ -66,6 +72,9 @@ const initialRideData: RideBookingData = {
   additionalInfo: '',
   offer: 0,
   offerType: 'fair',
+  vehiclePrices: {},
+  status: 'idle', // Initialize as idle
+  activeTrip: null,
 };
 
 /**
@@ -148,6 +157,14 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
       setCurrentRide(response.data.ride);
 
       console.log('Ride created successfully:', response.data.ride);
+      
+      if (response.data.ride && response.data.ride.rideId) {
+      // ✅ TELL THE SOCKET TO JOIN THE ROOM IMMEDIATELY
+      console.log("Joining ride room:", response.data.ride.rideId);
+
+      const socket = getPassengerSocket();
+      socket?.emit('ride:join_room', { rideId: response.data.ride.rideId });
+    }
 
       return response.data.ride;
 

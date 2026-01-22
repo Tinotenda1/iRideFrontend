@@ -79,40 +79,46 @@ const DriverDashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Inside DriverDashboard (app/driver/index.tsx)
+
   useEffect(() => {
-    if (!online) return;
-    const socket = getDriverSocket();
-    if (!socket) return;
+    if (!online) return;
+    const socket = getDriverSocket();
+    if (!socket) return;
 
-    const handleRideRequest = (rideData: any) => {
-      // ✅ FIX: Ensure we have a valid ID. Backend might send 'id' or '_id'.
-      // If we don't normalize this, 'rideId' is undefined and all rides share the same status.
-      const validRideId = rideData.rideId || rideData.id || rideData._id || `temp_${Date.now()}`;
-      
-      console.log('🚖 New Request ID:', validRideId);
+    const handleRideRequest = (rideData: any) => {
+      const validRideId = rideData.rideId || rideData.id || rideData._id || `temp_${Date.now()}`;
+      setIncomingRides(prev => [
+        ...prev, 
+        { ...rideData, rideId: validRideId, status: 'pending' }
+      ]);
+    };
 
-      // If this is a new request, ensure we don't have stale "submitted" state for this ID 
-      // (This helps during testing if you reuse IDs)
-      setSubmissionStates(prev => {
-        if (prev[validRideId]) {
-          const newState = { ...prev };
-          delete newState[validRideId];
-          return newState;
-        }
-        return prev;
-      });
+    // NEW: Listener for when THIS driver is successfully matched
+    const handleMatchConfirmed = (data: any) => {
+      console.log("✅ Match Confirmed! Clearing all other requests from UI.");
+      
+      // 1. Clear the list of other incoming requests
+      setIncomingRides([]); 
+      
+      // 2. Clear internal submission/loading states
+      setSubmissionStates({});
+      setSubmittedOffers({});
 
-      // Add to list with the Normalized 'rideId'
-      setIncomingRides(prev => [
-        ...prev, 
-        { ...rideData, rideId: validRideId, status: 'pending' }
-      ]);
-    };
+      // 3. Close the request tray if it's open
+      rideTrayRef.current?.close();
 
-    socket.on('ride:new_request', handleRideRequest);
-    return () => {
-      socket.off('ride:new_request', handleRideRequest);
-    };
+      // 4. Set local online status to false to prevent UI from showing "Available"
+      setOnline(false);
+    };
+
+    socket.on('ride:new_request', handleRideRequest);
+    socket.on('ride:matched', handleMatchConfirmed); // Listen for match
+
+    return () => {
+      socket.off('ride:new_request', handleRideRequest);
+      socket.off('ride:matched', handleMatchConfirmed);
+    };
   }, [online]);
 
   const handleDecline = (ride: any) => {
@@ -135,7 +141,7 @@ const DriverDashboard: React.FC = () => {
       const responseType = offer === baseOffer ? 'accept' : 'counter';
       
       // Execute socket call
-      await handleDriverResponse(rideId, driverInfo?.id, offer, responseType);
+      await handleDriverResponse(rideId, driverInfo?.phone, offer, responseType);
 
       // 2. Success: Update both states
       setSubmittedOffers(prev => ({ ...prev, [rideId]: offer }));

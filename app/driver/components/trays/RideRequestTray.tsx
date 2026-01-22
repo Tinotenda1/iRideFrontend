@@ -21,9 +21,9 @@ import {
 } from 'react-native';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import { IRButton } from '../../../../components/IRButton';
-import { OfferFareControl } from '../../../../components/OfferFareControl';
 import { theme } from '../../../../constants/theme';
 import { SubmissionState } from '../../index'; // Import the type
+import { OfferFareControl } from '../DriverOfferFareControl';
 
 const { height: windowHeight } = Dimensions.get('window');
 const OPEN_HEIGHT = windowHeight * 0.9;

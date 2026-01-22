@@ -1,154 +1,232 @@
-// components/tabs/Tray.tsx
+// app\passenger\components\tabs\Tray.tsx
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   Animated,
+  BackHandler,
   Dimensions,
-  Keyboard,
-  View
+  StyleSheet,
+  View,
 } from 'react-native';
 import { useRideBooking } from '../../../../app/context/RideBookingContext';
 import { theme } from '../../../../constants/theme';
 import { createStyles } from '../../../../utils/styles';
-import LocationInputCard from '../map/LocationInputCard';
-import { Place } from '../map/LocationSearch';
+import LocationInputTab from './LocationInputTab';
 import RideTab from './RideTab';
+import SearchingTab from './SearchingTab';
 
 interface TrayProps {
   onTrayStateChange?: (open: boolean) => void;
   onTrayHeightChange?: (height: number) => void;
   onLocationInputFocus?: (field: 'pickup' | 'destination') => void;
-  onOpenAdditionalInfo?: () => void; 
+  onOpenAdditionalInfo?: () => void;
+  hasOffers?: boolean; // Received from PassengerScreen
 }
 
-// Constants
-const { height: windowHeight } = Dimensions.get('window');
-const OPEN_HEIGHT = windowHeight * 0.5; // 50% of screen height when fully open
+const { width: windowWidth, height: windowHeight } = Dimensions.get('window');
+const OPEN_HEIGHT_INPUT = windowHeight * 0.5;
+const OPEN_HEIGHT_RIDE = windowHeight * 0.4;
+const OPEN_HEIGHT_SEARCHING = windowHeight * 0.3; 
+const CLOSED_HEIGHT = 140;
 
 const Tray = forwardRef<any, TrayProps>(({
   onTrayStateChange,
   onTrayHeightChange,
   onLocationInputFocus,
-  onOpenAdditionalInfo
+  onOpenAdditionalInfo,
+  hasOffers // Destructure hasOffers
 }, ref) => {
   const { rideData, updateRideData } = useRideBooking();
+  const [currentTab, setCurrentTab] = useState<'input' | 'ride' | 'searching'>('input');
+  
+  const heightAnim = useRef(new Animated.Value(0)).current; 
+  const translateY = useRef(new Animated.Value(OPEN_HEIGHT_INPUT - CLOSED_HEIGHT)).current;
+  const transitionAnim = useRef(new Animated.Value(0)).current;
 
-  const [trayOpen, setTrayOpen] = useState(false);
-  const [dynamicHeight, setDynamicHeight] = useState(OPEN_HEIGHT);
-  const [headerHeight, setHeaderHeight] = useState(0);
-
-  const translateY = useRef(new Animated.Value(OPEN_HEIGHT)).current;
-  const headerRef = useRef<View>(null);
-
-  // Measure header height
   useEffect(() => {
-    if (headerRef.current) {
-      headerRef.current.measure((x, y, width, height) => {
-        setHeaderHeight(height || 0);
-      });
-    }
-  }, [trayOpen]);
+    handleTransition('input');
+    openTray();
+  }, []);
 
-  // Expose functions to open/close tray
+  useEffect(() => {
+    const backAction = () => {
+      if (currentTab === 'ride') {
+        // Handle Ride Tab: Clear destination and go back to input
+        updateRideData({ destination: null });
+        handleTransition('input');
+        return true;
+      }
+      
+      // ⚠️ IMPORTANT CHANGE HERE:
+      // We must return 'false' for searching. This tells React Native:
+      // "Tray doesn't want to handle this, pass it to the next listener (SearchingTab)"
+      // SearchingTab will then block it (if searching) or handle it (if no drivers).
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [currentTab, updateRideData]);
+
+  useEffect(() => {
+    if (rideData.pickupLocation && rideData.destination) {
+      console.log('🔄 Locations detected, fetching prices...');
+      fetchPricingSuggestions();
+    }
+  }, [rideData.pickupLocation, rideData.destination]);
+
+  const fetchPricingSuggestions = async () => {
+    if (!rideData.pickupLocation || !rideData.destination) return;
+    try {
+      const payload = {
+        pickup: { latitude: rideData.pickupLocation.latitude, longitude: rideData.pickupLocation.longitude },
+        destination: { latitude: rideData.destination.latitude, longitude: rideData.destination.longitude },
+      };
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/api/pricing/suggest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      const prices: Record<string, number> = {};
+      data.suggestions.forEach((item: any) => { prices[item.vehicleType] = item.suggestedPrice; });
+      updateRideData({ vehiclePrices: prices });
+    } catch (error) {
+      console.error('❌ Error fetching pricing:', error);
+    }
+  };
+
   useImperativeHandle(ref, () => ({
-    openTray: () => openTray(),
-    closeTray: () => closeTray(),
+    openTray,
+    closeTray,
+    switchToRides: () => handleTransition('ride'),
+    switchToInput: () => handleTransition('input'),
+    switchToSearching: () => handleTransition('searching'),
   }));
 
-  const openTray = () => {
-    setTrayOpen(true);
-    onTrayStateChange?.(true);
+  const handleTransition = (target: 'input' | 'ride' | 'searching') => {
+    setCurrentTab(target);
+    
+    // NEW: If we are going back to the input screen, clear the old prices
+    // so they don't "flicker" with old data when the user picks a new destination.
+    if (target === 'input') {
+      updateRideData({ vehiclePrices: {} });
+    }
+    
+    let transitionValue = 0;
+    let heightValue = 0; // 0 = Input, 1 = Ride, 2 = Searching
 
+    if (target === 'input') {
+      transitionValue = 0;
+      heightValue = 0;
+    } else if (target === 'ride') {
+      transitionValue = 1;
+      heightValue = 1;
+    } else if (target === 'searching') {
+      transitionValue = 2;
+      heightValue = 2;
+    }
+
+    Animated.parallel([
+      Animated.spring(transitionAnim, {
+        toValue: transitionValue,
+        useNativeDriver: true,
+        tension: 40,
+        friction: 8,
+      }),
+      Animated.spring(heightAnim, {
+        toValue: heightValue,
+        useNativeDriver: false,
+      })
+    ]).start();
+  };
+
+  const openTray = () => {
+    onTrayStateChange?.(true);
     Animated.spring(translateY, {
       toValue: 0,
-      useNativeDriver: true,
-      tension: 60,
-      friction: 10,
+      useNativeDriver: false,
+      tension: 50,
+      friction: 9,
     }).start();
 
-    setDynamicHeight(OPEN_HEIGHT);
-    onTrayHeightChange?.(OPEN_HEIGHT);
+    // Report the correct height based on current tab
+    const heights = {
+      input: OPEN_HEIGHT_INPUT,
+      ride: OPEN_HEIGHT_RIDE,
+      searching: OPEN_HEIGHT_SEARCHING
+    };
+    onTrayHeightChange?.(heights[currentTab]);
   };
 
   const closeTray = () => {
-    setTrayOpen(false);
     onTrayStateChange?.(false);
-
+    const currentActiveHeight = currentTab === 'ride' ? OPEN_HEIGHT_RIDE : OPEN_HEIGHT_INPUT;
     Animated.spring(translateY, {
-      toValue: OPEN_HEIGHT,
-      useNativeDriver: true,
-      tension: 60,
-      friction: 10,
+      toValue: currentActiveHeight - CLOSED_HEIGHT,
+      useNativeDriver: false,
+      tension: 50,
+      friction: 9,
     }).start();
-
-    setDynamicHeight(OPEN_HEIGHT);
-    onTrayHeightChange?.(OPEN_HEIGHT);
+    onTrayHeightChange?.(CLOSED_HEIGHT);
   };
 
-  const handlePickupChange = useCallback((text: string) => {
-    updateRideData({
-      pickupLocation: rideData.pickupLocation
-        ? { ...rideData.pickupLocation, name: text }
-        : { id: 'temp-pickup', name: text, address: '', latitude: 0, longitude: 0 }
-    });
-  }, [rideData.pickupLocation, updateRideData]);
+  const inputTranslateX = transitionAnim.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: [0, -windowWidth, -windowWidth * 2],
+  });
 
-  const handleDestinationChange = useCallback((text: string) => {
-    updateRideData({
-      destination: rideData.destination
-        ? { ...rideData.destination, name: text }
-        : { id: 'temp-destination', name: text, address: '', latitude: 0, longitude: 0 }
-    });
-  }, [rideData.destination, updateRideData]);
+  const rideTranslateX = transitionAnim.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: [windowWidth, 0, -windowWidth],
+  });
 
-  const handlePickupSelect = useCallback((place: Place | null) => {
-    updateRideData({ pickupLocation: place });
-  }, [updateRideData]);
+  const searchingTranslateX = transitionAnim.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: [windowWidth * 2, windowWidth, 0],
+  });
 
-  const handleDestinationSelect = (place: Place | null) => {
-    updateRideData({ destination: place });
-
-    if (place) {
-      Keyboard.dismiss();
-      setTimeout(openTray, 120); // open fully when destination is selected
-    }
-  };
-
-  const handleLocationInputFocus = (field: 'pickup' | 'destination') => {
-    onLocationInputFocus?.(field);
-  };
+  const currentTrayHeight = heightAnim.interpolate({
+  inputRange: [0, 1, 2],
+  outputRange: [OPEN_HEIGHT_INPUT, OPEN_HEIGHT_RIDE, OPEN_HEIGHT_SEARCHING],
+});
 
   return (
-    <Animated.View
-      style={[styles.container, { transform: [{ translateY }], height: dynamicHeight }]}
-    >
-      <LinearGradient
-        colors={['rgba(255,255,255,0)', theme.colors.surface]}
-        locations={[0, 0.5]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 0.5 }}
-        style={[styles.gradientBackground, { height: dynamicHeight }]}
-      />
-
+    <Animated.View style={[styles.container, { height: currentTrayHeight, transform: [{ translateY }] }]}>
+      <LinearGradient colors={['#FFFFFF', theme.colors.surface]} style={styles.background} />
       <View style={styles.contentContainer}>
-        <View ref={headerRef} style={styles.locationInputContainer}>
-          <LocationInputCard
-            pickup={rideData.pickupLocation?.name || ''}
-            destination={rideData.destination?.name || ''}
-            onPickupChange={handlePickupChange}
-            onDestinationChange={handleDestinationChange}
-            onPickupSelect={handlePickupSelect}
-            onDestinationSelect={handleDestinationSelect}
-            onInputFocus={handleLocationInputFocus}
-          />
-        </View>
+        <View style={styles.tabsWrapper}>
+          {/* Location Input Tab */}
+          <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: inputTranslateX }] }]}>
+            <LocationInputTab onFocus={(field) => { openTray(); onLocationInputFocus?.(field); }} />
+          </Animated.View>
+          
+          {/* Ride Tab */}
+          <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: rideTranslateX }] }]}>
+            <RideTab 
+              id="ride-options" 
+              onOpenAdditionalInfo={onOpenAdditionalInfo || (() => {})} 
+              onSwitchToSearching={() => handleTransition('searching')}
+            />
+          </Animated.View>
 
-        {/* Ride tab content below LocationInputCard */}
-        {trayOpen && (
-          <View style={[styles.rideTabContainer, { marginTop: headerHeight + theme.spacing.sm }]}>
-            <RideTab id="ride" onOpenAdditionalInfo={onOpenAdditionalInfo!} />
-          </View>
-        )}
+          {/* Searching Tab */}
+          <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: searchingTranslateX }] }]}>
+            <SearchingTab 
+              // We use a logical AND: it's only active if the tray is on the searching tab 
+              // AND the ride hasn't been matched yet.
+              isActive={currentTab === 'searching' && rideData.status !== 'matched'}
+              onCancel={() => {
+                updateRideData({ destination: null });
+                handleTransition('input'); 
+              }}
+              onBackToRide={() => {
+                handleTransition('ride');
+              }}
+              hasOffers={!!hasOffers} 
+            />
+          </Animated.View>
+        </View>
       </View>
     </Animated.View>
   );
@@ -158,45 +236,12 @@ Tray.displayName = 'Tray';
 
 const styles = createStyles({
   container: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
-    overflow: 'hidden',
-    zIndex: 20,
-    borderTopLeftRadius: theme.borderRadius.xl,
-    borderTopRightRadius: theme.borderRadius.xl,
+    position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, backgroundColor: '#FFFFFF',
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 20,
   },
-  gradientBackground: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    borderTopLeftRadius: theme.borderRadius.xl,
-    borderTopRightRadius: theme.borderRadius.xl,
-  },
-  contentContainer: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    paddingHorizontal: theme.spacing.md,
-  },
-  locationInputContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    backgroundColor: 'transparent',
-    paddingHorizontal: theme.spacing.sm,
-    paddingTop: theme.spacing.lg,
-  },
-  rideTabContainer: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    paddingBottom: theme.spacing.md,
-  },
+  background: { ...StyleSheet.absoluteFillObject, borderTopLeftRadius: theme.borderRadius.xl * 1.5, borderTopRightRadius: theme.borderRadius.xl * 1.5 },
+  contentContainer: { flex: 1, paddingTop: theme.spacing.md },
+  tabsWrapper: { flex: 1, overflow: 'hidden' },
 });
 
 export default Tray;

@@ -24,7 +24,7 @@ export const OfferFareControl = ({
 
   useEffect(() => {
     onOfferChange(offer);
-  }, [offer, onOfferChange]);
+  }, [offer]);
 
   const decreaseOffer = () => {
     setOffer(prev =>
@@ -39,26 +39,29 @@ export const OfferFareControl = ({
   };
 
   return (
-    <>
+    <View style={styles.container}>
       <Text style={styles.offerLabel}>Offer your fare</Text>
 
-      <View style={styles.offerControl}>
+      <View style={styles.boltPill}>
         <TouchableOpacity
-          style={[styles.adjustBtn, offer <= minOffer && styles.disabledBtn]}
+          style={[styles.adjustBtn, offer <= minOffer && styles.disabledOpacity]}
           onPress={decreaseOffer}
           disabled={offer <= minOffer}
+          activeOpacity={0.6}
         >
           <Text style={styles.adjustText}>−</Text>
         </TouchableOpacity>
 
         <View style={styles.offerDisplay}>
-          <Text style={styles.offerValue}>${offer.toFixed(2)}</Text>
+          <Text style={styles.currencySymbol}>$</Text>
+          <Text style={styles.offerValue}>{offer.toFixed(2)}</Text>
         </View>
 
         <TouchableOpacity
-          style={[styles.adjustBtn, offer >= maxOffer && styles.disabledBtn]}
+          style={[styles.adjustBtn, offer >= maxOffer && styles.disabledOpacity]}
           onPress={increaseOffer}
           disabled={offer >= maxOffer}
+          activeOpacity={0.6}
         >
           <Text style={styles.adjustText}>+</Text>
         </TouchableOpacity>
@@ -67,59 +70,70 @@ export const OfferFareControl = ({
       <Text style={styles.rangeText}>
         Range: ${minOffer.toFixed(2)} – ${maxOffer.toFixed(2)}
       </Text>
-    </>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  offerLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#334155',
-    marginBottom: 10,
-    textAlign: 'center',
+  container: {
+    marginVertical: 10,
+    alignItems: 'center',
   },
-  offerControl: {
+  offerLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94a3b8', // Slate 400
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  boltPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9', // Very light slate (Bolt style background)
+    borderRadius: 30,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    width: '80%',
+    justifyContent: 'space-between',
+  },
+  adjustBtn: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adjustText: {
+    fontSize: 24,
+    fontWeight: '400',
+    color: '#0f172a', // Dark slate
+  },
+  disabledOpacity: {
+    opacity: 0.2,
+  },
+  offerDisplay: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 14,
   },
-  adjustBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#25D366',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  disabledBtn: {
-    backgroundColor: '#cbd5e1',
-  },
-  adjustText: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  offerDisplay: {
-    minWidth: 90,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    alignItems: 'center',
+  currencySymbol: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#0f172a',
+    marginRight: 2,
+    marginTop: 2, // Fine-tuning alignment
   },
   offerValue: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 26,
+    fontWeight: '700',
     color: '#0f172a',
+    fontVariant: ['tabular-nums'], // Prevents jumping when numbers change
   },
   rangeText: {
-    marginTop: 8,
+    marginTop: 12,
     fontSize: 12,
+    fontWeight: '500',
     color: '#64748b',
-    textAlign: 'center',
+    opacity: 0.8,
   },
 });

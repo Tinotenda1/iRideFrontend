@@ -1,66 +1,35 @@
+// utils/socket.ts
 import { io, Socket } from "socket.io-client";
 
-/* ---------------------------------------------
- * Socket Singleton
- * ------------------------------------------- */
 let socket: Socket | null = null;
+const SERVER_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://your-ngrok-url.dev";
 
-const SERVER_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ||
-  "https://unhaggled-aja-intercolonial.ngrok-free.dev";
-
-/* ---------------------------------------------
- * Initialize socket (Reuse instance)
- * ------------------------------------------- */
-export const initializeSocket = (): Socket => {
-  if (socket) {
-    return socket;
+export const initializeSocket = (phone?: string): Socket => {
+  if (!socket) {
+    socket = io(SERVER_URL, {
+      path: "/socket.io",
+      transports: ["websocket", "polling"],
+      autoConnect: false, // Keep this false so we can set phone first
+      reconnection: true,
+      auth: { phone: phone || "" }
+    });
+    
+    // Global Logs
+    socket.on("connect", () => console.log("🔗 Connected:", socket?.id));
+    socket.on("connect_error", (err) => console.error("❌ Socket Error:", err.message));
+  } else if (phone) {
+    // If socket exists but needs a phone update
+    socket.auth = { phone };
   }
-
-  console.log("🌐 Creating persistent socket instance to", SERVER_URL);
-
-  socket = io(SERVER_URL, {
-    path: "/socket.io",
-    // Prioritize websocket for better background stability
-    transports: ["websocket", "polling"], 
-    autoConnect: false,
-    reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 2000,
-    reconnectionDelayMax: 5000,
-    timeout: 20000,
-  });
-
-  /* ---------------------------------------------
-   * Global socket logging
-   * ------------------------------------------- */
-  socket.on("connect", () => {
-    console.log("🔗 Socket connected:", socket?.id);
-  });
-
-  socket.on("disconnect", (reason) => {
-    console.warn("⚠️ Socket disconnected:", reason);
-  });
-
-  socket.on("connect_error", (err) => {
-    console.error("❌ Socket connect_error:", err.message);
-  });
-
+  
   return socket;
 };
 
-/* ---------------------------------------------
- * Get socket instance
- * ------------------------------------------- */
-export const getSocket = (): Socket | null => socket;
-
-/* ---------------------------------------------
- * Disconnect socket (Soft disconnect)
- * ------------------------------------------- */
-export const disconnectSocket = (): void => {
-  if (socket) {
-    console.log("🛑 Soft-disconnecting socket:", socket.id);
-    socket.disconnect();
-    // Note: We do NOT set socket = null to keep the instance for reuse
-  }
+// HELPER: Use this when the app starts or user logs in
+export const connectWithPhone = (phone: string) => {
+  const s = initializeSocket(phone);
+  s.auth = { phone }; // Ensure phone is set
+  s.connect();
 };
+
+export const getSocket = () => socket;

@@ -1,3 +1,4 @@
+// app/passenger/socketConnectionUtility/passengerSocketService.ts
 import { initializeSocket } from "@/utils/sockets";
 import { getUserInfo } from "@/utils/storage";
 import * as Location from "expo-location";
@@ -76,9 +77,17 @@ const getPassengerLocation = async () => {
  * Public API
  * ------------------------------------------- */
 export const connectPassenger = async () => {
-  socket = initializeSocket();
+  const user = await getUserInfo();
+  const rawPhone = user?.phone;
 
-  // If already connected and authenticated, skip
+  if (!rawPhone) {
+    console.error("❌ Cannot connect: No phone number found for passenger");
+    setStatus("error");
+    return;
+  }
+
+  socket = initializeSocket(rawPhone);
+
   if (socket.connected && status === "connected") return;
 
   const online = await isNetworkOnline();
@@ -90,18 +99,9 @@ export const connectPassenger = async () => {
   shouldStayOnline = true;
   setStatus("connecting");
 
-  const user = await getUserInfo();
-  const phone = user?.phone?.replace(/\D/g, "");
+  const phone = rawPhone.replace(/\D/g, "");
   const location = await getPassengerLocation();
 
-  if (!phone) {
-    setStatus("error");
-    return;
-  }
-
-  /* ---------------------------------------------
-   * Register listeners (CLEAN SLATE via .off)
-   * ------------------------------------------- */
   socket.off("connect");
   socket.off("user:connected");
   socket.off("disconnect");
@@ -125,34 +125,32 @@ export const connectPassenger = async () => {
       clearTimers();
       setStatus("offline");
     } else {
-      // Internal Socket.io reconnection is happening
       setStatus("reconnecting");
     }
   });
 
-  socket.on("connect_error", () => {
+  socket.on("connect_error", (err) => {
+    console.error("❌ Passenger socket connect_error:", err.message);
     setStatus("error");
   });
 
-  // Trigger connection
   if (!socket.connected) {
     socket.connect();
   } else {
-    // If socket was already physically connected, just re-authenticate
     socket.emit("user:connect", {
       phone,
       userType: "passenger",
       ...(location && { location }),
     });
   }
-};
+}; // <--- THIS WAS THE MISSING BRACE
 
 export const disconnectPassenger = () => {
   shouldStayOnline = false;
   clearTimers();
 
   if (socket) {
-    socket.disconnect(); // Soft disconnect (instance remains)
+    socket.disconnect();
   }
 
   setStatus("offline");
