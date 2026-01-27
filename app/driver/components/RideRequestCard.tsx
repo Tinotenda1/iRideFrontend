@@ -1,58 +1,99 @@
 // app/driver/components/RideRequestCard.tsx
-import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useRef } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useCallback, useEffect, useRef } from "react";
 import {
   Animated,
+  Dimensions,
   Easing,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { IRAvatar } from '../../../components/IRAvatar';
+} from "react-native";
+import { IRAvatar } from "../../../components/IRAvatar";
 
-const SLIDE_DURATION = 300;
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const SLIDE_DURATION = 400;
 
 interface Props {
   rideId: string;
   rideData: any;
-  expiresAt: number; // Unix timestamp in milliseconds
+  expiresAt: number;
   submittedOffer?: number;
   onExpire?: (rideId: string) => void;
-  onSelect?: (rideId: string, currentProgress: number, remainingMs: number, rideData: any) => void;
+  onSelect?: (
+    rideId: string,
+    currentProgress: number,
+    remainingMs: number,
+    rideData: any,
+  ) => void;
 }
 
-export default function RideRequestCard({ 
-  rideId, 
-  rideData, 
-  expiresAt, 
-  submittedOffer, 
-  onExpire, 
-  onSelect 
+export default function RideRequestCard({
+  rideId,
+  rideData,
+  expiresAt,
+  submittedOffer,
+  onExpire,
+  onSelect,
 }: Props) {
-  const slideAnim = useRef(new Animated.Value(-400)).current;
+  const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.98)).current;
   const progressAnim = useRef(new Animated.Value(1)).current;
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressValue = useRef(1);
   const animationStartedRef = useRef(false);
 
   const isSubmitted = submittedOffer !== undefined;
 
-  const slideOut = useCallback((cb?: () => void) => {
-    Animated.timing(slideAnim, {
-      toValue: -500,
-      duration: SLIDE_DURATION,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => cb?.());
-  }, [slideAnim]);
+  useEffect(() => {
+    if (!isSubmitted) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(shimmerAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(shimmerAnim, {
+            toValue: 0,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ]),
+      ).start();
+    }
+  }, [isSubmitted]);
+
+  const slideOut = useCallback(
+    (cb?: () => void) => {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: -SCREEN_WIDTH,
+          duration: SLIDE_DURATION,
+          easing: Easing.bezier(0.4, 0, 0.2, 1),
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: SLIDE_DURATION,
+          useNativeDriver: true,
+        }),
+      ]).start(() => cb?.());
+    },
+    [slideAnim, opacityAnim],
+  );
 
   const handleSelect = () => {
-    //if (isSubmitted) return;
-    const currentProgress = progressValue.current;
-    const nowRemaining = expiresAt - Date.now();
-    const liveRemaining = Math.max(0, nowRemaining);
-    onSelect?.(rideId, currentProgress, liveRemaining, rideData);
+    onSelect?.(
+      rideId,
+      progressValue.current,
+      Math.max(0, expiresAt - Date.now()),
+      rideData,
+    );
   };
 
   useEffect(() => {
@@ -60,34 +101,41 @@ export default function RideRequestCard({
       progressValue.current = value;
     });
 
-    // If already submitted, stop all animations and timers
     if (isSubmitted) {
       progressAnim.stopAnimation();
       if (timerRef.current) clearTimeout(timerRef.current);
       return () => progressAnim.removeListener(listenerId);
     }
 
-    // Calculate remaining time
     const remainingMs = expiresAt - Date.now();
-    
-    // If already expired, remove immediately
     if (remainingMs <= 0) {
       slideOut(() => onExpire?.(rideId));
       return () => progressAnim.removeListener(listenerId);
     }
 
-    // Start slide in animation
     if (!animationStartedRef.current) {
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: SLIDE_DURATION,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
+      Animated.parallel([
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 60,
+          friction: 9,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 60,
+          friction: 9,
+          useNativeDriver: true,
+        }),
+      ]).start();
       animationStartedRef.current = true;
     }
 
-    // Start progress bar animation
     Animated.timing(progressAnim, {
       toValue: 0,
       duration: remainingMs,
@@ -95,173 +143,192 @@ export default function RideRequestCard({
       useNativeDriver: false,
     }).start();
 
-    // Set expiration timeout
     timerRef.current = setTimeout(() => {
       slideOut(() => onExpire?.(rideId));
     }, remainingMs);
 
-    // Cleanup
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       progressAnim.removeListener(listenerId);
     };
-  }, [expiresAt, isSubmitted, onExpire, rideId, slideAnim, slideOut, progressAnim]);
-
-  // Update progress value based on current time (for more accurate progress display)
-  useEffect(() => {
-    if (isSubmitted) return;
-
-    const updateProgress = () => {
-      const remainingMs = expiresAt - Date.now();
-      if (remainingMs <= 0) {
-        // Progress bar should be at 0 (empty)
-        progressAnim.setValue(0);
-        return;
-      }
-      
-      // Calculate total duration and elapsed time
-      const totalDuration = rideData.expiresIn || 60000;
-      const elapsedTime = totalDuration - remainingMs;
-      const progress = Math.max(0, Math.min(1, elapsedTime / totalDuration));
-      
-      // Update animation value if it's significantly different
-      if (Math.abs(progressValue.current - progress) > 0.01) {
-        progressAnim.setValue(1 - progress);
-      }
-    };
-
-    // Initial update
-    updateProgress();
-
-    // Update progress every 250ms for smoother animation
-    const interval = setInterval(updateProgress, 10);
-    return () => clearInterval(interval);
-  }, [expiresAt, isSubmitted, rideData.expiresIn, progressAnim]);
+  }, [
+    expiresAt,
+    isSubmitted,
+    onExpire,
+    rideId,
+    slideAnim,
+    slideOut,
+    progressAnim,
+    opacityAnim,
+    scaleAnim,
+  ]);
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
+    outputRange: ["0%", "100%"],
   });
 
-  // Handle case where ride might have already expired before component mounts
-  useEffect(() => {
-    const checkInitialExpiry = () => {
-      if (!isSubmitted && expiresAt <= Date.now()) {
-        // Small delay to allow slide-in animation
-        setTimeout(() => {
-          slideOut(() => onExpire?.(rideId));
-        }, 100);
-      }
-    };
+  const pricePulse = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.05],
+  });
 
-    checkInitialExpiry();
-  }, [expiresAt, isSubmitted, onExpire, rideId, slideOut]);
+  const renderStars = (rating: number) => {
+    return [1, 2, 3, 4, 5].map((i) => (
+      <Ionicons
+        key={i}
+        name={i <= Math.round(rating) ? "star" : "star-outline"}
+        size={7}
+        color={i <= Math.round(rating) ? "#FFC107" : "#cbd5e1"}
+      />
+    ));
+  };
 
   return (
-    <Animated.View 
+    <Animated.View
       style={[
-        styles.card, 
-        { transform: [{ translateX: slideAnim }] },
-        isSubmitted && styles.submittedCard
+        styles.card,
+        isSubmitted ? styles.submittedCard : styles.freshCard,
+        {
+          opacity: opacityAnim,
+          transform: [{ translateX: slideAnim }, { scale: scaleAnim }],
+        },
       ]}
     >
-      <TouchableOpacity activeOpacity={0.9} onPress={handleSelect}>
-        <View style={[styles.row, isSubmitted && styles.submittedContent]}>
-          <View style={styles.leftCol}>
-            <IRAvatar
-              source={rideData.passengerPic ? { uri: rideData.passengerPic } : undefined}
-              name={rideData.passengerName}
-              size="md"
-            />
-            <Text style={styles.name} numberOfLines={1}>
-              {rideData.passengerName || 'Passenger'}
+      <TouchableOpacity
+        activeOpacity={0.8} // Changed: Always show feedback on press
+        onPress={handleSelect}
+        disabled={false} // Changed: Tray now opens even if isSubmitted is true
+        style={styles.content}
+      >
+        {/* LEFT COLUMN - Larger Image Size */}
+        <View style={[styles.leftCol, isSubmitted && styles.desaturated]}>
+          <IRAvatar
+            source={
+              rideData.passengerPic ? { uri: rideData.passengerPic } : undefined
+            }
+            name={rideData.passengerName}
+            size="md"
+          />
+          <View style={styles.ratingRow}>
+            {renderStars(parseFloat(rideData.passengerRating || "5"))}
+          </View>
+          <Text style={styles.tripCountText}>
+            {rideData.passengerTrips || "0"} trips
+          </Text>
+        </View>
+
+        {/* RIGHT COLUMN */}
+        <View style={styles.rightCol}>
+          <View style={styles.headerRow}>
+            <Text
+              style={[
+                styles.passengerName,
+                isSubmitted && styles.submittedText,
+              ]}
+              numberOfLines={1}
+            >
+              {rideData.passengerName || "Passenger"}
             </Text>
-            <View style={styles.rating}>
-              <Ionicons name="star" size={14} color="#FFC107" />
-              <Text style={styles.ratingText}>{rideData.passengerRating ?? '5.0'}</Text>
-            </View>
-          </View>
 
-          <View style={styles.rightCol}>
-            <View style={styles.topRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-                <Text style={styles.offerText}>
-                  ${(rideData.offer)?.toFixed(2) ?? '--'}
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Ionicons
-                    name={rideData.paymentMethod === 'ecocash' ? 'wallet-outline' : 'cash-outline'}
-                    size={14}
-                    color="#475569"
-                    style={{ marginRight: 4 }}
-                  />
-                  <Text style={styles.metaText}>
-                    {rideData.paymentMethod === 'ecocash' ? 'Ecocash' : 'Cash'}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Ionicons
-                    name="car-outline"
-                    size={14}
-                    color="#475569"
-                    style={{ marginRight: 4 }}
-                  />
-                  <Text style={styles.metaText}>
-                    {rideData.vehicleType === '4seater' ? '4 Seater' :
-                     rideData.vehicleType === '7seater' ? '7 Seater' : 'Pickup Truck'}
-                  </Text>
-                </View>
-              </View>
-              <View style={[
-                styles.badge,
-                {
-                  backgroundColor: isSubmitted ? '#64748b' :
-                    rideData.offerType === 'good' ? '#10B981' :
-                    rideData.offerType === 'fair' ? '#F59E0B' :
-                    rideData.offerType === 'poor' ? '#EF4444' : '#25D366',
-                },
-              ]}>
-                <Text style={styles.badgeText}>
-                  {isSubmitted ? 'WAITING' : (rideData.offerType?.toUpperCase() || 'NEW')}
-                </Text>
-              </View>
-            </View>
-            
-            {isSubmitted && (
-              <Text style={styles.waitingLabel}>
-                 ${(isSubmitted ? submittedOffer : rideData.offer)?.toFixed(2) ?? '--'} Offer submitted, waiting for response...
+            <Animated.View
+              style={[
+                styles.priceRow,
+                !isSubmitted && { transform: [{ scale: pricePulse }] },
+              ]}
+            >
+              <Text
+                style={[styles.priceText, isSubmitted && styles.submittedPrice]}
+              >
+                $
+                {(isSubmitted ? submittedOffer : rideData.offer)?.toFixed(2) ??
+                  "--"}
               </Text>
-            )}
-
-            <View style={styles.addressContainer}>
-              <View style={styles.infoRow}>
-                <Ionicons name="location-sharp" size={16} color="#25D366" />
-                <Text style={styles.infoText} numberOfLines={1}>
-                  {rideData.pickup?.address || 'Pickup'}
-                </Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Ionicons name="flag-sharp" size={16} color="#EA4335" />
-                <Text style={styles.infoText} numberOfLines={1}>
-                  {rideData.destination?.address || 'Destination'}
-                </Text>
-              </View>
-            </View>
-            {rideData.additionalInfo && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
-                <Ionicons name="information-circle-outline" size={14} color="#64748b" style={{ marginRight: 4 }} />
-                <Text style={styles.additionalInfoText} numberOfLines={1} ellipsizeMode="tail">
-                  {rideData.additionalInfo}
-                </Text>
-              </View>
-            )}
+            </Animated.View>
           </View>
+
+          {/* META INFO */}
+          <View style={styles.metaInfoRow}>
+            <Text
+              style={[styles.metaLabel, isSubmitted && styles.submittedText]}
+            >
+              {rideData.paymentMethod === "ecocash" ? "Ecocash" : "Cash"}
+            </Text>
+            <View style={styles.dotSeparator} />
+            <Text style={styles.vehicleBadgeText}>
+              {rideData.vehicleType === "4seater" ? "4 SEATER" : "7 SEATER"}
+            </Text>
+            <View style={styles.dotSeparator} />
+            <Text
+              style={[styles.distanceText, isSubmitted && styles.submittedText]}
+            >
+              {rideData.distance || "0.0"} km
+            </Text>
+          </View>
+
+          {/* ADDRESS SECTION */}
+          <View style={styles.addressSection}>
+            <View style={styles.addressLine}>
+              <View
+                style={[
+                  styles.dot,
+                  { backgroundColor: isSubmitted ? "#cbd5e1" : "#10B981" },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.addressText,
+                  isSubmitted && styles.submittedText,
+                ]}
+                numberOfLines={1}
+              >
+                {rideData.pickup?.address || "Pickup"}
+              </Text>
+            </View>
+            <View style={styles.addressLine}>
+              <View
+                style={[
+                  styles.dot,
+                  { backgroundColor: isSubmitted ? "#cbd5e1" : "#ef4444" },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.addressText,
+                  isSubmitted && styles.submittedText,
+                ]}
+                numberOfLines={1}
+              >
+                {rideData.destination?.address || "Destination"}
+              </Text>
+            </View>
+          </View>
+
+          {/* FOOTER */}
+          {(rideData.additionalInfo || isSubmitted) && (
+            <View style={styles.footerRow}>
+              <View style={{ flex: 1 }}>
+                {rideData.additionalInfo && (
+                  <Text style={styles.infoPreview} numberOfLines={1}>
+                    {`"${rideData.additionalInfo}"`}
+                  </Text>
+                )}
+              </View>
+              {isSubmitted && (
+                <View style={styles.statusBadgeProcessing}>
+                  <Text style={styles.waitingText}>PENDING</Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
       </TouchableOpacity>
-      
+
       {!isSubmitted && (
         <View style={styles.progressBar}>
-          <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
+          <Animated.View
+            style={[styles.progressFill, { width: progressWidth }]}
+          />
         </View>
       )}
     </Animated.View>
@@ -269,52 +336,82 @@ export default function RideRequestCard({
 }
 
 const styles = StyleSheet.create({
-  card: { 
-    backgroundColor: '#fff', 
-    borderRadius: 16, 
-    marginBottom: 12, 
-    elevation: 4, 
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+  freshCard: {
+    backgroundColor: "#fff",
+    elevation: 4,
+    shadowColor: "#000",
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    overflow: 'hidden' 
+    shadowRadius: 6,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
   },
   submittedCard: {
-    backgroundColor: '#f1f5f9',
-    elevation: 1,
+    backgroundColor: "#fcfdfe",
+    elevation: 0,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
   },
-  submittedContent: {
-    opacity: 0.6,
+  desaturated: { opacity: 0.5 },
+  submittedText: { color: "#94a3b8" },
+  submittedPrice: { color: "#94a3b8" },
+
+  card: { borderRadius: 12, marginBottom: 8, overflow: "hidden" },
+  content: { flexDirection: "row", padding: 10 },
+  leftCol: { alignItems: "center", width: 68 }, // Slightly wider to hold the 'md' avatar
+  ratingRow: { flexDirection: "row", marginTop: 4, gap: 1 },
+  tripCountText: {
+    fontSize: 8,
+    color: "#94a3b8",
+    fontWeight: "600",
+    marginTop: 2,
   },
-  waitingLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#3b82f6',
-    marginBottom: 6,
-    fontStyle: 'italic',
+
+  rightCol: { flex: 1, marginLeft: 10 },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  row: { flexDirection: 'row', padding: 14 },
-  leftCol: { width: 85, alignItems: 'center', justifyContent: 'center' },
-  rightCol: { flex: 1, paddingLeft: 12 },
-  name: { fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 4 },
-  rating: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  ratingText: { fontSize: 12, fontWeight: '600', color: '#64748b' },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  offerText: { fontSize: 18, fontWeight: '800', color: '#1e293b' },
-  badge: {
-    paddingHorizontal: 8,
+  passengerName: { fontWeight: "700", fontSize: 14, color: "#1e293b", flex: 1 },
+  priceRow: { flexDirection: "row", alignItems: "center" },
+  priceText: { fontWeight: "800", color: "#10B981", fontSize: 16 },
+
+  metaInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  metaLabel: { fontSize: 10, color: "#64748b", fontWeight: "600" },
+  distanceText: { fontSize: 10, color: "#10B981", fontWeight: "800" },
+  dotSeparator: {
+    width: 2,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#cbd5e1",
+    marginHorizontal: 6,
+  },
+  vehicleBadgeText: { fontSize: 9, color: "#94a3b8", fontWeight: "700" },
+
+  addressSection: { gap: 2 },
+  addressLine: { flexDirection: "row", alignItems: "center", gap: 6 },
+  dot: { width: 5, height: 5, borderRadius: 2.5 },
+  addressText: { fontSize: 12, color: "#475569", fontWeight: "500", flex: 1 },
+
+  footerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+    alignItems: "center",
+  },
+  infoPreview: { fontSize: 10, color: "#94a3b8", fontStyle: "italic" },
+  progressBar: { height: 3, backgroundColor: "#f8fafc" },
+  progressFill: { height: "100%", backgroundColor: "#10B981" },
+  statusBadgeProcessing: {
+    backgroundColor: "#f0f9ff",
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 8,
-    marginLeft: 'auto',
-    alignSelf: 'center',
+    borderRadius: 4,
   },
-  metaText: { fontSize: 12, color: '#475569', fontWeight: '600' },
-  additionalInfoText: { fontSize: 12, color: '#475569', fontStyle: 'italic', flex: 1 },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  addressContainer: { gap: 4 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  infoText: { fontSize: 13, color: '#475569', flex: 1 },
-  progressBar: { height: 6, backgroundColor: '#f1f5f9' },
-  progressFill: { height: '100%', backgroundColor: '#25D366' },
+  waitingText: { color: "#0369a1", fontWeight: "800", fontSize: 8 },
 });

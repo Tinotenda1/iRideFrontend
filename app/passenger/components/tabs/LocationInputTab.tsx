@@ -121,7 +121,7 @@ const styles = createStyles({
     lineDecorator: { alignItems: 'center', width: 20, marginVertical: 15, marginRight: theme.spacing.sm },
     dotPickup: { width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.primary },
     line: { flex: 1, width: 1, backgroundColor: theme.colors.border, marginVertical: 4 },
-    squareDestination: { width: 8, height: 8, backgroundColor: '#000' },
+    squareDestination: { width: 8, height: 8, backgroundColor: '#d34444ff' },
     fieldsWrapper: { flex: 1, backgroundColor: theme.colors.background, borderRadius: 12, paddingHorizontal: theme.spacing.md },
     inputContainer: { height: 50, flexDirection: 'row', alignItems: 'center' },
     textInput: { flex: 1, fontSize: 15, color: theme.colors.text },

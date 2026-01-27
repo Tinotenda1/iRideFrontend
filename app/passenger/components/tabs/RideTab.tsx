@@ -272,6 +272,7 @@ const styles = createStyles({
     flex: 1,
     backgroundColor: theme.colors.surface,
     justifyContent: 'space-between',
+    marginBottom: theme.spacing.sm,
   },
   mainContent: {
     flex: 1,

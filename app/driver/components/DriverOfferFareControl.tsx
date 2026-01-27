@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+// app/passenger/components/PassengerOfferFareControl.tsx
+import { useEffect, useState } from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface OfferFareControlProps {
   minOffer: number;
@@ -27,24 +28,33 @@ export const OfferFareControl = ({
   }, [offer]);
 
   const decreaseOffer = () => {
-    setOffer(prev =>
-      Math.max(minOffer, Number((prev - STEP).toFixed(2)))
-    );
+    setOffer((prev) => {
+      const nextValue = prev - STEP;
+      // Round the minimum floor to the nearest 0.5 so 2.80 becomes 3.00
+      const strictMin = Math.ceil(minOffer * 2) / 2;
+      const roundedValue = Math.max(strictMin, Math.round(nextValue * 2) / 2);
+      return Number(roundedValue.toFixed(2));
+    });
   };
 
   const increaseOffer = () => {
-    setOffer(prev =>
-      Math.min(maxOffer, Number((prev + STEP).toFixed(2)))
-    );
+    setOffer((prev) => {
+      const nextValue = prev + STEP;
+      // Round the maximum ceiling to the nearest 0.5 so 5.25 becomes 5.00
+      const strictMax = Math.floor(maxOffer * 2) / 2;
+      const roundedValue = Math.min(strictMax, Math.round(nextValue * 2) / 2);
+      return Number(roundedValue.toFixed(2));
+    });
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.offerLabel}>Offer your fare</Text>
-
       <View style={styles.boltPill}>
         <TouchableOpacity
-          style={[styles.adjustBtn, offer <= minOffer && styles.disabledOpacity]}
+          style={[
+            styles.adjustBtn,
+            offer <= minOffer && styles.disabledOpacity,
+          ]}
           onPress={decreaseOffer}
           disabled={offer <= minOffer}
           activeOpacity={0.6}
@@ -58,7 +68,10 @@ export const OfferFareControl = ({
         </View>
 
         <TouchableOpacity
-          style={[styles.adjustBtn, offer >= maxOffer && styles.disabledOpacity]}
+          style={[
+            styles.adjustBtn,
+            offer >= maxOffer && styles.disabledOpacity,
+          ]}
           onPress={increaseOffer}
           disabled={offer >= maxOffer}
           activeOpacity={0.6}
@@ -66,74 +79,65 @@ export const OfferFareControl = ({
           <Text style={styles.adjustText}>+</Text>
         </TouchableOpacity>
       </View>
-
-      <Text style={styles.rangeText}>
-        Range: ${minOffer.toFixed(2)} – ${maxOffer.toFixed(2)}
-      </Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 10,
-    alignItems: 'center',
+    alignItems: "center",
   },
   offerLabel: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#94a3b8', // Slate 400
-    marginBottom: 12,
-    textTransform: 'uppercase',
+    fontWeight: "700",
+    color: "#94a3b8", // Slate 400
+    textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   boltPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f1f5f9', // Very light slate (Bolt style background)
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: 30,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    width: '80%',
-    justifyContent: 'space-between',
+    width: "80%",
+    justifyContent: "space-between",
   },
   adjustBtn: {
     width: 48,
     height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   adjustText: {
     fontSize: 24,
-    fontWeight: '400',
-    color: '#0f172a', // Dark slate
+    fontWeight: "400",
+    color: "#0f172a", // Dark slate
   },
   disabledOpacity: {
     opacity: 0.2,
   },
   offerDisplay: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
   currencySymbol: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#0f172a',
+    fontWeight: "600",
+    color: "#0f172a",
     marginRight: 2,
     marginTop: 2, // Fine-tuning alignment
   },
   offerValue: {
     fontSize: 26,
-    fontWeight: '700',
-    color: '#0f172a',
-    fontVariant: ['tabular-nums'], // Prevents jumping when numbers change
+    fontWeight: "700",
+    color: "#0f172a",
+    fontVariant: ["tabular-nums"], // Prevents jumping when numbers change
   },
   rangeText: {
-    marginTop: 12,
     fontSize: 12,
-    fontWeight: '500',
-    color: '#64748b',
+    fontWeight: "500",
+    color: "#64748b",
     opacity: 0.8,
   },
 });

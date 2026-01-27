@@ -1,30 +1,27 @@
 // app/driver/components/DriverHeader.tsx
-
-import { theme } from '@/constants/theme';
-import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
+import { theme } from "../../../constants/theme";
 import {
   connectDriver,
   disconnectDriver,
   DriverSocketStatus,
   getDriverSocketStatus,
-} from '../socketConnectionUtility/driverSocketService';
+} from "../socketConnectionUtility/driverSocketService";
 
 interface DriverHeaderProps {
   onMenuPress: () => void;
   onOpenSettings: () => void;
-
-  // Inform DriverHome / Dashboard
   setOnline?: (value: boolean) => void;
   setIsConnecting?: (value: boolean) => void;
 }
@@ -35,182 +32,245 @@ export default function DriverHeader({
   setOnline,
   setIsConnecting,
 }: DriverHeaderProps) {
-  /**
-   * Local UI guard (prevents rapid toggling)
-   */
   const [isToggling, setIsToggling] = useState(false);
-
-  /**
-   * Socket status mirrored from service
-   */
-  const [status, setStatus] =
-    useState<DriverSocketStatus>('offline');
-
-  /**
-   * Polling reference (service is non-reactive)
-   */
+  const [showOfflineModal, setShowOfflineModal] = useState(false);
+  const [status, setStatus] = useState<DriverSocketStatus>("offline");
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /**
-   * Start lightweight polling of socket status
-   * (keeps UI & dashboard in sync)
-   */
   useEffect(() => {
     statusPollRef.current = setInterval(() => {
       setStatus(getDriverSocketStatus());
     }, 500);
 
     return () => {
-      statusPollRef.current &&
-        clearInterval(statusPollRef.current);
+      statusPollRef.current && clearInterval(statusPollRef.current);
     };
   }, []);
 
-  /**
-   * Derived states
-   */
-  const online = status === 'connected';
-  const isConnecting =
-    status === 'connecting' || status === 'reconnecting';
+  const online = status === "connected";
+  const isConnecting = status === "connecting" || status === "reconnecting";
 
-  /**
-   * Sync socket state upward to DriverHome
-   */
+  const lastStatus = useRef(online);
+
   useEffect(() => {
-    setOnline?.(online);
+    if (lastStatus.current !== online) {
+      setOnline?.(online);
+      lastStatus.current = online;
+    }
     setIsConnecting?.(isConnecting);
-  }, [online, isConnecting, setOnline, setIsConnecting]);
+  }, [online, isConnecting]);
 
-  /**
-   * Handle online / offline toggle
-   * Header explicitly controls socket lifecycle
-   */
-  const handleToggle = async (value: boolean) => {
+  // Modified to handle the modal logic
+  const handleTogglePress = () => {
     if (isToggling || isConnecting) return;
 
-    console.log('[DriverHeader] Toggle:', value);
-    setIsToggling(true);
+    if (online) {
+      // If driver is online, show confirmation before going offline
+      setShowOfflineModal(true);
+    } else {
+      // If offline, go online immediately
+      executeToggle(true);
+    }
+  };
 
+  const executeToggle = async (shouldGoOnline: boolean) => {
+    setIsToggling(true);
+    setShowOfflineModal(false);
     try {
-      if (value) {
-        console.log('[DriverHeader] Connecting driver...');
+      if (shouldGoOnline) {
         await connectDriver();
       } else {
-        console.log('[DriverHeader] Disconnecting driver...');
         disconnectDriver();
       }
     } catch (err) {
-      console.error('[DriverHeader] Toggle failed:', err);
+      console.error("[DriverHeader] Toggle failed:", err);
     } finally {
       setIsToggling(false);
     }
   };
 
-  /**
-   * UI helpers
-   */
-  const getStatusText = () => {
-    if (isToggling || isConnecting) return 'Connecting...';
-    return online ? 'Online' : 'Offline';
-  };
-
-  const getStatusColor = () => {
-    if (isToggling || isConnecting)
-      return theme.colors.warning;
-    return online
-      ? theme.colors.primary
-      : theme.colors.textSecondary;
-  };
-
   return (
-    <SafeAreaView edges={['top']} style={styles.safe}>
+    <SafeAreaView edges={["top"]} style={styles.safe}>
       <View style={styles.header}>
-        {/* Menu */}
         <TouchableOpacity
           onPress={onMenuPress}
-          disabled={isToggling}
+          style={styles.sideButton}
+          activeOpacity={0.7}
         >
-          <Ionicons
-            name="menu"
-            size={28}
-            color={
-              isToggling
-                ? theme.colors.textSecondary
-                : theme.colors.text
-            }
-          />
+          <Ionicons name="menu-outline" size={28} color="#1e293b" />
         </TouchableOpacity>
 
-        {/* Status + Switch */}
-        <View style={styles.center}>
-          {(isToggling || isConnecting) ? (
-            <ActivityIndicator
-              size="small"
-              color={theme.colors.warning}
-            />
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={handleTogglePress}
+          disabled={isToggling || isConnecting}
+          style={[
+            styles.statusPill,
+            online ? styles.pillOnline : styles.pillOffline,
+          ]}
+        >
+          {isToggling || isConnecting ? (
+            <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Switch
-              value={online}
-              onValueChange={handleToggle}
-              thumbColor={
-                online ? theme.colors.primary : '#ccc'
-              }
-              disabled={isToggling}
-            />
+            <View style={styles.statusDot} />
           )}
-
-          <Text
-            style={[
-              styles.statusText,
-              { color: getStatusColor() },
-            ]}
-          >
-            {getStatusText()}
+          <Text style={styles.statusLabel}>
+            {isToggling || isConnecting
+              ? "WAITING..."
+              : online
+                ? "GO OFFLINE"
+                : "GO ONLINE"}
           </Text>
-        </View>
+        </TouchableOpacity>
 
-        {/* Settings */}
         <TouchableOpacity
           onPress={onOpenSettings}
-          disabled={isToggling}
+          style={styles.sideButton}
+          activeOpacity={0.7}
         >
-          <Ionicons
-            name="settings-outline"
-            size={24}
-            color={
-              isToggling
-                ? theme.colors.textSecondary
-                : theme.colors.text
-            }
-          />
+          <Ionicons name="settings-outline" size={24} color="#1e293b" />
         </TouchableOpacity>
       </View>
+
+      {/* Confirmation Modal */}
+      <Modal visible={showOfflineModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.warningCircle}>
+              <Ionicons name="power-outline" size={32} color="#ef4444" />
+            </View>
+            <Text style={styles.modalTitle}>Go offline?</Text>
+            <Text style={styles.modalSubtitle}>
+              You will not receive any new ride requests until you go back
+              online.
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.keepBtn}
+                onPress={() => setShowOfflineModal(false)}
+              >
+                <Text style={styles.keepBtnText}>Stay Online</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.confirmOfflineBtn}
+                onPress={() => executeToggle(false)}
+              >
+                <Text style={styles.confirmOfflineText}>Yes, Go Offline</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { backgroundColor: '#fff' },
+  safe: {
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 10,
+  },
   header: {
-    height: 65,
-    paddingHorizontal: 15,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    height: 70,
+    paddingHorizontal: 20,
+    backgroundColor: "#fff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  center: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minHeight: 40,
+  sideButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#f8fafc",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  statusText: {
-    fontSize: 18,
-    fontWeight: '600',
-    minWidth: 100,
-    textAlign: 'center',
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 30,
+    minWidth: 150,
+    justifyContent: "center",
+    gap: 10,
+  },
+  pillOnline: { backgroundColor: theme.colors.primary },
+  pillOffline: { backgroundColor: theme.colors.error },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#fff",
+  },
+  statusLabel: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.7)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+    paddingBottom: 40,
+    alignItems: "center",
+  },
+  warningCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#fef2f2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#1e293b",
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 15,
+    color: "#64748b",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+  modalActions: { width: "100%", gap: 12 },
+  keepBtn: {
+    width: "100%",
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: theme.colors.primary,
+    alignItems: "center",
+  },
+  keepBtnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  confirmOfflineBtn: {
+    width: "100%",
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+  },
+  confirmOfflineText: {
+    color: theme.colors.error,
+    fontWeight: "700",
+    fontSize: 16,
   },
 });

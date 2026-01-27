@@ -1,17 +1,19 @@
-// WhatsApp-inspired theme colors and styles
+// constants/theme.js
+
+// theme colors and styles
 export const theme = {
   colors: {
-    primary: '#34d35cff', // bolt green
-    primaryDark: '#128C7E',
-    secondary: '#218AFF', // SMS/Telegram blue
-    background: '#f6f6f6ff',
-    surface: '#ffffffff',
-    text: '#1F2937',
-    textSecondary: '#a7a7a7ff',
-    border: '#E5E7EB',
+    primary: '#10B981', // Premium Bolt Emerald
+    primaryDark: '#059669',
+    secondary: '#2563EB', // Modern action blue
+    background: '#F8FAFC', // Slate-50 background
+    surface: '#FFFFFF',
+    text: '#0F172A', // Deep Slate-900
+    textSecondary: '#64748B', // Slate-500
+    border: '#E2E8F0',
     error: '#EF4444',
     success: '#10B981',
-    warning: '#FF9500',
+    warning: '#F59E0B',
   },
   shadows: {
     none: {
@@ -22,24 +24,24 @@ export const theme = {
       elevation: 0,
     },
     sm: {
-      shadowColor: '#000',
+      shadowColor: '#0F172A',
       shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
+      shadowOpacity: 0.05,
       shadowRadius: 2,
       elevation: 2,
     },
     md: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.15,
-      shadowRadius: 4,
+      shadowColor: '#0F172A',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 6,
       elevation: 4,
     },
     lg: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
+      shadowColor: '#0F172A',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
       elevation: 8,
     },
   }, 
@@ -61,22 +63,22 @@ export const theme = {
   typography: {
     h1: {
       fontSize: 28,
-      fontWeight: '700',
+      fontWeight: '800',
       lineHeight: 36,
     },
     h2: {
       fontSize: 24,
-      fontWeight: '600',
+      fontWeight: '700',
       lineHeight: 32,
     },
     h3: {
       fontSize: 20,
-      fontWeight: '600',
+      fontWeight: '700',
       lineHeight: 28,
     },
     body: {
       fontSize: 16,
-      fontWeight: '400',
+      fontWeight: '500',
       lineHeight: 24,
     },
     bodySmall: {
@@ -86,10 +88,8 @@ export const theme = {
     },
     caption: {
       fontSize: 12,
-      fontWeight: '400',
+      fontWeight: '600',
       lineHeight: 16,
     },
   },
- 
 };
-

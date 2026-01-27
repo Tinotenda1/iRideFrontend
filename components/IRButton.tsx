@@ -1,11 +1,10 @@
-// components/IRButton.tsx
 import React from "react";
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TextStyle, TouchableOpacity, ViewStyle } from "react-native";
 import { theme } from "../constants/theme";
 
 interface IRButtonProps {
   title: string;
-  variant?: "primary" | "secondary" | "outline" | "danger";
+  variant?: "primary" | "secondary" | "outline" | "danger" | "ghost";
   loading?: boolean;
   disabled?: boolean;
   leftIcon?: React.ReactNode;
@@ -13,9 +12,10 @@ interface IRButtonProps {
   onPress?: () => void;
   fullWidth?: boolean;
   size?: "sm" | "md" | "lg";
-  style?: any;
-  textStyle?: any; // ✅ New prop to customize the button text
-  loadingColor?: string; // custom loader color
+  style?: ViewStyle;
+  textStyle?: TextStyle;
+  loadingColor?: string;
+  borderColor?: string; // ✅ Added to match custom outlines
 }
 
 export function IRButton({
@@ -29,16 +29,21 @@ export function IRButton({
   fullWidth = true,
   size = "md",
   style,
-  textStyle, // ✅ Destructure new prop
+  textStyle,
+  loadingColor,
+  borderColor,
 }: IRButtonProps) {
+  
   const getButtonStyle = () => {
     switch (variant) {
       case "secondary":
         return styles.secondary;
       case "outline":
-        return styles.outline;
+        return [styles.outline, borderColor ? { borderColor } : null];
       case "danger":
         return styles.danger;
+      case "ghost":
+        return styles.ghost;
       default:
         return styles.primary;
     }
@@ -55,10 +60,15 @@ export function IRButton({
     }
   };
 
-  const defaultTextStyle =
-    variant === "outline" ? styles.outlineText :
-    variant === "danger" ? styles.dangerText :
-    styles.text;
+  // Content Color Logic
+  const getDefaultContentColor = () => {
+    if (variant === "outline") return theme.colors.primary;
+    if (variant === "ghost") return "#FF3B30"; // Matches the Red text in your CancelButton
+    if (variant === "danger") return "#fff";
+    return "#fff"; 
+  };
+
+  const contentColor = getDefaultContentColor();
 
   return (
     <TouchableOpacity
@@ -67,7 +77,7 @@ export function IRButton({
         getButtonStyle(),
         getSizeStyle(),
         fullWidth && { width: "100%" },
-        disabled && styles.disabled,
+        (disabled || loading) && styles.disabled,
         style,
       ]}
       activeOpacity={0.7}
@@ -76,7 +86,7 @@ export function IRButton({
     >
       {loading ? (
         <ActivityIndicator 
-          color={variant === "outline" ? theme.colors.primary : "#fff"} 
+          color={loadingColor || contentColor} 
           size="small" 
         />
       ) : (
@@ -84,9 +94,13 @@ export function IRButton({
           {leftIcon}
           <Text
             style={[
-              defaultTextStyle,
-              textStyle, // ✅ Apply custom text style here
-              { marginLeft: leftIcon ? 8 : 0, marginRight: rightIcon ? 8 : 0 }
+              styles.text,
+              { color: contentColor },
+              textStyle,
+              { 
+                marginLeft: leftIcon ? 8 : 0, 
+                marginRight: rightIcon ? 8 : 0 
+              }
             ]}
           >
             {title}
@@ -100,21 +114,23 @@ export function IRButton({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: theme.borderRadius.full,
+    // ⬛ SHAPE UPDATE: Matches the 12px radius of the CancelButton
+    borderRadius: 12, 
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
   },
   small: {
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 16,
   },
   medium: {
-    paddingVertical: 16,
+    // 📏 HEIGHT UPDATE: 14px padding matches the height of the CancelButton perfectly
+    paddingVertical: 14, 
     paddingHorizontal: 24,
   },
   large: {
-    paddingVertical: 20,
+    paddingVertical: 18,
     paddingHorizontal: 32,
   },
   primary: {
@@ -124,29 +140,23 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.secondary,
   },
   outline: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: theme.colors.primary,
     backgroundColor: "transparent",
   },
   danger: {
     backgroundColor: theme.colors.error,
   },
+  ghost: {
+    // 👻 MATCHING: Uses the exact light grey background from the CancelButton
+    backgroundColor: '#F2F2F2', 
+  },
   disabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   text: {
-    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
-  },
-  outlineText: {
-    color: theme.colors.primary,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  dangerText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
+    letterSpacing: -0.3, // Makes the text look tighter and more modern
   },
 });

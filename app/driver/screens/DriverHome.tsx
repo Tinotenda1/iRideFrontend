@@ -1,27 +1,33 @@
 // app/driver/screens/DriverHome.tsx
-import { theme } from '@/constants/theme';
-import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import { theme } from "@/constants/theme";
+import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
-  Easing,
   FlatList,
   LayoutAnimation,
   Platform,
   StyleSheet,
   Text,
+  TouchableOpacity, // Added
   UIManager,
-  View
-} from 'react-native';
-import RideRequestCard from '../components/RideRequestCard';
+  View,
+} from "react-native";
+import MapView, { PROVIDER_GOOGLE, Region } from "react-native-maps";
+import RideRequestCard from "../components/RideRequestCard";
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 interface RideState {
   rideId: string;
-  expiresAt: number; // Unix timestamp in milliseconds
+  expiresAt: number;
   data: any;
 }
 
@@ -30,14 +36,17 @@ interface Props {
   isConnecting: boolean;
   incomingRides?: any[];
   submittedOffers: { [rideId: string]: number };
-  onRideSelect: (ride: any, progress: number, msLeft: number, rideData: any) => void;
+  onRideSelect: (
+    rideId: string,
+    progress: number,
+    msLeft: number,
+    rideData: any,
+  ) => void;
   onRideExpire: (ride: any) => void;
+  trayPadding: number;
 }
 
-const PULSE_COUNT = 3;
-const PULSE_DURATION = 2500;
-const POINT_COUNT = 8;
-const DEFAULT_EXPIRE_TIME = 10000; // 60 seconds
+const DEFAULT_EXPIRE_TIME = 10000;
 
 const DriverHome: React.FC<Props> = ({
   online,
@@ -46,26 +55,45 @@ const DriverHome: React.FC<Props> = ({
   submittedOffers,
   onRideSelect,
   onRideExpire,
+  trayPadding,
 }) => {
   const [rides, setRides] = useState<RideState[]>([]);
   const lastProcessedRidesRef = useRef<Set<string>>(new Set());
 
-  const pulses = useRef(
-    Array.from({ length: PULSE_COUNT }, () => new Animated.Value(0))
-  ).current;
-  const textAnim = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const pulseLoops = useRef<Animated.CompositeAnimation[]>([]).current;
-  const points = useRef(
-    Array.from({ length: POINT_COUNT }, () => ({
-      x: Math.random() * 200 - 100,
-      y: Math.random() * 200 - 100,
-      size: Math.random() * 8 + 5,
-      anim: new Animated.Value(0),
-    }))
-  ).current;
+  // MAP STATES
+  const mapRef = useRef<MapView>(null);
+  const [userRegion, setUserRegion] = useState<any>(null);
+  const [mapLoading, setMapLoading] = useState(true);
+  const [showRecenter, setShowRecenter] = useState(false); // Track button visibility
 
-  // Calculate expiresAt for each incoming ride when it's first received
+  // ANIMATION VALUES
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // 1. MAP LOGIC: LOAD USER LOCATION
+  useEffect(() => {
+    const loadLocation = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setMapLoading(false);
+        return;
+      }
+
+      const loc = await Location.getCurrentPositionAsync({});
+      const region = {
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        latitudeDelta: 0.012,
+        longitudeDelta: 0.012,
+      };
+
+      setUserRegion(region);
+      setMapLoading(false);
+    };
+
+    loadLocation();
+  }, []);
+
+  // 2. RIDE PROCESSING LOGIC
   useEffect(() => {
     if (!incomingRides || incomingRides.length === 0) {
       setRides([]);
@@ -73,212 +101,107 @@ const DriverHome: React.FC<Props> = ({
       return;
     }
 
-    // Get current ride IDs
-    const currentRideIds = new Set(incomingRides.map(ride => ride.rideId));
-    
-    // Find new rides that haven't been processed yet
+    const currentRideIds = new Set(incomingRides.map((ride) => ride.rideId));
     const newRides: RideState[] = [];
-    incomingRides.forEach(ride => {
+
+    incomingRides.forEach((ride) => {
       if (!lastProcessedRidesRef.current.has(ride.rideId)) {
         const expiresIn = ride.expiresIn || DEFAULT_EXPIRE_TIME;
         const expiresAt = Date.now() + expiresIn;
-        
-        newRides.push({
-          rideId: ride.rideId,
-          expiresAt,
-          data: ride,
-        });
-        
+        newRides.push({ rideId: ride.rideId, expiresAt, data: ride });
         lastProcessedRidesRef.current.add(ride.rideId);
       }
     });
 
-    // Update rides state
-    setRides(prev => {
-      // Remove rides that are no longer in incomingRides
-      const filteredPrev = prev.filter(ride => currentRideIds.has(ride.rideId));
-      
-      // Update existing rides with new data (like status changes)
-      const updatedPrev = filteredPrev.map(prevRide => {
-        const currentData = incomingRides.find(r => r.rideId === prevRide.rideId);
+    setRides((prev) => {
+      const filteredPrev = prev.filter((ride) =>
+        currentRideIds.has(ride.rideId),
+      );
+      const updatedPrev = filteredPrev.map((prevRide) => {
+        const currentData = incomingRides.find(
+          (r) => r.rideId === prevRide.rideId,
+        );
         return currentData ? { ...prevRide, data: currentData } : prevRide;
       });
 
-      // Add new rides
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       return [...updatedPrev, ...newRides];
     });
 
+    lastProcessedRidesRef.current.forEach((id) => {
+      if (!currentRideIds.has(id)) lastProcessedRidesRef.current.delete(id);
+    });
   }, [incomingRides]);
 
-  // Clean up rides that are no longer in incomingRides
-  useEffect(() => {
-    if (incomingRides && incomingRides.length > 0) {
-      const currentRideIds = new Set(incomingRides.map(ride => ride.rideId));
-      
-      setRides(prev => {
-        const updated = prev.filter(ride => currentRideIds.has(ride.rideId));
-        
-        // Clean up the ref for removed rides
-        lastProcessedRidesRef.current.forEach(rideId => {
-          if (!currentRideIds.has(rideId)) {
-            lastProcessedRidesRef.current.delete(rideId);
-          }
-        });
-        
-        return updated;
-      });
-    }
-  }, [incomingRides]);
-
-  // Layout animation for ride changes
-  useEffect(() => {
-    if (rides.length > 0) {
-      LayoutAnimation.configureNext({
-        duration: 500,
-        create: {
-          type: LayoutAnimation.Types.spring,
-          property: LayoutAnimation.Properties.scaleXY,
-          springDamping: 0.9,
-        },
-        update: {
-          type: LayoutAnimation.Types.spring,
-          springDamping: 0.9,
-        },
-      });
-    }
-  }, [rides]);
-
-  // Animation controller
+  // 3. RADAR ANIMATION LOOP
   useEffect(() => {
     if (online && !isConnecting) {
-      fadeAnim.setValue(0);
-      pulseLoops.length = 0;
-      
-      pulses.forEach((pulse, index) => {
-        const loop = Animated.loop(
-          Animated.sequence([
-            Animated.delay((PULSE_DURATION / PULSE_COUNT) * index),
-            Animated.timing(pulse, {
-              toValue: 1,
-              duration: PULSE_DURATION,
-              easing: Easing.out(Easing.ease),
-              useNativeDriver: true,
-            }),
-            Animated.timing(pulse, {
-              toValue: 0,
-              duration: 0,
-              useNativeDriver: true,
-            }),
-          ])
-        );
-        pulseLoops.push(loop);
-        loop.start();
-      });
-
-      Animated.loop(
+      const animation = Animated.loop(
         Animated.sequence([
-          Animated.timing(textAnim, {
+          Animated.timing(pulseAnim, {
+            toValue: 1.15,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
             toValue: 1,
             duration: 1000,
             useNativeDriver: true,
           }),
-          Animated.timing(textAnim, {
-            toValue: 0,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-
-      points.forEach((p) => {
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(p.anim, {
-              toValue: 1,
-              duration: 800 + Math.random() * 800,
-              useNativeDriver: true,
-            }),
-            Animated.timing(p.anim, {
-              toValue: 0,
-              duration: 800 + Math.random() * 800,
-              useNativeDriver: true,
-            }),
-          ])
-        ).start();
-      });
-    } else {
-      pulseLoops.forEach((l) => l.stop());
-      pulses.forEach((p) => p.setValue(0));
-      textAnim.setValue(0);
-      points.forEach((p) => p.anim.setValue(0));
-
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [online, isConnecting, fadeAnim, pulseLoops, points, pulses, textAnim]);
-
-  const handleCardSelect = (rideId: string, progress: number, msLeft: number, rideData: any) => {
-    const rideState = rides.find(r => r.rideId === rideId);
-   
-      onRideSelect(rideId, progress, msLeft, rideData);
-    
-  };
-
-  const handleCardExpire = (rideId: string) => {
-    const rideState = rides.find(r => r.rideId === rideId);
-    if (rideState) {
-      onRideExpire(rideState.data);
-    }
-  };
-
-  const renderPulses = () =>
-    pulses.map((pulse, i) => {
-      const scale = pulse.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0.2, 3],
-      });
-      const opacity = pulse.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0.6, 0],
-      });
-
-      return (
-        <Animated.View
-          key={i}
-          style={[styles.radarCircle, { transform: [{ scale }], opacity }]}
-        />
+        ]),
       );
-    });
+      animation.start();
+      return () => animation.stop();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [online, isConnecting, pulseAnim]);
 
-  const renderPoints = () =>
-    points.map((p, i) => (
-      <Animated.View
-        key={i}
-        style={[
-          styles.point,
-          {
-            width: p.size,
-            height: p.size,
-            left: 150 + p.x,
-            top: 150 + p.y,
-            opacity: p.anim,
-          },
-        ]}
-      />
-    ));
+  // 4. HANDLERS
+  const handleCardSelect = useCallback(
+    (rideId: string, progress: number, msLeft: number, rideData: any) => {
+      onRideSelect(rideId, progress, msLeft, rideData);
+    },
+    [onRideSelect],
+  );
 
-  const textOpacity = textAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.4, 1],
-  });
+  const handleCardExpire = useCallback(
+    (rideId: string) => {
+      const rideState = rides.find((r) => r.rideId === rideId);
+      if (rideState) onRideExpire(rideState.data);
+    },
+    [rides, onRideExpire],
+  );
 
+  const handleRecenter = () => {
+    if (userRegion && mapRef.current) {
+      mapRef.current.animateToRegion(userRegion, 1000);
+      setShowRecenter(false);
+    }
+  };
+
+  const onRegionChangeComplete = (region: Region) => {
+    if (!userRegion) return;
+
+    // Check if user has moved the map significantly from their location
+    const latDiff = Math.abs(region.latitude - userRegion.latitude);
+    const lngDiff = Math.abs(region.longitude - userRegion.longitude);
+
+    // threshold of ~0.001 (~100 meters)
+    if (latDiff > 0.001 || lngDiff > 0.001) {
+      setShowRecenter(true);
+    } else {
+      setShowRecenter(false);
+    }
+  };
+
+  // OFFLINE VIEW
   if (!online) {
     return (
-      <View style={styles.center}>
-        <Ionicons name="cloud-offline-outline" size={120} color="#aaa" />
+      <View style={styles.offlineContainer}>
+        <View style={styles.offlineIcon}>
+          <Ionicons name="moon-outline" size={60} color="#94a3b8" />
+        </View>
         <Text style={styles.title}>You are Offline</Text>
         <Text style={styles.subtitle}>
           Turn online to start receiving ride requests
@@ -287,38 +210,88 @@ const DriverHome: React.FC<Props> = ({
     );
   }
 
-  if (isConnecting) {
+  // LOADING VIEW
+  if (mapLoading || !userRegion) {
     return (
       <View style={styles.center}>
-        <Ionicons name="wifi-outline" size={120} color={theme.colors.warning} />
-        <Text style={styles.title}>Connecting…</Text>
-        <Text style={[styles.subtitle]}>
-          Checking network and syncing with server
-        </Text>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.radar} pointerEvents="none">
-        {renderPulses()}
-        {renderPoints()}
-        <View style={styles.centerDot} />
+      {/* BACKGROUND LAYER: MAP */}
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_GOOGLE}
+        style={StyleSheet.absoluteFill}
+        mapPadding={{
+          top: 60,
+          right: 0,
+          bottom: trayPadding,
+          left: 0,
+        }}
+        initialRegion={userRegion}
+        showsUserLocation={true}
+        showsMyLocationButton={false}
+        onRegionChangeComplete={onRegionChangeComplete} // Track movement
+        loadingEnabled={true}
+        pitchEnabled={false}
+        rotateEnabled={false}
+      />
+
+      {/* MIDDLE LAYER: RADAR RADIAL */}
+      <View
+        style={[
+          styles.radarLayer,
+          {
+            top: 60,
+            bottom: trayPadding,
+          },
+        ]}
+        pointerEvents="none"
+      >
+        <Animated.View
+          style={[styles.pulseCircle, { transform: [{ scale: pulseAnim }] }]}
+        />
+        <Animated.View
+          style={[
+            styles.pulseCircleOuter,
+            { transform: [{ scale: pulseAnim }] },
+          ]}
+        />
+        <View style={styles.driverDot} />
       </View>
 
-      <Animated.View style={{ opacity: textOpacity }}>
-        <Text style={styles.searchText}>Searching for riders…</Text>
-      </Animated.View>
+      {/* RECENTER BUTTON (FLOATS ABOVE TRAY) */}
+      {showRecenter && (
+        <TouchableOpacity
+          style={[styles.recenterButton, { bottom: trayPadding + 16 }]}
+          onPress={handleRecenter}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="navigate" size={24} color={theme.colors.primary} />
+        </TouchableOpacity>
+      )}
 
+      {/* TOP LAYER: SCROLLABLE RIDE STACK */}
       {rides.length > 0 && (
-        <View style={styles.rideStackContainer}>
+        <View
+          style={[
+            styles.rideStackContainer,
+            {
+              top: 10,
+              bottom: 160,
+            },
+          ]}
+          pointerEvents="box-none"
+        >
           <FlatList
             data={[...rides].reverse()}
             keyExtractor={(item) => item.rideId}
-            removeClippedSubviews={false}
             renderItem={({ item }) => (
-              <View style={{ marginVertical: 5 }}>
+              <View style={styles.cardWrapper}>
                 <RideRequestCard
                   rideId={item.rideId}
                   rideData={item.data}
@@ -329,7 +302,11 @@ const DriverHome: React.FC<Props> = ({
                 />
               </View>
             )}
-            contentContainerStyle={{ paddingVertical: 10, paddingBottom: 40 }}
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              //paddingTop: 10,
+              //paddingBottom: 10,
+            }}
             showsVerticalScrollIndicator={false}
           />
         </View>
@@ -338,69 +315,96 @@ const DriverHome: React.FC<Props> = ({
   );
 };
 
-export default DriverHome;
-
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1, backgroundColor: "#f3f3f3" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  offlineContainer: {
     flex: 1,
-    backgroundColor: '#f3f3f3',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#0f172a",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+  offlineIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#1e293b",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
   },
-  radar: {
-    width: 300,
-    height: 300,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radarCircle: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    borderWidth: 3,
-    borderColor: theme.colors.primary,
-    backgroundColor: 'rgba(52,152,219,0.25)',
-  },
-  point: {
-    position: 'absolute',
-    borderRadius: 10,
-    backgroundColor: theme.colors.primary,
-  },
-  centerDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: theme.colors.primary,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    marginTop: 20,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#777',
-    textAlign: 'center',
-    marginTop: 10,
-  },
-  searchText: {
-    marginTop: 40,
-    fontSize: 22,
-    fontWeight: '700',
-  },
-  rideStackContainer: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
+  radarLayer: {
+    position: "absolute",
     left: 0,
     right: 0,
-    paddingHorizontal: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1,
+  },
+  pulseCircle: {
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    backgroundColor: theme.colors.primary + "15",
+    borderWidth: 2,
+    borderColor: theme.colors.primary + "40",
+  },
+  pulseCircleOuter: {
+    position: "absolute",
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: theme.colors.primary + "10",
+  },
+  driverDot: {
+    position: "absolute",
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: theme.colors.primary,
+    borderWidth: 3,
+    borderColor: "#fff",
+    elevation: 5,
+  },
+  recenterButton: {
+    position: "absolute",
+    right: 16,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 8,
+    zIndex: 30,
+  },
+  title: { fontSize: 24, fontWeight: "800", color: "#fff", marginTop: 10 },
+  subtitle: {
+    fontSize: 15,
+    color: "#94a3b8",
+    textAlign: "center",
+    marginTop: 8,
+    paddingHorizontal: 40,
+  },
+  rideStackContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    zIndex: 20,
+  },
+  cardWrapper: {
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
   },
 });
+
+export default DriverHome;
