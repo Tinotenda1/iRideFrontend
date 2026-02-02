@@ -1,5 +1,13 @@
+// components/IRButton.tsx
 import React from "react";
-import { ActivityIndicator, StyleSheet, Text, TextStyle, TouchableOpacity, ViewStyle } from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TextStyle,
+  TouchableOpacity,
+  ViewStyle,
+} from "react-native";
 import { theme } from "../constants/theme";
 
 interface IRButtonProps {
@@ -33,7 +41,6 @@ export function IRButton({
   loadingColor,
   borderColor,
 }: IRButtonProps) {
-  
   const getButtonStyle = () => {
     switch (variant) {
       case "secondary":
@@ -65,7 +72,7 @@ export function IRButton({
     if (variant === "outline") return theme.colors.primary;
     if (variant === "ghost") return "#FF3B30"; // Matches the Red text in your CancelButton
     if (variant === "danger") return "#fff";
-    return "#fff"; 
+    return "#fff";
   };
 
   const contentColor = getDefaultContentColor();
@@ -85,10 +92,7 @@ export function IRButton({
       disabled={disabled || loading}
     >
       {loading ? (
-        <ActivityIndicator 
-          color={loadingColor || contentColor} 
-          size="small" 
-        />
+        <ActivityIndicator color={loadingColor || contentColor} size="small" />
       ) : (
         <>
           {leftIcon}
@@ -97,10 +101,10 @@ export function IRButton({
               styles.text,
               { color: contentColor },
               textStyle,
-              { 
-                marginLeft: leftIcon ? 8 : 0, 
-                marginRight: rightIcon ? 8 : 0 
-              }
+              {
+                marginLeft: leftIcon ? 8 : 0,
+                marginRight: rightIcon ? 8 : 0,
+              },
             ]}
           >
             {title}
@@ -115,7 +119,7 @@ export function IRButton({
 const styles = StyleSheet.create({
   base: {
     // ⬛ SHAPE UPDATE: Matches the 12px radius of the CancelButton
-    borderRadius: 12, 
+    borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -126,7 +130,7 @@ const styles = StyleSheet.create({
   },
   medium: {
     // 📏 HEIGHT UPDATE: 14px padding matches the height of the CancelButton perfectly
-    paddingVertical: 14, 
+    paddingVertical: 14,
     paddingHorizontal: 24,
   },
   large: {
@@ -149,7 +153,7 @@ const styles = StyleSheet.create({
   },
   ghost: {
     // 👻 MATCHING: Uses the exact light grey background from the CancelButton
-    backgroundColor: '#F2F2F2', 
+    backgroundColor: "#F2F2F2",
   },
   disabled: {
     opacity: 0.5,

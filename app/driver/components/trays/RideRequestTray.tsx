@@ -1,4 +1,3 @@
-// app/driver/components/trays/RideRequestTray.tsx
 import { Ionicons } from "@expo/vector-icons";
 import {
   forwardRef,
@@ -13,19 +12,20 @@ import {
   BackHandler,
   Dimensions,
   Easing,
-  Image,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
+import { IRAvatar } from "../../../../components/IRAvatar"; // Added Import
 import { IRButton } from "../../../../components/IRButton";
 import { SubmissionState } from "../../index";
 import { OfferFareControl } from "../DriverOfferFareControl";
 
 const { height: windowHeight } = Dimensions.get("window");
-const OPEN_HEIGHT = windowHeight * 0.8;
+const OPEN_HEIGHT = windowHeight * 0.88;
 
 export interface RideRequestTrayRef {
   open: (
@@ -51,14 +51,14 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     const [rideId, setRideId] = useState<string | null>(null);
     const [selectedRideData, setSelectedRideData] = useState<any>(null);
     const [expiresAt, setExpiresAt] = useState<number | null>(null);
-    const [secondsLeft, setSecondsLeft] = useState(0); // Added for text timer
+    const [secondsLeft, setSecondsLeft] = useState(0);
 
     const [currentOffer, setCurrentOffer] = useState(0);
     const [currentStatus, setCurrentStatus] = useState<SubmissionState>("idle");
 
     const progressAnim = useRef(new Animated.Value(1)).current;
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null); // Added for text timer
+    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const baseOffer = selectedRideData?.offer ?? 0;
     const minOffer = selectedRideData?.priceRange?.min ?? baseOffer;
@@ -67,6 +67,13 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     const clearTimers = () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+
+    const vehicleTypeLabels: Record<string, string> = {
+      "4seater": "4 SEATER",
+      "7seater": "7 SEATER",
+      pickup2seater: "2 SEATER PICKUP",
+      pickup4seater: "4 SEATER PICKUP",
     };
 
     const handleClose = useCallback(() => {
@@ -98,8 +105,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
           setCurrentOffer(existingOffer ?? rideData.offer);
           setIsOpen(true);
 
-          if (status === "idle") {
-            // 1. Progress Bar Animation
+          if (status === ("idle" as any)) {
             progressAnim.setValue(currentProgress ?? 1);
             Animated.timing(progressAnim, {
               toValue: 0,
@@ -108,29 +114,14 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
               useNativeDriver: false,
             }).start();
 
-            // 2. Numeric Timer Logic
             const initialSeconds = Math.ceil(remainingMs / 1000);
             setSecondsLeft(initialSeconds);
 
             clearTimers();
-
-            // Expiry timer
             timerRef.current = setTimeout(handleClose, remainingMs);
-
-            // Countdown interval
             intervalRef.current = setInterval(() => {
-              setSecondsLeft((prev) => {
-                if (prev <= 1) {
-                  if (intervalRef.current) clearInterval(intervalRef.current);
-                  return 0;
-                }
-                return prev - 1;
-              });
+              setSecondsLeft((prev) => (prev <= 1 ? 0 : prev - 1));
             }, 1000);
-          } else {
-            progressAnim.stopAnimation();
-            progressAnim.setValue(0);
-            setSecondsLeft(0);
           }
         },
         close: handleClose,
@@ -139,9 +130,11 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     );
 
     const submitOffer = () => {
-      if (!rideId || !selectedRideData || currentStatus !== "idle") return;
+      if (!rideId || !selectedRideData || (currentStatus as string) !== "idle")
+        return;
+
       onOfferSubmitted(rideId, currentOffer, baseOffer);
-      setCurrentStatus("submitting");
+      setCurrentStatus("submitted" as any);
       clearTimers();
       progressAnim.stopAnimation();
     };
@@ -167,7 +160,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
 
     const progressColor = progressAnim.interpolate({
       inputRange: [0, 0.2, 1],
-      outputRange: ["#EF4444", "#F59E0B", "#00D26A"],
+      outputRange: ["#EF4444", "#F59E0B", "#32D74B"],
     });
 
     return (
@@ -177,172 +170,210 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
           activeOpacity={1}
           onPress={handleClose}
         />
-
         <View style={styles.container}>
-          {/* Top Edge Progress Bar (Only when Idle) */}
-          {currentStatus === "idle" && (
+          {(currentStatus as string) === "idle" && (
             <Animated.View
               style={[
                 styles.topProgressBar,
-                {
-                  width: progressWidth,
-                  backgroundColor: progressColor,
-                },
+                { width: progressWidth, backgroundColor: progressColor },
               ]}
             />
           )}
-
-          {/* Header Area with Timer Text */}
           <View style={styles.headerArea}>
-            {currentStatus === "idle" ? (
-              <View style={styles.timerContainer}>
-                <Text style={styles.timerDigits}>
-                  00:{secondsLeft.toString().padStart(2, "0")}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.timerContainer}>
-                <Text style={styles.timerLabel}>STATUS</Text>
-                <Text style={[styles.timerDigits, { color: "#00D26A" }]}>
-                  ACTIVE
-                </Text>
-              </View>
-            )}
+            <View style={styles.handle} />
+            <Text style={styles.timerDigits}>
+              {(currentStatus as string) === "idle"
+                ? `NEW REQUEST - ${vehicleTypeLabels[selectedRideData.vehicleType] || "Ride"} • 00:${secondsLeft
+                    .toString()
+                    .padStart(2, "0")}`
+                : "OFFER PENDING"}
+            </Text>
           </View>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.scrollArea}
+            contentContainerStyle={{ flexGrow: 1 }}
+          >
+            <View style={[styles.mapContainer, { flex: 1, minHeight: 120 }]}>
+              <MapView
+                provider={PROVIDER_GOOGLE}
+                style={StyleSheet.absoluteFillObject}
+                initialRegion={{
+                  latitude: selectedRideData.pickup?.latitude ?? -17.82,
+                  longitude: selectedRideData.pickup?.longitude ?? 31.04,
+                  latitudeDelta: 0.02,
+                  longitudeDelta: 0.02,
+                }}
+                scrollEnabled={false}
+              />
+            </View>
 
-          {/* Map Section */}
-          <View style={styles.mapContainer}>
-            <MapView
-              provider={PROVIDER_GOOGLE}
-              style={StyleSheet.absoluteFillObject}
-              initialRegion={{
-                latitude: selectedRideData.pickup?.latitude ?? -17.82,
-                longitude: selectedRideData.pickup?.longitude ?? 31.04,
-                latitudeDelta: 0.05,
-                longitudeDelta: 0.05,
-              }}
-            />
-          </View>
-
-          {/* Content Section */}
-          <View style={styles.middleSection}>
-            <View style={styles.topRow}>
-              {/* Left: Passenger Info */}
-              <View style={styles.leftCol}>
-                <View style={styles.avatarWrapper}>
-                  <Image
-                    source={{ uri: selectedRideData.passengerPic }}
-                    style={styles.passengerPic}
+            <View style={styles.middleSection}>
+              <View style={styles.profileRow}>
+                <View style={styles.avatarContainer}>
+                  {/* Implemented IRAvatar for Passenger Pic */}
+                  <IRAvatar
+                    source={
+                      selectedRideData.passengerPic
+                        ? { uri: selectedRideData.passengerPic }
+                        : undefined
+                    }
+                    name={selectedRideData.passengerName}
+                    size={54}
                   />
-                  <View style={styles.ratingBadge}>
-                    <Ionicons name="star" size={9} color="#fff" />
-                    <Text style={styles.ratingBadgeText}>
-                      {selectedRideData.passengerRating}
+                </View>
+
+                <View style={styles.profileInfo}>
+                  <Text style={styles.passengerName}>
+                    {selectedRideData.passengerName || "Passenger"}
+                  </Text>
+
+                  <View style={styles.ratingRow}>
+                    <View style={{ flexDirection: "row", gap: 1 }}>
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <Ionicons
+                          key={i}
+                          name={
+                            i <=
+                            Math.round(selectedRideData.passengerRating || 5)
+                              ? "star"
+                              : "star-outline"
+                          }
+                          size={10}
+                          color={
+                            i <=
+                            Math.round(selectedRideData.passengerRating || 5)
+                              ? "#FFC107"
+                              : "#cbd5e1"
+                          }
+                        />
+                      ))}
+                    </View>
+
+                    <Text style={styles.ratingValueText}>
+                      (
+                      {parseFloat(
+                        selectedRideData.passengerRating || "5",
+                      ).toFixed(2)}
+                      )
+                    </Text>
+
+                    <View style={styles.dotSeparator} />
+
+                    <Text style={styles.tripCountText}>
+                      {selectedRideData.passengerTrips || "0"} trips
                     </Text>
                   </View>
                 </View>
-              </View>
 
-              {/* Right: Price & Meta */}
-              <View style={styles.rightCol}>
-                <View style={styles.headerPriceRow}>
-                  <Text style={styles.offerText}>${baseOffer?.toFixed(2)}</Text>
+                <View
+                  style={[
+                    styles.priceContainer,
+                    { flexDirection: "row", alignItems: "center", gap: 8 },
+                  ]}
+                >
+                  <Text style={styles.mainPrice}>${baseOffer?.toFixed(2)}</Text>
                   <View
                     style={[
                       styles.offerBadge,
                       {
                         backgroundColor:
                           selectedRideData.offerType === "good"
-                            ? "#00D26A" // Bolt Green
-                            : selectedRideData.offerType === "fair"
-                              ? "#FFC107"
-                              : "#FF4B55",
+                            ? "#E6FBF0"
+                            : "#FFF4E5",
                       },
                     ]}
                   >
-                    <Text style={styles.badgeText}>
+                    <Text
+                      style={[
+                        styles.badgeText,
+                        {
+                          color:
+                            selectedRideData.offerType === "good"
+                              ? "#00D26A"
+                              : "#FF9500",
+                        },
+                      ]}
+                    >
                       {selectedRideData.offerType?.toUpperCase() || "NEW"}
                     </Text>
                   </View>
                 </View>
+              </View>
 
-                {/* Metadata Row (Payment | Vehicle | Distance) */}
-                <View style={styles.metaRow}>
-                  <View style={styles.metaItem}>
-                    <Ionicons name="wallet" size={14} color="#555" />
-                    <Text style={styles.metaText}>
-                      {selectedRideData.paymentMethod === "ecocash"
-                        ? "Ecocash"
-                        : "Cash"}
+              <View style={styles.statsStrip}>
+                <View style={styles.statItem}>
+                  <Ionicons name="navigate-circle" size={16} color="#64748B" />
+                  <Text style={styles.statValue}>
+                    {selectedRideData.rideDistanceKm?.toFixed(1)} km
+                  </Text>
+                  <Text style={styles.statLabel}>Trip</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Ionicons name="car" size={16} color="#64748B" />
+                  <Text style={styles.statValue}>
+                    {parseFloat(
+                      selectedRideData.pickupDistanceKm || "0",
+                    ).toFixed(2)}{" "}
+                    km
+                  </Text>
+                  <Text style={styles.statLabel}>Pickup</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Ionicons name="wallet" size={16} color="#64748B" />
+                  <Text style={styles.statValue}>
+                    {selectedRideData.paymentMethod === "ecocash"
+                      ? "Eco"
+                      : "Cash"}
+                  </Text>
+                  <Text style={styles.statLabel}>Pay</Text>
+                </View>
+              </View>
+
+              <View style={styles.addressSection}>
+                <View style={styles.timelineLine} />
+                <View style={styles.addressRow}>
+                  <View style={[styles.dot, { backgroundColor: "#00D26A" }]} />
+                  <View style={styles.addressTextContainer}>
+                    <Text style={styles.addressLabelSmall}>PICKUP</Text>
+                    <Text style={styles.addressText} numberOfLines={1}>
+                      {selectedRideData.pickup?.address}
                     </Text>
                   </View>
-                  <View style={styles.dotSeparator} />
-                  <View style={styles.metaItem}>
-                    <Ionicons name="car" size={14} color="#555" />
-                    <Text style={styles.metaText}>
-                      {selectedRideData.vehicleType?.replace(
-                        "seater",
-                        " Seater",
-                      )}
-                    </Text>
-                  </View>
-                  <View style={styles.dotSeparator} />
-                  <View style={styles.metaItem}>
-                    <Text style={styles.distanceTextHighlight}>
-                      {selectedRideData.distanceKm?.toFixed(1)} km
+                </View>
+                <View style={[styles.addressRow, { marginTop: 12 }]}>
+                  <View style={[styles.dot, { backgroundColor: "#FF4B55" }]} />
+                  <View style={styles.addressTextContainer}>
+                    <Text style={styles.addressLabelSmall}>DESTINATION</Text>
+                    <Text style={styles.addressText} numberOfLines={1}>
+                      {selectedRideData.destination?.address}
                     </Text>
                   </View>
                 </View>
               </View>
-            </View>
 
-            {/* Address Visual Timeline */}
-            <View style={styles.addressContainer}>
-              <View style={styles.timelineConnector} />
-              {/* Pickup */}
-              <View style={styles.addressItem}>
-                <View
-                  style={[styles.addressMarker, { backgroundColor: "#00D26A" }]}
-                />
-                <Text style={styles.addressText} numberOfLines={2}>
-                  {selectedRideData.pickup?.address}
-                </Text>
-              </View>
-              {/* Destination */}
-              <View style={[styles.addressItem, { marginTop: 14 }]}>
-                <View
-                  style={[styles.addressMarker, { backgroundColor: "#FF4B55" }]}
-                />
-                <Text style={styles.addressText} numberOfLines={2}>
-                  {selectedRideData.destination?.address}
+              <View style={styles.noteContainer}>
+                <Ionicons name="information-circle" size={14} color="#64748B" />
+                <Text style={styles.noteText}>
+                  {selectedRideData.additionalInfo ||
+                    "No special instructions provided."}
                 </Text>
               </View>
             </View>
+          </ScrollView>
 
-            {/* Note Box */}
-            <View style={styles.noteBox}>
-              <Text style={styles.noteTitle}>PASSENGER NOTE</Text>
-              <Text style={styles.noteContent}>
-                {selectedRideData.additionalInfo || "No special requests"}
-              </Text>
-            </View>
-          </View>
-
-          {/* Bottom Controls */}
           <View style={styles.bottomSection}>
             {(currentStatus as string) === "submitted" ||
-            currentStatus === "submitting" ? (
-              <View style={styles.submittedContainer}>
-                <View style={styles.boltSuccessCircle}>
+            (currentStatus as string) === "submitting" ? (
+              <View style={styles.successState}>
+                <View style={styles.checkCircle}>
                   <Ionicons name="checkmark" size={32} color="#00D26A" />
                 </View>
-                <Text style={styles.submittedTitle}>Response Submitted</Text>
-                <Text style={styles.submittedSubText}>
-                  Rider is looking at your{" "}
-                  <Text style={{ color: "#2F3337", fontWeight: "800" }}>
-                    ${currentOffer.toFixed(2)}
-                  </Text>{" "}
-                  offer.
+                <Text style={styles.successTitle}>Offer Submitted</Text>
+                <Text style={styles.successSub}>
+                  Rider is reviewing your ${currentOffer.toFixed(2)} offer.
                 </Text>
               </View>
             ) : (
@@ -354,19 +385,14 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                   onOfferChange={setCurrentOffer}
                 />
                 <IRButton
-                  title="SUBMIT OFFER"
-                  loading={currentStatus === "submitting"}
+                  title={`ACCEPT FOR $${currentOffer.toFixed(2)}`}
+                  loading={(currentStatus as string) === "submitting"}
                   onPress={submitOffer}
                 />
               </>
             )}
 
-            <TouchableOpacity
-              style={styles.dismissButton}
-              onPress={handleClose}
-            >
-              <Text style={styles.dismissText}>DISMISS</Text>
-            </TouchableOpacity>
+            <IRButton title="CLOSE" variant="outline" onPress={handleClose} />
           </View>
         </View>
       </>
@@ -374,13 +400,10 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
   },
 );
 
-RideRequestTray.displayName = "RideRequestTray";
-export default RideRequestTray;
-
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(15, 23, 42, 0.7)",
     zIndex: 998,
   },
   container: {
@@ -388,16 +411,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: "100%",
     height: OPEN_HEIGHT,
-    backgroundColor: "#FFFFFF",
-    // Radius Removed per request
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
+    backgroundColor: "#FFF",
     paddingHorizontal: 20,
     paddingBottom: 24,
     zIndex: 999,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: "hidden",
   },
-
-  // Timer Styles
   topProgressBar: {
     position: "absolute",
     top: 0,
@@ -409,191 +430,209 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
   },
-  timerContainer: {
-    alignItems: "center",
-  },
-  timerLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#94A3B8",
-    letterSpacing: 1,
-    marginBottom: 2,
+  handle: {
+    width: 36,
+    height: 4,
+    backgroundColor: "#E2E8F0",
+    borderRadius: 2,
+    marginBottom: 8,
   },
   timerDigits: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#0F172A",
-    fontVariant: ["tabular-nums"], // Monospace numbers to prevent jitter
-    letterSpacing: -0.5,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#64748B",
+    letterSpacing: 0.5,
   },
-
+  scrollArea: {
+    flex: 1,
+  },
   mapContainer: {
-    height: OPEN_HEIGHT * 0.28,
-    marginBottom: 24,
+    height: 140,
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "#F1F5F9",
-    backgroundColor: "#E5E7EB",
+    marginBottom: 20,
   },
-  middleSection: { flex: 1 },
-
-  /* Top Row Layout */
-  topRow: { flexDirection: "row", marginBottom: 10, alignItems: "flex-start" },
-  leftCol: { width: 72, alignItems: "center" },
-  avatarWrapper: { position: "relative" },
-  passengerPic: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+  middleSection: {
+    flex: 1,
   },
-  ratingBadge: {
-    position: "absolute",
-    bottom: -4,
-    right: -4,
-    backgroundColor: "#2F3337",
+  profileRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
+    marginBottom: 20,
   },
-  ratingBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
+  avatarContainer: {},
+  profileInfo: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: "center",
+  },
+  passengerName: {
+    fontSize: 18,
     fontWeight: "800",
-    marginLeft: 2,
-  },
-
-  rightCol: { flex: 1, paddingLeft: 16, justifyContent: "center" },
-  headerPriceRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-    marginTop: 2,
-  },
-  offerText: {
-    fontSize: 28,
-    fontWeight: "900",
     color: "#0F172A",
-    letterSpacing: -0.5,
-    includeFontPadding: false,
+    marginBottom: 2,
   },
-  offerBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  badgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "800" },
-
-  /* Metadata Row */
-  metaRow: { flexDirection: "row", alignItems: "center" },
-  metaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  metaText: { fontSize: 13, color: "#64748B", fontWeight: "600" },
-  distanceTextHighlight: {
-    fontSize: 13,
-    color: "#00D26A",
-    fontWeight: "800",
+  ratingValueText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+    marginLeft: 4,
+  },
+  tripCountText: {
+    fontSize: 11,
+    color: "#94a3b8",
+    fontWeight: "600",
   },
   dotSeparator: {
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: "#CBD5E1",
-    marginHorizontal: 10,
+    backgroundColor: "#cbd5e1",
+    marginHorizontal: 6,
   },
-
-  /* Address Timeline */
-  addressContainer: {
-    position: "relative",
-    paddingLeft: 4,
-    marginBottom: 10,
+  priceContainer: {
+    alignItems: "flex-end",
+    justifyContent: "center",
   },
-  timelineConnector: {
-    position: "absolute",
-    left: 3.25,
-    top: 14,
-    bottom: 14,
-    width: 1.5,
-    backgroundColor: "#E2E8F0",
+  mainPrice: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#10B981",
   },
-  addressItem: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
-  addressMarker: {
-    width: 8,
-    height: 8,
+  offerBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 4,
-    marginTop: 6,
-    zIndex: 2,
+    alignSelf: "flex-start",
   },
-  addressText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#334155",
-    flex: 1,
-    lineHeight: 20,
+  badgeText: {
+    fontSize: 9,
+    fontWeight: "900",
   },
-
-  /* Note Box */
-  noteBox: {
+  statsStrip: {
+    flexDirection: "row",
     backgroundColor: "#F8FAFC",
-    padding: 10,
     borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+    alignItems: "center",
+    justifyContent: "space-around",
     borderWidth: 1,
     borderColor: "#F1F5F9",
   },
-  noteTitle: {
+  statItem: {
+    alignItems: "center",
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1E293B",
+    marginTop: 2,
+  },
+  statLabel: {
     fontSize: 10,
+    color: "#94A3B8",
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  statDivider: {
+    width: 1,
+    height: 10,
+    backgroundColor: "#E2E8F0",
+  },
+  addressSection: {
+    paddingLeft: 8,
+    marginBottom: 10,
+    position: "relative",
+  },
+  timelineLine: {
+    position: "absolute",
+    left: 11.5,
+    top: 20,
+    bottom: 20,
+    width: 1.5,
+    backgroundColor: "#E2E8F0",
+    borderStyle: "dashed",
+  },
+  addressRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 18,
+  },
+  addressTextContainer: {
+    flex: 1,
+    paddingVertical: 4,
+  },
+  addressLabelSmall: {
+    fontSize: 9,
     fontWeight: "800",
     color: "#94A3B8",
-    letterSpacing: 1,
-    marginBottom: 5,
+    marginBottom: 2,
+    letterSpacing: 0.5,
   },
-  noteContent: {
+  addressText: {
     fontSize: 14,
-    color: "#475569",
-    fontWeight: "500",
-    lineHeight: 20,
+    fontWeight: "600",
+    color: "#334155",
+    lineHeight: 18,
   },
-
-  /* Bottom Section */
-  bottomSection: { paddingVertical: 5, gap: 5 },
-
-  /* Submitted State */
-  submittedContainer: { alignItems: "center", paddingVertical: 12 },
-  boltSuccessCircle: {
+  noteContainer: {
+    flexDirection: "row",
+    gap: 5,
+    backgroundColor: "#F1F5F9",
+    padding: 10,
+    borderRadius: 10,
+    alignItems: "flex-start",
+  },
+  noteText: {
+    fontSize: 12,
+    color: "#64748B",
+    fontStyle: "italic",
+    flex: 1,
+    lineHeight: 16,
+  },
+  bottomSection: {
+    gap: 10,
+    paddingTop: 10,
+  },
+  successState: {
+    alignItems: "center",
+    paddingVertical: 15,
+  },
+  checkCircle: {
     width: 56,
     height: 56,
     borderRadius: 28,
     backgroundColor: "#E6FBF0",
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 10,
   },
-  submittedTitle: {
-    fontSize: 16,
+  successTitle: {
+    fontSize: 18,
     fontWeight: "800",
     color: "#0F172A",
-    marginBottom: 4,
   },
-  submittedSubText: {
+  successSub: {
     fontSize: 14,
     color: "#64748B",
+    marginTop: 2,
     textAlign: "center",
-    paddingHorizontal: 24,
-    lineHeight: 20,
-  },
-
-  dismissButton: { alignSelf: "center", paddingVertical: 8 },
-  dismissText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#94A3B8",
-    letterSpacing: 1,
-    textTransform: "uppercase",
   },
 });
+
+RideRequestTray.displayName = "RideRequestTray";
+export default RideRequestTray;

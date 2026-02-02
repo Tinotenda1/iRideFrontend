@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import MapView, { PROVIDER_GOOGLE, Region } from "react-native-maps";
 import RideRequestCard from "../components/RideRequestCard";
+import { onRemoveRideRequest } from "../socketConnectionUtility/driverSocketService";
 
 if (
   Platform.OS === "android" &&
@@ -195,6 +196,31 @@ const DriverHome: React.FC<Props> = ({
     }
   };
 
+  // 5. REUSABLE SOCKET LISTENER: CLOSE SPECIFIC RIDE CARD
+  useEffect(() => {
+    // This effect handles the 'ride:remove_request' event from the backend
+    const unsubscribe = onRemoveRideRequest((data) => {
+      const rideIdToRemove = data?.rideId;
+      if (!rideIdToRemove) return;
+
+      setRides((prev) => {
+        const exists = prev.find((r) => r.rideId === rideIdToRemove);
+        // If the ride isn't in our current list, do nothing
+        if (!exists) return prev;
+
+        // Smoothly animate the removal of the card
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+
+        return prev.filter((ride) => ride.rideId !== rideIdToRemove);
+      });
+
+      // Crucial: remove from the ref so the logic can process it again if needed later
+      lastProcessedRidesRef.current.delete(rideIdToRemove);
+    });
+
+    return () => unsubscribe(); // Standard cleanup
+  }, []);
+
   // OFFLINE VIEW
   if (!online) {
     return (
@@ -304,8 +330,6 @@ const DriverHome: React.FC<Props> = ({
             )}
             contentContainerStyle={{
               paddingHorizontal: 16,
-              //paddingTop: 10,
-              //paddingBottom: 10,
             }}
             showsVerticalScrollIndicator={false}
           />

@@ -27,6 +27,10 @@ TaskManager.defineTask(LOCATION_TRACKING_TASK, async ({ data, error }: any) => {
         speed: loc.coords.speed,
         timestamp: loc.timestamp,
       });
+    } else {
+      // ⚡ OPTIONAL: If disconnected, we could cache the location
+      // and send it as a "batch" once reconnected.
+      console.log("📡 Offline: Background location update skipped.");
     }
   }
 });
@@ -107,93 +111,70 @@ const stopLocationUpdates = async () => {
   }
 };
 
+// app/driver/socketConnectionUtility/driverSocketService.ts
+
+// ... imports remain the same ...
+
 export const connectDriver = async () => {
   const user = await getUserInfo();
   const phone = user?.phone;
 
-  if (!phone) {
-    console.error("❌ Cannot connect: No phone number found in storage");
-    setStatus("error");
-    return;
-  }
-
-  socket = initializeSocket(phone);
-  if (socket.connected && status === "connected") return;
-
-  const online = await isNetworkOnline();
-  if (!online) {
-    setStatus("error");
-    return;
-  }
+  if (!phone) return setStatus("error");
+  if (socket?.connected && status === "connected") return;
 
   shouldStayOnline = true;
   setStatus("connecting");
 
-  // ✅ FIX: Error-proof location fetching
-  let currentLoc = null;
-  try {
-    currentLoc = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-  } catch (e) {
-    console.warn(
-      "⚠️ Driver initial location unavailable. Handshaking without it.",
-    );
-  }
+  socket = initializeSocket(phone);
 
+  // CLEANUP existing listeners to prevent memory leaks/duplicate events
   socket.off("connect");
   socket.off("user:connected");
   socket.off("disconnect");
-  socket.off("connect_error");
 
-  socket.on("connect", () => {
+  // ⚡ AUTO-HANDSHAKE: This fires on initial connect AND auto-reconnects
+  socket.on("connect", async () => {
+    console.log("🔌 Connection established, handshaking...");
+
+    // Get fresh location for the handshake
+    const { status: locStatus } =
+      await Location.getForegroundPermissionsAsync();
+    let location = null;
+    if (locStatus === "granted") {
+      const last = await Location.getLastKnownPositionAsync();
+      if (last)
+        location = {
+          latitude: last.coords.latitude,
+          longitude: last.coords.longitude,
+        };
+    }
+
     socket?.emit("user:connect", {
       phone: phone.replace(/\D/g, ""),
       userType: "driver",
-      location: currentLoc
-        ? {
-            latitude: currentLoc.coords.latitude,
-            longitude: currentLoc.coords.longitude,
-          }
-        : null,
+      location,
     });
   });
 
   socket.on("user:connected", () => {
     setStatus("connected");
     startHeartbeat();
-    startLocationUpdates();
+    startLocationUpdates(); // Turn on background tracking
   });
 
   socket.on("disconnect", (reason) => {
+    console.log("🔌 Disconnected:", reason);
     if (reason === "io client disconnect" || !shouldStayOnline) {
       clearTimers();
       stopLocationUpdates();
       setStatus("offline");
     } else {
+      // "transport close" or "ping timeout" triggers reconnecting state
       setStatus("reconnecting");
     }
   });
 
-  socket.on("connect_error", (err) => {
-    console.error("❌ Driver connect error:", err.message);
-    setStatus("error");
-  });
-
-  if (!socket.connected) {
-    socket.connect();
-  } else {
-    socket.emit("user:connect", {
-      phone: phone.replace(/\D/g, ""),
-      userType: "driver",
-      location: currentLoc
-        ? {
-            latitude: currentLoc.coords.latitude,
-            longitude: currentLoc.coords.longitude,
-          }
-        : null,
-    });
-  }
+  if (!socket.connected) socket.connect();
 };
 
 export const disconnectDriver = () => {
@@ -249,6 +230,17 @@ export const onDriverRejected = (callback: (ride: any) => void) => {
 export const onRideCancelled = (callback: (data: any) => void) => {
   if (!socket) return () => {};
   const eventName = "ride_cancelled";
+  socket.on(eventName, callback);
+  return () => {
+    socket?.off(eventName, callback);
+  };
+};
+
+export const onRemoveRideRequest = (
+  callback: (data: { rideId: string }) => void,
+) => {
+  if (!socket) return () => {};
+  const eventName = "ride:remove_request";
   socket.on(eventName, callback);
   return () => {
     socket?.off(eventName, callback);

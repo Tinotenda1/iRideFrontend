@@ -1,4 +1,5 @@
 // app/driver/components/RideRequestCard.tsx
+import { theme } from "@/constants/theme";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef } from "react";
 import {
@@ -49,6 +50,29 @@ export default function RideRequestCard({
 
   const isSubmitted = submittedOffer !== undefined;
 
+  // Badge configuration based on offerType with distinct colors
+  const getOfferBadge = (type: string) => {
+    switch (type?.toLowerCase()) {
+      case "good":
+        return { label: "GOOD", color: "#059669", bg: "#d1fae5" };
+      case "fair":
+        return { label: "FAIR", color: "#2563eb", bg: "#dbeafe" };
+      case "poor":
+        return { label: "POOR", color: "#dc2626", bg: "#fee2e2" };
+      default:
+        return null;
+    }
+  };
+
+  const vehicleTypeLabels: Record<string, string> = {
+    "4seater": "4 SEATER",
+    "7seater": "7 SEATER",
+    pickup2seater: "2 SEATER PICKUP",
+    pickup4seater: "4 SEATER PICKUP",
+  };
+
+  const badge = getOfferBadge(rideData.offerType);
+
   useEffect(() => {
     if (!isSubmitted) {
       Animated.loop(
@@ -94,6 +118,7 @@ export default function RideRequestCard({
       Math.max(0, expiresAt - Date.now()),
       rideData,
     );
+    console.log("RideRequestCard selected:", rideData);
   };
 
   useEffect(() => {
@@ -179,7 +204,13 @@ export default function RideRequestCard({
         key={i}
         name={i <= Math.round(rating) ? "star" : "star-outline"}
         size={7}
-        color={i <= Math.round(rating) ? "#FFC107" : "#cbd5e1"}
+        color={
+          isSubmitted
+            ? "#cbd5e1"
+            : i <= Math.round(rating)
+              ? "#FFC107"
+              : "#cbd5e1"
+        }
       />
     ));
   };
@@ -195,13 +226,23 @@ export default function RideRequestCard({
         },
       ]}
     >
+      {/* CARD TITLE HEADER */}
+      <View style={styles.cardTitleHeader}>
+        <Text
+          style={[styles.cardTitleText, isSubmitted && styles.submittedText]}
+        >
+          {isSubmitted ? "Accepted Ride Request" : "New Request"} -{" "}
+          {vehicleTypeLabels[rideData.vehicleType] || "Ride"}
+        </Text>
+      </View>
+
       <TouchableOpacity
-        activeOpacity={0.8} // Changed: Always show feedback on press
+        activeOpacity={0.8}
         onPress={handleSelect}
-        disabled={false} // Changed: Tray now opens even if isSubmitted is true
+        disabled={false}
         style={styles.content}
       >
-        {/* LEFT COLUMN - Larger Image Size */}
+        {/* LEFT COLUMN */}
         <View style={[styles.leftCol, isSubmitted && styles.desaturated]}>
           <IRAvatar
             source={
@@ -212,8 +253,18 @@ export default function RideRequestCard({
           />
           <View style={styles.ratingRow}>
             {renderStars(parseFloat(rideData.passengerRating || "5"))}
+            <Text
+              style={[
+                styles.ratingValueText,
+                isSubmitted && styles.submittedText,
+              ]}
+            >
+              ({parseFloat(rideData.passengerRating || "5").toFixed(2)})
+            </Text>
           </View>
-          <Text style={styles.tripCountText}>
+          <Text
+            style={[styles.tripCountText, isSubmitted && styles.submittedText]}
+          >
             {rideData.passengerTrips || "0"} trips
           </Text>
         </View>
@@ -231,20 +282,38 @@ export default function RideRequestCard({
               {rideData.passengerName || "Passenger"}
             </Text>
 
-            <Animated.View
-              style={[
-                styles.priceRow,
-                !isSubmitted && { transform: [{ scale: pricePulse }] },
-              ]}
-            >
-              <Text
-                style={[styles.priceText, isSubmitted && styles.submittedPrice]}
+            <View style={styles.priceContainer}>
+              {badge && !isSubmitted && (
+                <View
+                  style={[
+                    styles.offerBadge,
+                    { backgroundColor: badge.bg, borderColor: badge.color },
+                  ]}
+                >
+                  <Text style={[styles.offerBadgeText, { color: badge.color }]}>
+                    {badge.label}
+                  </Text>
+                </View>
+              )}
+              <Animated.View
+                style={[
+                  styles.priceRow,
+                  !isSubmitted && { transform: [{ scale: pricePulse }] },
+                ]}
               >
-                $
-                {(isSubmitted ? submittedOffer : rideData.offer)?.toFixed(2) ??
-                  "--"}
-              </Text>
-            </Animated.View>
+                <Text
+                  style={[
+                    styles.priceText,
+                    isSubmitted && styles.submittedPrice,
+                  ]}
+                >
+                  $
+                  {(isSubmitted ? submittedOffer : rideData.offer)?.toFixed(
+                    2,
+                  ) ?? "--"}
+                </Text>
+              </Animated.View>
+            </View>
           </View>
 
           {/* META INFO */}
@@ -252,17 +321,19 @@ export default function RideRequestCard({
             <Text
               style={[styles.metaLabel, isSubmitted && styles.submittedText]}
             >
-              {rideData.paymentMethod === "ecocash" ? "Ecocash" : "Cash"}
-            </Text>
-            <View style={styles.dotSeparator} />
-            <Text style={styles.vehicleBadgeText}>
-              {rideData.vehicleType === "4seater" ? "4 SEATER" : "7 SEATER"}
+              {rideData.paymentMethod === "ecocash" ? "Eco" : "Cash"}
             </Text>
             <View style={styles.dotSeparator} />
             <Text
               style={[styles.distanceText, isSubmitted && styles.submittedText]}
             >
-              {rideData.distance || "0.0"} km
+              {parseFloat(rideData.pickupDistanceKm || "0").toFixed(1)}km away
+            </Text>
+            <View style={styles.dotSeparator} />
+            <Text
+              style={[styles.metaLabel, isSubmitted && styles.submittedText]}
+            >
+              {rideData.rideDistanceKm || "0"}km trip
             </Text>
           </View>
 
@@ -309,7 +380,13 @@ export default function RideRequestCard({
             <View style={styles.footerRow}>
               <View style={{ flex: 1 }}>
                 {rideData.additionalInfo && (
-                  <Text style={styles.infoPreview} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.infoPreview,
+                      isSubmitted && styles.submittedText,
+                    ]}
+                    numberOfLines={1}
+                  >
                     {`"${rideData.additionalInfo}"`}
                   </Text>
                 )}
@@ -356,9 +433,33 @@ const styles = StyleSheet.create({
   submittedPrice: { color: "#94a3b8" },
 
   card: { borderRadius: 12, marginBottom: 8, overflow: "hidden" },
+  cardTitleHeader: {
+    backgroundColor: "#f8fafc",
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  cardTitleText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: theme.colors.primary,
+    letterSpacing: 0.5,
+  },
   content: { flexDirection: "row", padding: 10 },
-  leftCol: { alignItems: "center", width: 68 }, // Slightly wider to hold the 'md' avatar
-  ratingRow: { flexDirection: "row", marginTop: 4, gap: 1 },
+  leftCol: { alignItems: "center", width: 68 },
+  ratingRow: {
+    flexDirection: "row",
+    marginTop: 4,
+    gap: 1,
+    alignItems: "center",
+  },
+  ratingValueText: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: "#64748b",
+    marginLeft: 2,
+  },
   tripCountText: {
     fontSize: 8,
     color: "#94a3b8",
@@ -373,6 +474,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   passengerName: { fontWeight: "700", fontSize: 14, color: "#1e293b", flex: 1 },
+  priceContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  offerBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  offerBadgeText: {
+    fontSize: 8,
+    fontWeight: "900",
+  },
   priceRow: { flexDirection: "row", alignItems: "center" },
   priceText: { fontWeight: "800", color: "#10B981", fontSize: 16 },
 
@@ -391,8 +507,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#cbd5e1",
     marginHorizontal: 6,
   },
-  vehicleBadgeText: { fontSize: 9, color: "#94a3b8", fontWeight: "700" },
-
   addressSection: { gap: 2 },
   addressLine: { flexDirection: "row", alignItems: "center", gap: 6 },
   dot: { width: 5, height: 5, borderRadius: 2.5 },

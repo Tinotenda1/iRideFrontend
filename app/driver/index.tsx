@@ -1,19 +1,10 @@
-// app/driver/index.tsx
 import { theme } from "@/constants/theme";
 import { getUserInfo } from "@/utils/storage";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-// Added Modal, Text, TouchableOpacity, and Ionicons (via @expo/vector-icons)
-import { Ionicons } from "@expo/vector-icons";
-import {
-  ActivityIndicator,
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 
+import TripStatusModal, { ModalType } from "../../components/TripStatusModal";
 import DriverFooterNav from "./components/DriverFooterNav";
 import DriverHeader from "./components/DriverHeader";
 import Sidebar from "./components/DriverSideBar";
@@ -28,7 +19,8 @@ import {
   handleDriverResponse,
   isDriverOnline,
   onNewRideRequest,
-  onRideCancelled, // Added this import
+  onRemoveRideRequest,
+  onRideCancelled,
 } from "./socketConnectionUtility/driverSocketService";
 
 type Screen = "home" | "wallet" | "revenue" | "notifications";
@@ -49,9 +41,13 @@ const DriverDashboard: React.FC = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [trayHeight, setTrayHeight] = useState(0);
 
-  // --- Cancellation Modal State ---
-  const [cancelModalVisible, setCancelModalVisible] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
+  // ✅ Unified Modal State
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    type: "cancellation" as ModalType,
+    title: "",
+    message: "",
+  });
 
   const [submissionStates, setSubmissionStates] = useState<
     Record<string, SubmissionState>
@@ -60,16 +56,17 @@ const DriverDashboard: React.FC = () => {
     Record<string, number>
   >({});
 
-  // ✅ New Effect: Listen for Trip Cancellation
+  // ✅ Listener for Trip Cancellation (Reusable Modal)
   useEffect(() => {
     if (!online) return;
 
     const unsubscribe = onRideCancelled((data: any) => {
-      console.log("🛑 Passenger cancelled trip:", data);
-      setCancelReason(
-        data.reason || "The passenger has cancelled the trip request.",
-      );
-      setCancelModalVisible(true);
+      setModalConfig({
+        visible: true,
+        type: "cancellation",
+        title: "Trip Cancelled",
+        message: data.reason || "The passenger has cancelled the trip request.",
+      });
 
       // Clean up local ride states
       setIncomingRides([]);
@@ -83,11 +80,10 @@ const DriverDashboard: React.FC = () => {
     return () => unsubscribe();
   }, [online]);
 
-  // MODAL CLOSE HANDLER
-  const closeCancelModal = () => {
-    setCancelModalVisible(false);
+  const handleCloseModal = () => {
+    setModalConfig((prev) => ({ ...prev, visible: false }));
 
-    // ✅ Transition the tray back to the "Online" state (radar mode)
+    // Transition the tray back to the "Online" state (radar mode)
     if (driverTrayRef.current) {
       driverTrayRef.current.goOnline();
     }
@@ -95,7 +91,23 @@ const DriverDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!online) return;
+
+    const unsubscribe = onRemoveRideRequest((rideId) => {
+      // 1. Remove from the global incoming list
+      setIncomingRides((prev) => prev.filter((r) => r.rideId !== rideId));
+
+      // 2. If the tray for this specific ride is open, close it
+      // (Assuming you want to kick the driver out of the view if the ride is gone)
+      // You can check if the current rideId in the tray matches
+    });
+
+    return () => unsubscribe();
+  }, [online]);
+
+  useEffect(() => {
+    if (!online) return;
     const unsubscribe = onNewRideRequest((newRide: any) => {
+      console.log("New ride request received:", newRide);
       setIncomingRides((prev) => {
         if (prev.find((r) => r.rideId === newRide.rideId)) return prev;
         return [...prev, newRide];
@@ -144,7 +156,10 @@ const DriverDashboard: React.FC = () => {
   }, [online]);
 
   const handleDecline = (ride: any) => {
-    setIncomingRides((prev) => prev.filter((r) => r.rideId !== ride.rideId));
+    // This triggers the removal of the ride from the state
+    setIncomingRides((prev) =>
+      prev.filter((r) => r.rideId !== (ride.rideId || ride)),
+    );
   };
 
   const handleOfferSubmission = async (
@@ -258,30 +273,14 @@ const DriverDashboard: React.FC = () => {
 
       <DriverFooterNav active={activeScreen} onChange={setActiveScreen} />
 
-      {/* ✅ TRIP CANCELLATION MODAL */}
-      <Modal
-        visible={cancelModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={closeCancelModal}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.boltModal}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="close-circle" size={44} color="#FF3B30" />
-            </View>
-            <Text style={styles.modalTitle}>Trip Cancelled</Text>
-            <Text style={styles.modalReason}>{cancelReason}</Text>
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={closeCancelModal}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.modalButtonText}>Got it</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* ✅ REUSABLE STATUS MODAL */}
+      <TripStatusModal
+        visible={modalConfig.visible}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={handleCloseModal}
+      />
     </View>
   );
 };
@@ -303,55 +302,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  // --- Cancellation Modal Styles ---
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-    zIndex: 1000,
-  },
-  boltModal: {
-    backgroundColor: "#fff",
-    width: "100%",
-    borderRadius: 28,
-    padding: 24,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 5,
-  },
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#FF3B3010",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#000",
-    marginBottom: 10,
-  },
-  modalReason: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    marginBottom: 30,
-    lineHeight: 22,
-  },
-  modalButton: {
-    backgroundColor: "#34C759", // Bolt Green
-    width: "100%",
-    paddingVertical: 18,
-    borderRadius: 16,
-    alignItems: "center",
-  },
-  modalButtonText: { color: "#fff", fontSize: 18, fontWeight: "600" },
 });

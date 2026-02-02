@@ -1,18 +1,19 @@
+// app/passenger/index.tsx
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   AppState,
   AppStateStatus,
   FlatList,
-  Modal,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from "react-native";
 
+import RatingModal from "../../components/RatingModal";
+import TripStatusModal, { ModalType } from "../../components/TripStatusModal";
+import { submitUserRating } from "../../utils/ratingSubmittion";
 import { RideResponse, useRideBooking } from "../context/RideBookingContext";
 import { DriverOfferCard } from "./components/DriverOfferCard";
 import MapContainer from "./components/map/MapContainer";
@@ -21,7 +22,6 @@ import Tray from "./components/tabs/Tray";
 import AdditionalInfoTray from "./components/trays/AdditionalInfoTray";
 import InputTray from "./components/trays/InputTray";
 import TripLocationCard from "./components/TripLocationCard";
-
 import {
   connectPassenger,
   disconnectPassenger,
@@ -43,12 +43,15 @@ const PassengerScreen: React.FC = () => {
 
   // --- Socket & Context ---
   const socket = getPassengerSocket();
-  const { rideData, updateRideData, setCurrentRide } = useRideBooking();
+  const { rideData, updateRideData, currentRide, setCurrentRide } =
+    useRideBooking();
 
   // --- State ---
   const [trayHeight, setTrayHeight] = useState(0);
   const [isTrayOpen, setIsTrayOpen] = useState(false);
   const [offers, setOffers] = useState<any[]>([]);
+  const [ratingVisible, setRatingVisible] = useState(false);
+  const [ratingSnapshot, setRatingSnapshot] = useState<any>(null);
   const [activeInputField, setActiveInputField] = useState<
     "pickup" | "destination"
   >("pickup");
@@ -56,18 +59,52 @@ const PassengerScreen: React.FC = () => {
     Record<string, "idle" | "submitting" | "accepted">
   >({});
 
-  // --- Cancellation Modal State ---
-  const [cancelModalVisible, setCancelModalVisible] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
+  // ✅ Reusable Modal State
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    type: "arrival" as ModalType,
+    title: "",
+    message: "",
+  });
 
   // --- Animations ---
   const searchCardBottomAnim = useRef(new Animated.Value(0)).current;
   const menuOpacity = useRef(new Animated.Value(1)).current;
 
   // -------------------------------------------------
-  // 1. HELPERS
+  // 1. HANDLERS (Defined at top level to obey Hook rules)
   // -------------------------------------------------
-  const removeOffer = useCallback((driverPhone: string) => {
+
+  const handleRatingSubmit = useCallback(
+    async (stars: number, comment: string) => {
+      // ✅ Uses the snapshot so data isn't lost when context resets
+      const rideId = ratingSnapshot?.rideId;
+      const driverPhone = ratingSnapshot?.driverPhone;
+
+      if (rideId && driverPhone) {
+        await submitUserRating("driver", driverPhone, rideId, stars, comment);
+      }
+
+      setRatingVisible(false);
+      setRatingSnapshot(null);
+      setCurrentRide(null); // Fully clear current ride now
+    },
+    [ratingSnapshot, setCurrentRide],
+  );
+
+  const removeOffer = useCallback((driverPhone: string, rideId: string) => {
+    console.log(`Removing offer for driver ${driverPhone} for ride ${rideId}`);
+
+    // 1. Alert the backend
+    const activeSocket = getPassengerSocket(); // Using your existing utility getter
+    if (activeSocket?.connected) {
+      activeSocket.emit("driver:offer_expired", {
+        rideId: rideId,
+        driverPhone: driverPhone,
+      });
+    }
+
+    // 2. Local State Cleanup (Logic unchanged)
     setOffers((prev) => prev.filter((o) => o.driver.phone !== driverPhone));
     setSubmissionStates((prev) => {
       const newState = { ...prev };
@@ -78,7 +115,6 @@ const PassengerScreen: React.FC = () => {
 
   const handleAcceptOffer = useCallback(
     async (offer: any) => {
-      console.log("✅ Accepted offer:", offer);
       updateRideData({ status: "matched" });
       const activeSocket = getPassengerSocket();
       activeSocket?.emit("passenger:select_driver", {
@@ -96,44 +132,50 @@ const PassengerScreen: React.FC = () => {
         rideId: offer.rideId,
         driverPhone: offer.driver.phone,
       });
-      removeOffer(offer.driver.phone);
+      removeOffer(offer.driver.phone, offer.rideId);
     },
     [removeOffer],
   );
 
-  const handleDriverArrived = (data: any) => {
-    Alert.alert("Driver Arrived!", data.message);
-    updateRideData({ status: "arrived" });
-  };
+  const handleDriverArrived = useCallback(
+    (data: any) => {
+      setModalConfig({
+        visible: true,
+        type: "arrival",
+        title: "Driver Arrived!",
+        message: data.message || "Your driver is at the pickup point.",
+      });
+      updateRideData({ status: "arrived" });
+    },
+    [updateRideData],
+  );
 
-  /**
-   * ✅ Logic for when a driver cancels remotely
-   */
   const handleRequestCancelled = useCallback((data: any) => {
-    console.log("🛑 RECEIVED CANCELLATION FROM SERVER:", data);
-    setCancelReason(
-      data.reason || "The driver was unable to complete this trip.",
-    );
-    setCancelModalVisible(true);
-
-    // Immediate UI cleanup
+    setModalConfig({
+      visible: true,
+      type: "cancellation",
+      title: "Trip Cancelled",
+      message: data.reason || "The driver was unable to complete this trip.",
+    });
     setOffers([]);
     setSubmissionStates({});
   }, []);
 
-  const closeCancelModal = () => {
-    setCancelModalVisible(false);
-    // Return UI to initial state
-    updateRideData({ status: "idle", destination: null });
-    trayRef.current?.switchToInput();
+  const handleCloseModal = () => {
+    const wasCancellation = modalConfig.type === "cancellation";
+    setModalConfig((prev) => ({ ...prev, visible: false }));
+
+    if (wasCancellation) {
+      updateRideData({ status: "idle", destination: null });
+      trayRef.current?.switchToInput();
+    }
   };
 
   // -------------------------------------------------
-  // 2. LIFECYCLE: CONNECT & DISCONNECT
+  // 2. LIFECYCLE: APP STATE
   // -------------------------------------------------
   useEffect(() => {
     connectPassenger();
-
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (
         appState.current === "active" &&
@@ -163,10 +205,23 @@ const PassengerScreen: React.FC = () => {
   useEffect(() => {
     if (!socket) return;
 
-    // Log all incoming events for debugging
-    socket.onAny((event, ...args) => {
-      console.log(`📡 Incoming Socket Event: ${event}`, args);
-    });
+    const handleTripCompleted = (data: any) => {
+      // ✅ Capture context data into snapshot BEFORE clearing context
+      if (currentRide) {
+        setRatingSnapshot({
+          rideId: currentRide.rideId,
+          driverPhone: currentRide.driver?.phone,
+          driverName: currentRide.driver?.name,
+          driverPic: currentRide.driver?.profilePic,
+        });
+      }
+
+      setRatingVisible(true);
+
+      // Trigger UI reset to input screen
+      updateRideData({ status: "idle", destination: null });
+      trayRef.current?.switchToInput();
+    };
 
     const handleDriverResponse = (newOffer: any) => {
       const driverPhone = newOffer.driver?.phone;
@@ -181,72 +236,91 @@ const PassengerScreen: React.FC = () => {
     };
 
     const handleMatched = (data: any) => {
+      console.log("🚖 Ride Matched:", data);
       setOffers([]);
       setSubmissionStates({});
+
+      const { tripDetails, rideId } = data;
+
       const matchedRide: RideResponse = {
-        rideId: data.rideId,
+        rideId: rideId,
         status: "matched",
-        pickup: data.tripDetails.ride.pickup,
-        destination: data.tripDetails.ride.destination,
-        vehicleType: data.tripDetails.ride.vehicleType,
-        offer: data.tripDetails.offer,
-        offerType: "fair",
-        paymentMethod: "Cash",
+        pickup: {
+          address: tripDetails.ride.pickupAddress,
+          latitude: tripDetails.ride.pickup.lat,
+          longitude: tripDetails.ride.pickup.lng,
+        },
+        destination: {
+          address: tripDetails.ride.destinationAddress,
+          latitude: tripDetails.ride.destination.lat,
+          longitude: tripDetails.ride.destination.lng,
+        },
+        vehicleType: tripDetails.ride.vehicleType,
+        offer: tripDetails.offer,
+        offerType: tripDetails.offerType || "fair",
+        // FIX: Accessing from tripDetails.ride as seen in logs
+        paymentMethod: tripDetails.ride.paymentMethod || "Cash",
         timestamp: new Date().toISOString(),
+
         driver: {
-          name: data.tripDetails.driver.name,
-          phone: data.tripDetails.driver.phone,
-          rating: parseFloat(data.tripDetails.driver.rating),
-          profilePic: data.tripDetails.driver.profilePic,
+          name: tripDetails.driver.name,
+          phone: tripDetails.driver.phone,
+          rating: parseFloat(tripDetails.driver.rating || "5.0"),
+          profilePic: tripDetails.driver.profilePic, // Ensure backend uses 'profilePic' not 'profile_pic'
+          totalTrips: tripDetails.driver.totalTrips || 0, // Matches your DB fetch
           vehicle: {
-            model: data.tripDetails.vehicle.model,
-            color: data.tripDetails.vehicle.color,
-            licensePlate: data.tripDetails.vehicle.licensePlate,
+            model: tripDetails.vehicle.model,
+            color: tripDetails.vehicle.color,
+            licensePlate: tripDetails.vehicle.licensePlate,
+            pic: tripDetails.vehicle.pic,
           },
         },
       };
+
       setCurrentRide(matchedRide);
-      updateRideData({ status: "matched", activeTrip: data.tripDetails });
+
+      updateRideData({
+        status: "matched",
+        activeTrip: tripDetails, // This provides the raw data to TripTab's normalization
+        offer: tripDetails.offer,
+      });
     };
 
-    const handleMatchFailed = ({ reason }: any) => {
-      setSubmissionStates({});
-      if (reason === "response_expired") {
-        Alert.alert(
-          "Offer Expired",
-          "This driver's offer is no longer available.",
-        );
-      }
+    const handleTripStarted = (data: any) => {
+      updateRideData({ status: "on_trip" });
+      setModalConfig({
+        visible: true,
+        type: "arrival",
+        title: "Trip Started",
+        message: "You are now on your way!",
+      });
+      setTimeout(() => {
+        setModalConfig((prev) => ({ ...prev, visible: false }));
+      }, 2000);
     };
 
-    const handleDriverUnavailable = ({ driverPhone }: any) =>
-      removeOffer(driverPhone);
-
-    // Bind Listeners
     socket.on("ride:driver_response", handleDriverResponse);
     socket.on("ride:matched", handleMatched);
-    socket.on("ride:match_failed", handleMatchFailed);
-    socket.on("driver_unavailable", handleDriverUnavailable);
     socket.on("ride:driver_arrived", handleDriverArrived);
-
-    // ✅ The critical listener for driver cancellation
     socket.on("ride_cancelled", handleRequestCancelled);
+    socket.on("ride:completed", handleTripCompleted);
+    socket.on("ride:trip_started", handleTripStarted);
 
     return () => {
-      socket.offAny();
       socket.off("ride:driver_response", handleDriverResponse);
       socket.off("ride:matched", handleMatched);
-      socket.off("ride:match_failed", handleMatchFailed);
-      socket.off("driver_unavailable", handleDriverUnavailable);
       socket.off("ride:driver_arrived", handleDriverArrived);
       socket.off("ride_cancelled", handleRequestCancelled);
+      socket.off("ride:completed", handleTripCompleted);
+      socket.off("ride:trip_started", handleTripStarted);
     };
   }, [
     socket,
-    removeOffer,
+    currentRide, // Needed so snapshot captures latest data
     updateRideData,
     setCurrentRide,
     handleRequestCancelled,
+    handleDriverArrived,
   ]);
 
   // -------------------------------------------------
@@ -328,7 +402,7 @@ const PassengerScreen: React.FC = () => {
                 status={submissionStates[item.driver.phone] || "idle"}
                 onAccept={handleAcceptOffer}
                 onDecline={() => handleDeclineOffer(item)}
-                onExpire={() => removeOffer(item.driver.phone)}
+                onExpire={() => removeOffer(item.driver.phone, item.rideId)}
               />
             )}
             contentContainerStyle={styles.offersListContent}
@@ -337,30 +411,22 @@ const PassengerScreen: React.FC = () => {
         </View>
       )}
 
-      {/* ✅ BOLT-STYLE CANCELLATION MODAL */}
-      <Modal
-        visible={cancelModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={closeCancelModal}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.boltModal}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="close-circle" size={44} color="#FF3B30" />
-            </View>
-            <Text style={styles.modalTitle}>Trip Cancelled</Text>
-            <Text style={styles.modalReason}>{cancelReason}</Text>
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={closeCancelModal}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.modalButtonText}>Got it</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <TripStatusModal
+        visible={modalConfig.visible}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={handleCloseModal}
+      />
+
+      <RatingModal
+        visible={ratingVisible}
+        title="Trip Complete!"
+        userName={ratingSnapshot?.driverName}
+        userImage={ratingSnapshot?.driverPic}
+        subtitle="How was your experience with your driver?"
+        onSelectRating={handleRatingSubmit}
+      />
 
       <TripLocationCard onPress={() => trayRef.current?.switchToInput()} />
       <InputTray
@@ -397,55 +463,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   offersListContent: { paddingTop: 10, paddingBottom: 250 },
-
-  // --- Modal Styles ---
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  boltModal: {
-    backgroundColor: "#fff",
-    width: "100%",
-    borderRadius: 28,
-    padding: 24,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 5,
-  },
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#FF3B3010",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#000",
-    marginBottom: 10,
-  },
-  modalReason: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    marginBottom: 30,
-    lineHeight: 22,
-  },
-  modalButton: {
-    backgroundColor: "#34C759", // Bolt Green
-    width: "100%",
-    paddingVertical: 18,
-    borderRadius: 16,
-    alignItems: "center",
-  },
-  modalButtonText: { color: "#fff", fontSize: 18, fontWeight: "600" },
 });

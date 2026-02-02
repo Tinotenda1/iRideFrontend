@@ -1,8 +1,8 @@
+// app/passenger/components/tabs/TripTab.tsx
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Modal,
   StyleSheet,
   Text,
@@ -12,6 +12,8 @@ import {
 } from "react-native";
 import { useRideBooking } from "../../../../app/context/RideBookingContext";
 import CancelButton from "../../../../components/CancelButton";
+import { IRAvatar } from "../../../../components/IRAvatar";
+import { IRButton } from "../../../../components/IRButton";
 import { getUserInfo } from "../../../../utils/storage";
 import { subscribeToRideCancellation } from "../../socketConnectionUtility/passengerSocketService";
 
@@ -19,7 +21,6 @@ interface TripTabProps {
   onCancel: () => void;
 }
 
-// ✅ Bolt-style predefined passenger reasons
 const PREDEFINED_REASONS = [
   "Wait time too long",
   "Driver is not moving",
@@ -29,12 +30,10 @@ const PREDEFINED_REASONS = [
 ];
 
 const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
-  const { currentRide } = useRideBooking();
+  const { currentRide, rideData } = useRideBooking();
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-
-  // ✅ New state for when the driver cancels
   const [remoteCancelData, setRemoteCancelData] = useState<{
     reason: string;
     cancelledBy: string;
@@ -42,27 +41,30 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
 
   const isMounted = useRef(true);
 
+  const isOn_trip =
+    rideData.status === "on_trip" || currentRide?.status === "on_trip";
+
+  const driver = rideData?.activeTrip?.driver || currentRide?.driver;
+  const vehicle = rideData?.activeTrip?.vehicle || currentRide?.driver?.vehicle;
+  const profilePic = driver?.profilePic || driver?.profile_pic;
+  const totalTrips = driver?.totalTrips ?? driver?.total_trips ?? 0;
+  const displayOffer =
+    rideData?.activeTrip?.offer ?? currentRide?.offer ?? rideData?.offer ?? 0;
+
   useEffect(() => {
     isMounted.current = true;
-
-    // ✅ Listen for cancellation from the driver via the service
     subscribeToRideCancellation((data) => {
       if (data.cancelledBy === "driver" && isMounted.current) {
         setRemoteCancelData(data);
       }
     });
-
     return () => {
       isMounted.current = false;
     };
   }, []);
 
-  const driver = currentRide?.driver;
-  const vehicle = currentRide?.driver?.vehicle as any;
-
   const handleConfirmCancel = useCallback(async () => {
     if (!isMounted.current || isCancelling) return;
-
     setIsCancelling(true);
     try {
       const userInfo = await getUserInfo();
@@ -76,7 +78,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
         },
         body: JSON.stringify({
           userPhone: formattedPhone,
-          reason: cancelReason || "No reason selected", // ✅ Send reason to backend
+          reason: cancelReason || "No reason provided.",
         }),
       });
 
@@ -89,10 +91,9 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
     }
   }, [isCancelling, onCancel, cancelReason]);
 
-  // ✅ Handle closing the driver-cancellation modal
   const handleCloseRemoteModal = () => {
     setRemoteCancelData(null);
-    onCancel(); // Returns user to input tab
+    onCancel();
   };
 
   if (!driver?.name) {
@@ -106,41 +107,49 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
 
   return (
     <View style={styles.container}>
-      {/* Top Section: Driver & Vehicle Info */}
       <View style={styles.topSection}>
+        {/* ✅ Header row containing Badge and Safety Button */}
+        {isOn_trip && (
+          <View style={styles.headerRow}>
+            <View style={styles.ongoingBadge}>
+              <View style={styles.pulseDot} />
+              <Text style={styles.ongoingText}>Trip in Progress</Text>
+            </View>
+
+            <IRButton
+              title="Safety Toolkit"
+              variant="outline"
+              size="sm"
+              fullWidth={false}
+              onPress={() => {
+                /* your safety logic */
+              }}
+              leftIcon={
+                <Ionicons name="shield-checkmark" size={16} color="#007AFF" />
+              }
+              style={styles.safetyButton}
+              textStyle={styles.safetyButtonText}
+              borderColor="#E2E8F0"
+            />
+          </View>
+        )}
+
         <View style={styles.driverRow}>
           <View style={styles.driverInfo}>
-            <View style={styles.avatarWrapper}>
-              {driver.profilePic ? (
-                <Image
-                  source={{ uri: driver.profilePic }}
-                  style={styles.avatar}
-                />
-              ) : (
-                <Ionicons name="person" size={24} color="#94a3b8" />
-              )}
-            </View>
+            <IRAvatar
+              source={profilePic ? { uri: profilePic } : undefined}
+              size={52}
+            />
             <View>
               <Text style={styles.driverName}>{driver.name}</Text>
               <View style={styles.ratingBadge}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Ionicons
-                    key={star}
-                    name="star"
-                    size={12}
-                    color="#FFC107"
-                    style={{ marginRight: 1 }}
-                  />
-                ))}
+                <Ionicons name="star" size={12} color="#FFC107" />
                 <Text style={styles.ratingText}>
                   {typeof driver.rating === "number"
                     ? driver.rating.toFixed(2)
                     : "5.00"}
                 </Text>
-                <Text style={styles.tripCount}>
-                  {" "}
-                  • {driver.totalTrips || 0} rides
-                </Text>
+                <Text style={styles.tripCount}> • {totalTrips} rides</Text>
               </View>
             </View>
           </View>
@@ -149,49 +158,43 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.divider} />
-
         <View style={styles.vehicleRow}>
           <View style={styles.vehicleInfo}>
-            <View style={styles.carIconWrapper}>
-              <Image
-                source={{
-                  uri:
-                    vehicle?.pic ||
-                    "https://cdn-icons-png.flaticon.com/512/744/744465.png",
-                }}
-                style={styles.carImage}
-                resizeMode="contain"
-              />
-            </View>
+            <IRAvatar
+              source={vehicle?.pic ? { uri: vehicle.pic } : undefined}
+              variant="rounded"
+              size={50}
+              style={{ backgroundColor: "#f8fafc" }}
+            />
             <View>
               <Text style={styles.carModel}>
                 {vehicle?.color} {vehicle?.model}
               </Text>
               <View style={styles.plateBadge}>
-                <Text style={styles.plateNumber}>{vehicle?.licensePlate}</Text>
+                <Text style={styles.plateNumber}>
+                  {vehicle?.licensePlate || "No Plate"}
+                </Text>
               </View>
             </View>
           </View>
           <View style={styles.pricePill}>
             <Text style={styles.priceText}>
-              $
-              {typeof currentRide?.offer === "number"
-                ? currentRide?.offer.toFixed(2)
-                : currentRide?.offer || "0.00"}
+              ${Number(displayOffer).toFixed(2)}
             </Text>
           </View>
         </View>
       </View>
 
-      <View style={styles.footer}>
-        <CancelButton
-          label="Cancel ride"
-          onPress={() => setShowCancelModal(true)}
-        />
+      <View>
+        {!isOn_trip && (
+          <CancelButton
+            label="Cancel ride"
+            onPress={() => setShowCancelModal(true)}
+          />
+        )}
       </View>
 
-      {/* ✅ Premium Bolt-style Cancel Modal (User Initiated) */}
+      {/* Modals */}
       <Modal visible={showCancelModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -200,7 +203,6 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
             <Text style={styles.modalSubtitle}>
               Please let us know why you are cancelling
             </Text>
-
             <View style={styles.reasonContainer}>
               {PREDEFINED_REASONS.map((reason) => (
                 <TouchableOpacity
@@ -222,38 +224,29 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
                 </TouchableOpacity>
               ))}
             </View>
-
             <TextInput
               style={styles.reasonInput}
               placeholder="Other reason..."
-              placeholderTextColor="#94a3b8"
               value={cancelReason}
               onChangeText={setCancelReason}
               multiline
             />
-
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.keepBtn}
-                onPress={() => {
-                  setShowCancelModal(false);
-                  setCancelReason("");
-                }}
-                disabled={isCancelling}
-              >
-                <Text style={styles.keepBtnText}>Keep ride</Text>
-              </TouchableOpacity>
-              <CancelButton
-                label="Confirm Cancellation"
+              <IRButton
+                title="Keep ride"
+                onPress={() => setShowCancelModal(false)}
+              />
+              <IRButton
+                title="Confirm Cancellation"
+                variant="ghost"
                 onPress={handleConfirmCancel}
-                isLoading={isCancelling}
+                loading={isCancelling}
               />
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* ✅ Driver-Initiated Cancellation Modal (New) */}
       <Modal visible={!!remoteCancelData} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, styles.remoteModalPadding]}>
@@ -264,20 +257,13 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
             <Text style={styles.modalSubtitle}>
               The driver has cancelled this request.
             </Text>
-
             <View style={styles.reasonDisplayBox}>
               <Text style={styles.reasonLabel}>Reason:</Text>
               <Text style={styles.reasonValue}>
                 {remoteCancelData?.reason || "No reason provided"}
               </Text>
             </View>
-
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={handleCloseRemoteModal}
-            >
-              <Text style={styles.closeBtnText}>Back to Home</Text>
-            </TouchableOpacity>
+            <IRButton title="Back to Home" onPress={handleCloseRemoteModal} />
           </View>
         </View>
       </Modal>
@@ -293,6 +279,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   topSection: { flex: 1 },
+  // ✅ New Header Row Style
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   center: { justifyContent: "center", alignItems: "center" },
   loadingText: {
     marginTop: 12,
@@ -305,17 +298,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  driverInfo: { flexDirection: "row", alignItems: "center", gap: 12 },
-  avatarWrapper: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "#f1f5f9",
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
-  },
-  avatar: { width: "100%", height: "100%" },
+  driverInfo: { flexDirection: "row", alignItems: "center", gap: 10 },
   driverName: { fontSize: 18, fontWeight: "700", color: "#1e293b" },
   ratingBadge: { flexDirection: "row", alignItems: "center", marginTop: 2 },
   ratingText: {
@@ -335,7 +318,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#f1f5f9",
   },
-  divider: { height: 1, backgroundColor: "#f1f5f9", marginVertical: 15 },
   vehicleRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -343,13 +325,25 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   vehicleInfo: { flexDirection: "row", alignItems: "center", gap: 12 },
-  carIconWrapper: {
-    width: 50,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+  pulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#10B981",
+    marginRight: 6,
   },
-  carImage: { width: "100%", height: "100%" },
+  safetyButton: {
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    width: "auto", // Ensure it doesn't take full width
+  },
+  safetyButtonText: {
+    fontSize: 12,
+    color: "#475569",
+  },
   carModel: {
     fontSize: 15,
     fontWeight: "600",
@@ -378,8 +372,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   priceText: { fontSize: 18, fontWeight: "800", color: "#10B981" },
-  footer: { paddingBottom: 20 },
-
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.7)",
@@ -454,20 +446,6 @@ const styles = StyleSheet.create({
     width: "100%",
     gap: 12,
   },
-  keepBtn: {
-    width: "100%",
-    padding: 18,
-    borderRadius: 16,
-    backgroundColor: "#f1f5f9",
-    alignItems: "center",
-  },
-  keepBtnText: {
-    color: "#475569",
-    fontWeight: "800",
-    fontSize: 16,
-  },
-
-  // ✅ New Remote Modal Styles
   remoteModalPadding: {
     alignItems: "center",
     borderTopLeftRadius: 40,
@@ -504,17 +482,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontStyle: "italic",
   },
-  closeBtn: {
-    width: "100%",
-    padding: 18,
-    borderRadius: 16,
-    backgroundColor: "#10B981",
+  ongoingBadge: {
+    flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#ecfdf5",
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
   },
-  closeBtnText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 16,
+  ongoingText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#10B981",
+    textTransform: "uppercase",
   },
 });
 

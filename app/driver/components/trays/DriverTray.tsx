@@ -20,6 +20,8 @@ import {
 import { createStyles } from "../../../../utils/styles";
 
 import { useRideBooking } from "../../../../app/context/RideBookingContext";
+import RatingModal from "../../../../components/RatingModal"; // Adjust path
+import { submitUserRating } from "../../../../utils/ratingSubmittion";
 import {
   getDriverSocket,
   onMatchedRide,
@@ -53,6 +55,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
   ({ onStatusChange, onHeightChange, onMatch }, ref) => {
     const [status, setStatus] = useState<DriverStatus>("welcome");
     const { rideData, updateRideData } = useRideBooking();
+    const [ratingVisible, setRatingVisible] = useState(false);
 
     const heightAnim = useRef(new Animated.Value(0)).current;
     const translateY = useRef(new Animated.Value(windowHeight)).current;
@@ -126,22 +129,21 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
       const unsubscribeMatched = onMatchedRide((matchedData: any) => {
         console.log("📥 Driver matched payload:", matchedData);
 
-        // ✅ FIX: Un-nest the data so TripTab can find 'passenger' immediately
-        // Some backends send { tripDetails: { passenger: ... } }
-        // Others send { passenger: ... } directly.
-        const actualTripData = matchedData.tripDetails || matchedData;
+        // 1. Extract the ID from the root and the details from the nested object
+        const rideId = matchedData.rideId;
+        const details = matchedData.tripDetails;
 
-        // 1. Clear Context and update with normalized trip data
+        // 2. Save them together in the activeTrip state
         updateRideData({
           requests: [],
-          activeTrip: actualTripData,
+          activeTrip: {
+            ...details, // This brings in passenger, ride, vehicle, etc.
+            rideId: rideId, // This ensures the ID is attached for socket calls
+          },
           status: "matched",
         });
 
-        // 2. Notify Parent (Clears Dashboard Radar & Cards)
         onMatch?.();
-
-        // 3. Move UI to Active Trip Tab
         handleTransition("active");
       });
 
@@ -158,21 +160,77 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
 
     const handleArrived = () => {
       const socket = getDriverSocket();
+      // Now that we've flattened the ID into activeTrip, we grab it here:
+      const rId = rideData.activeTrip?.rideId;
+
+      if (!rId) {
+        console.error("❌ Cannot emit arrival: rideId is missing from state");
+        return;
+      }
+
       socket?.emit("ride:driver_arrived", {
-        rideId:
-          rideData.activeTrip?.ride?.ride_id || rideData.activeTrip?.rideId,
+        rideId: rId,
         driverPhone: rideData.activeTrip?.driver?.phone,
       });
+
+      console.log("🚗 Driver arrived for ride:", rId);
       updateRideData({ status: "arrived" });
     };
 
     const handleStartTrip = () => {
       const socket = getDriverSocket();
-      socket?.emit("ride:start_trip", {
-        rideId:
-          rideData.activeTrip?.ride?.ride_id || rideData.activeTrip?.rideId,
-      });
-      updateRideData({ status: "on_trip" });
+      const rId = rideData.activeTrip?.rideId;
+
+      if (rId) {
+        socket?.emit("ride:start_trip", { rideId: rId });
+        updateRideData({ status: "on_trip" });
+      }
+    };
+
+    const handleEndTrip = async () => {
+      const rId = rideData.activeTrip?.rideId;
+      if (!rId) return;
+
+      try {
+        const response = await fetch(
+          `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/rides/end_ride`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rideId: rId }),
+          },
+        );
+
+        const result = await response.json();
+
+        if (result.success) {
+          // ✅ Change status to "idle" and UI to "online", but KEEP activeTrip data
+          updateRideData({ status: "idle" });
+          handleTransition("online");
+          setRatingVisible(true);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    const handleRatingSubmit = async (stars: number, comment: string) => {
+      const rideId = rideData.activeTrip?.rideId;
+      const passengerPhone = rideData.activeTrip?.passenger?.phone;
+
+      if (rideId && passengerPhone) {
+        await submitUserRating(
+          "passenger",
+          passengerPhone,
+          rideId,
+          stars,
+          comment,
+        );
+      }
+
+      // ✅ FINALLY set activeTrip to null here
+      updateRideData({ activeTrip: null });
+      setRatingVisible(false);
     };
 
     // Interpolations
@@ -235,8 +293,18 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
                   onArrived={handleArrived}
                   onStartTrip={handleStartTrip}
                   onCancel={() => handleTransition("online")}
+                  onEndTrip={handleEndTrip}
                 />
               </Animated.View>
+              <RatingModal
+                visible={ratingVisible}
+                title="Rate Your Passenger"
+                userName={rideData.activeTrip?.passenger?.name}
+                userImage={rideData.activeTrip?.passenger?.profilePic}
+                subtitle="Your feedback helps keep the community safe."
+                onSelectRating={handleRatingSubmit}
+                // Remove onClose
+              />
             </View>
           </View>
         </Animated.View>

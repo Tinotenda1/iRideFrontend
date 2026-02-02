@@ -120,6 +120,7 @@ const Tray = forwardRef<any, TrayProps>(
           },
         );
         const data = await response.json();
+        console.log("DEBUG: API Suggestions:", data.suggestions); // <--- Add this
         const prices: Record<string, number> = {};
         data.suggestions.forEach((item: any) => {
           prices[item.vehicleType] = item.suggestedPrice;
@@ -155,7 +156,6 @@ const Tray = forwardRef<any, TrayProps>(
           destination: null,
           vehiclePrices: {},
         });
-        setCurrentRide(null); // This clears the driver/vehicle from TripTab
       }
 
       // ✅ NEW: Update global status based on the tab transition

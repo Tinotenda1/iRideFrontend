@@ -1,134 +1,172 @@
 // components/trays/InputTray.tsx
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
-import { BackHandler, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useRideBooking } from '../../../../app/context/RideBookingContext';
-import { theme } from '../../../../constants/theme';
-import LocationSearch, { Place } from '../map/LocationSearch';
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import {
+  BackHandler,
+  Dimensions,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useRideBooking } from "../../../../app/context/RideBookingContext";
+import LocationSearch, { Place } from "../map/LocationSearch";
 
-const { height: windowHeight } = Dimensions.get('window');
-const OPEN_HEIGHT = windowHeight * 0.9; // 90% open
+const { height: windowHeight } = Dimensions.get("window");
+const OPEN_HEIGHT = windowHeight * 0.95; // Slightly higher for that full-screen Bolt feel
 
 interface InputTrayProps {
-  activeField: 'pickup' | 'destination';
+  activeField: "pickup" | "destination";
   onClose?: () => void;
 }
 
-const InputTray = forwardRef<any, InputTrayProps>(({ activeField, onClose }, ref) => {
-  const { rideData, updateRideData } = useRideBooking();
-  const [isOpen, setIsOpen] = useState(false);
+const InputTray = forwardRef<any, InputTrayProps>(
+  ({ activeField, onClose }, ref) => {
+    const { rideData, updateRideData } = useRideBooking();
+    const [isOpen, setIsOpen] = useState(false);
 
-  // Input text
-  const [inputText, setInputText] = useState(
-    activeField === 'pickup'
-      ? rideData.pickupLocation?.name || ''
-      : rideData.destination?.name || ''
-  );
-
-  // Handle Android back button
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => {
-        handleClose();
-        return true;
-      }
+    const [inputText, setInputText] = useState(
+      activeField === "pickup"
+        ? rideData.pickupLocation?.name || ""
+        : rideData.destination?.name || "",
     );
 
-    return () => backHandler.remove();
-  }, [isOpen]);
+    useEffect(() => {
+      if (!isOpen) return;
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        () => {
+          handleClose();
+          return true;
+        },
+      );
+      return () => backHandler.remove();
+    }, [isOpen]);
 
-  // Allow parent to control tray
-  useImperativeHandle(ref, () => ({
-    open: () => {
-      setInputText('');     // clear field
-      setIsOpen(true);      // show tray
-    },
-    close: () => {
+    useImperativeHandle(ref, () => ({
+      open: () => {
+        setInputText("");
+        setIsOpen(true);
+      },
+      close: () => {
+        handleClose();
+      },
+    }));
+
+    const handleClose = () => {
+      setIsOpen(false);
+      onClose?.();
+    };
+
+    const handlePlaceSelect = (place: Place | null) => {
+      if (!place) return;
+      if (activeField === "pickup") updateRideData({ pickupLocation: place });
+      else updateRideData({ destination: place });
       handleClose();
-    },
-  }));
+    };
 
-  const handleClose = () => {
-    setIsOpen(false);
-    onClose?.();
-  };
+    if (!isOpen) return null;
 
-  // Handle selecting a place
-  const handlePlaceSelect = (place: Place | null) => {
-    if (!place) return;
+    return (
+      <>
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={handleClose}
+        />
 
-    if (activeField === 'pickup') updateRideData({ pickupLocation: place });
-    else updateRideData({ destination: place });
+        <View style={styles.container}>
+          {/* Premium Drag Handle */}
+          <View style={styles.dragHandle} />
 
-    handleClose();
-  };
+          {/* Header Section */}
+          <View style={styles.header}>
+            <Text style={styles.label}>
+              {activeField === "pickup" ? "Pickup Location" : "Where to?"}
+            </Text>
+          </View>
 
-  if (!isOpen) return null;
-
-  return (
-    <>
-      {/* Backdrop overlay - tappable to close */}
-      <TouchableOpacity
-        style={styles.backdrop}
-        activeOpacity={1}
-        onPress={handleClose}
-      />
-      
-      <View style={styles.container}>
-
-        <Text style={styles.label}>
-          {activeField === 'pickup' ? 'Enter Pickup Location' : 'Enter Destination'}
-        </Text>
-
-        <LocationSearch
-          destination={inputText}
-          onDestinationChange={setInputText}
-          onPlaceSelect={handlePlaceSelect}
-          placeholder={activeField === 'pickup' ? 'Pickup location' : 'Destination'}
-          autoFocus={true}          
-          />
-      </View>
-    </>
-  );
-});
+          {/* Content Section */}
+          <View style={styles.searchWrapper}>
+            <LocationSearch
+              destination={inputText}
+              onDestinationChange={setInputText}
+              onPlaceSelect={handlePlaceSelect}
+              placeholder={
+                activeField === "pickup"
+                  ? "Search pickup point"
+                  : "Enter destination"
+              }
+              autoFocus={true}
+            />
+          </View>
+        </View>
+      </>
+    );
+  },
+);
 
 InputTray.displayName = "InputTray";
 export default InputTray;
 
 const styles = StyleSheet.create({
   backdrop: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: "rgba(15, 23, 42, 0.4)", // Slightly more blue-tinted dark overlay
     zIndex: 998,
   },
   container: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
-    width: '100%',
+    width: "100%",
     height: OPEN_HEIGHT,
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: theme.borderRadius.xl,
-    borderTopRightRadius: theme.borderRadius.xl,
-    padding: theme.spacing.md,
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 32, // Large rounded corners
+    borderTopRightRadius: 32,
+    paddingHorizontal: 20,
+    paddingTop: 12,
     zIndex: 999,
+    // Premium Shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 25,
   },
-  handle: {
-    width: 40,
-    height: 2,
-    backgroundColor: theme.colors.border,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: theme.spacing.md,
+  dragHandle: {
+    width: 38,
+    height: 5,
+    backgroundColor: "#E2E8F0",
+    borderRadius: 10,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  closeCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F1F5F9",
+    justifyContent: "center",
+    alignItems: "center",
   },
   label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: theme.spacing.sm,
+    fontSize: 22, // Larger, bold Bolt-style title
+    fontWeight: "800",
+    color: "#1e293b",
+    letterSpacing: -0.5,
+  },
+  searchWrapper: {
+    flex: 1,
+    // LocationSearch handles its own internal styling,
+    // but this wrapper ensures proper spacing.
   },
 });

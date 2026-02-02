@@ -55,6 +55,7 @@ export interface RideResponse {
       model: string;
       color: string;
       licensePlate: string;
+      pic: string;
     };
   };
 }

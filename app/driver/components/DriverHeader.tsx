@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { IRButton } from "../../../components/IRButton";
 import { theme } from "../../../constants/theme";
 import {
   connectDriver,
@@ -56,19 +57,18 @@ export default function DriverHeader({
     if (lastStatus.current !== online) {
       setOnline?.(online);
       lastStatus.current = online;
+      // ✅ Automatically stop toggle loading when status matches expected state
+      setIsToggling(false);
     }
     setIsConnecting?.(isConnecting);
   }, [online, isConnecting]);
 
-  // Modified to handle the modal logic
   const handleTogglePress = () => {
     if (isToggling || isConnecting) return;
 
     if (online) {
-      // If driver is online, show confirmation before going offline
       setShowOfflineModal(true);
     } else {
-      // If offline, go online immediately
       executeToggle(true);
     }
   };
@@ -81,10 +81,11 @@ export default function DriverHeader({
         await connectDriver();
       } else {
         disconnectDriver();
+        // Since disconnect is usually instant/local, we reset here
+        setIsToggling(false);
       }
     } catch (err) {
       console.error("[DriverHeader] Toggle failed:", err);
-    } finally {
       setIsToggling(false);
     }
   };
@@ -107,6 +108,7 @@ export default function DriverHeader({
           style={[
             styles.statusPill,
             online ? styles.pillOnline : styles.pillOffline,
+            (isToggling || isConnecting) && { opacity: 0.8 },
           ]}
         >
           {isToggling || isConnecting ? (
@@ -132,7 +134,6 @@ export default function DriverHeader({
         </TouchableOpacity>
       </View>
 
-      {/* Confirmation Modal */}
       <Modal visible={showOfflineModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -145,19 +146,19 @@ export default function DriverHeader({
               online.
             </Text>
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.keepBtn}
+              <IRButton
+                title="Stay Online"
+                variant="primary"
                 onPress={() => setShowOfflineModal(false)}
-              >
-                <Text style={styles.keepBtnText}>Stay Online</Text>
-              </TouchableOpacity>
+                disabled={isToggling}
+              />
 
-              <TouchableOpacity
-                style={styles.confirmOfflineBtn}
+              <IRButton
+                title="Yes, Go Offline"
+                variant="ghost"
                 onPress={() => executeToggle(false)}
-              >
-                <Text style={styles.confirmOfflineText}>Yes, Go Offline</Text>
-              </TouchableOpacity>
+                loading={isToggling} // ✅ Added loading state here
+              />
             </View>
           </View>
         </View>
@@ -216,7 +217,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.5,
   },
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.7)",
@@ -253,24 +253,4 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   modalActions: { width: "100%", gap: 12 },
-  keepBtn: {
-    width: "100%",
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: theme.colors.primary,
-    alignItems: "center",
-  },
-  keepBtnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
-  confirmOfflineBtn: {
-    width: "100%",
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: "#f1f5f9",
-    alignItems: "center",
-  },
-  confirmOfflineText: {
-    color: theme.colors.error,
-    fontWeight: "700",
-    fontSize: 16,
-  },
 });
