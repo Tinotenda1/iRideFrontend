@@ -11,13 +11,16 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TouchableOpacity, // Added
+  TouchableOpacity,
   UIManager,
   View,
 } from "react-native";
 import MapView, { PROVIDER_GOOGLE, Region } from "react-native-maps";
 import RideRequestCard from "../components/RideRequestCard";
-import { onRemoveRideRequest } from "../socketConnectionUtility/driverSocketService";
+import {
+  onRemoveRideRequest,
+  onRideNoLongerAvailable,
+} from "../socketConnectionUtility/driverSocketService";
 
 if (
   Platform.OS === "android" &&
@@ -61,25 +64,26 @@ const DriverHome: React.FC<Props> = ({
   const [rides, setRides] = useState<RideState[]>([]);
   const lastProcessedRidesRef = useRef<Set<string>>(new Set());
 
-  // MAP STATES
   const mapRef = useRef<MapView>(null);
   const [userRegion, setUserRegion] = useState<any>(null);
   const [mapLoading, setMapLoading] = useState(true);
-  const [showRecenter, setShowRecenter] = useState(false); // Track button visibility
+  const [showRecenter, setShowRecenter] = useState(false);
 
-  // ANIMATION VALUES
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // 1. MAP LOGIC: LOAD USER LOCATION
+  /* ---------------- Load Location ---------------- */
+
   useEffect(() => {
     const loadLocation = async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
+
       if (status !== "granted") {
         setMapLoading(false);
         return;
       }
 
       const loc = await Location.getCurrentPositionAsync({});
+
       const region = {
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
@@ -94,7 +98,8 @@ const DriverHome: React.FC<Props> = ({
     loadLocation();
   }, []);
 
-  // 2. RIDE PROCESSING LOGIC
+  /* ---------------- Process Incoming Rides ---------------- */
+
   useEffect(() => {
     if (!incomingRides || incomingRides.length === 0) {
       setRides([]);
@@ -102,39 +107,45 @@ const DriverHome: React.FC<Props> = ({
       return;
     }
 
-    const currentRideIds = new Set(incomingRides.map((ride) => ride.rideId));
+    const currentRideIds = new Set(incomingRides.map((r) => r.rideId));
     const newRides: RideState[] = [];
 
     incomingRides.forEach((ride) => {
       if (!lastProcessedRidesRef.current.has(ride.rideId)) {
         const expiresIn = ride.expiresIn || DEFAULT_EXPIRE_TIME;
-        const expiresAt = Date.now() + expiresIn;
-        newRides.push({ rideId: ride.rideId, expiresAt, data: ride });
+
+        newRides.push({
+          rideId: ride.rideId,
+          expiresAt: Date.now() + expiresIn,
+          data: ride,
+        });
+
         lastProcessedRidesRef.current.add(ride.rideId);
       }
     });
 
     setRides((prev) => {
-      const filteredPrev = prev.filter((ride) =>
-        currentRideIds.has(ride.rideId),
-      );
-      const updatedPrev = filteredPrev.map((prevRide) => {
-        const currentData = incomingRides.find(
-          (r) => r.rideId === prevRide.rideId,
-        );
-        return currentData ? { ...prevRide, data: currentData } : prevRide;
+      const filtered = prev.filter((r) => currentRideIds.has(r.rideId));
+
+      const updated = filtered.map((r) => {
+        const data = incomingRides.find((i) => i.rideId === r.rideId);
+        return data ? { ...r, data } : r;
       });
 
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      return [...updatedPrev, ...newRides];
+
+      return [...updated, ...newRides];
     });
 
     lastProcessedRidesRef.current.forEach((id) => {
-      if (!currentRideIds.has(id)) lastProcessedRidesRef.current.delete(id);
+      if (!currentRideIds.has(id)) {
+        lastProcessedRidesRef.current.delete(id);
+      }
     });
   }, [incomingRides]);
 
-  // 3. RADAR ANIMATION LOOP
+  /* ---------------- Radar Animation ---------------- */
+
   useEffect(() => {
     if (online && !isConnecting) {
       const animation = Animated.loop(
@@ -151,14 +162,17 @@ const DriverHome: React.FC<Props> = ({
           }),
         ]),
       );
+
       animation.start();
+
       return () => animation.stop();
     } else {
       pulseAnim.setValue(1);
     }
-  }, [online, isConnecting, pulseAnim]);
+  }, [online, isConnecting]);
 
-  // 4. HANDLERS
+  /* ---------------- Handlers ---------------- */
+
   const handleCardSelect = useCallback(
     (rideId: string, progress: number, msLeft: number, rideData: any) => {
       onRideSelect(rideId, progress, msLeft, rideData);
@@ -168,10 +182,10 @@ const DriverHome: React.FC<Props> = ({
 
   const handleCardExpire = useCallback(
     (rideId: string) => {
-      const rideState = rides.find((r) => r.rideId === rideId);
-      if (rideState) onRideExpire(rideState.data);
+      const ride = rides.find((r) => r.rideId === rideId);
+      if (ride) onRideExpire(ride.data);
     },
-    [rides, onRideExpire],
+    [rides],
   );
 
   const handleRecenter = () => {
@@ -184,51 +198,61 @@ const DriverHome: React.FC<Props> = ({
   const onRegionChangeComplete = (region: Region) => {
     if (!userRegion) return;
 
-    // Check if user has moved the map significantly from their location
-    const latDiff = Math.abs(region.latitude - userRegion.latitude);
-    const lngDiff = Math.abs(region.longitude - userRegion.longitude);
+    const lat = Math.abs(region.latitude - userRegion.latitude);
+    const lng = Math.abs(region.longitude - userRegion.longitude);
 
-    // threshold of ~0.001 (~100 meters)
-    if (latDiff > 0.001 || lngDiff > 0.001) {
+    if (lat > 0.001 || lng > 0.001) {
       setShowRecenter(true);
     } else {
       setShowRecenter(false);
     }
   };
 
-  // 5. REUSABLE SOCKET LISTENER: CLOSE SPECIFIC RIDE CARD
+  /* ---------------- Socket Cleanup ---------------- */
+
   useEffect(() => {
-    // This effect handles the 'ride:remove_request' event from the backend
-    const unsubscribe = onRemoveRideRequest((data) => {
-      const rideIdToRemove = data?.rideId;
-      if (!rideIdToRemove) return;
+    const unsub = onRemoveRideRequest((data) => {
+      const id = data?.rideId;
+      if (!id) return;
 
       setRides((prev) => {
-        const exists = prev.find((r) => r.rideId === rideIdToRemove);
-        // If the ride isn't in our current list, do nothing
-        if (!exists) return prev;
-
-        // Smoothly animate the removal of the card
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-
-        return prev.filter((ride) => ride.rideId !== rideIdToRemove);
+        return prev.filter((r) => r.rideId !== id);
       });
 
-      // Crucial: remove from the ref so the logic can process it again if needed later
-      lastProcessedRidesRef.current.delete(rideIdToRemove);
+      lastProcessedRidesRef.current.delete(id);
     });
 
-    return () => unsubscribe(); // Standard cleanup
+    return () => unsub();
   }, []);
 
-  // OFFLINE VIEW
+  useEffect(() => {
+    const unsub = onRideNoLongerAvailable((data) => {
+      const id = data?.rideId;
+      if (!id) return;
+
+      setRides((prev) => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        return prev.filter((r) => r.rideId !== id);
+      });
+
+      lastProcessedRidesRef.current.delete(id);
+    });
+
+    return () => unsub();
+  }, []);
+
+  /* ---------------- Offline ---------------- */
+
   if (!online) {
     return (
       <View style={styles.offlineContainer}>
         <View style={styles.offlineIcon}>
           <Ionicons name="moon-outline" size={60} color="#94a3b8" />
         </View>
+
         <Text style={styles.title}>You are Offline</Text>
+
         <Text style={styles.subtitle}>
           Turn online to start receiving ride requests
         </Text>
@@ -236,7 +260,8 @@ const DriverHome: React.FC<Props> = ({
     );
   }
 
-  // LOADING VIEW
+  /* ---------------- Loading ---------------- */
+
   if (mapLoading || !userRegion) {
     return (
       <View style={styles.center}>
@@ -245,9 +270,10 @@ const DriverHome: React.FC<Props> = ({
     );
   }
 
+  /* ---------------- Main ---------------- */
+
   return (
     <View style={styles.container}>
-      {/* BACKGROUND LAYER: MAP */}
       <MapView
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
@@ -259,15 +285,14 @@ const DriverHome: React.FC<Props> = ({
           left: 0,
         }}
         initialRegion={userRegion}
-        showsUserLocation={true}
+        showsUserLocation
         showsMyLocationButton={false}
-        onRegionChangeComplete={onRegionChangeComplete} // Track movement
-        loadingEnabled={true}
+        onRegionChangeComplete={onRegionChangeComplete}
+        loadingEnabled
         pitchEnabled={false}
         rotateEnabled={false}
       />
 
-      {/* MIDDLE LAYER: RADAR RADIAL */}
       <View
         style={[
           styles.radarLayer,
@@ -281,27 +306,26 @@ const DriverHome: React.FC<Props> = ({
         <Animated.View
           style={[styles.pulseCircle, { transform: [{ scale: pulseAnim }] }]}
         />
+
         <Animated.View
           style={[
             styles.pulseCircleOuter,
             { transform: [{ scale: pulseAnim }] },
           ]}
         />
+
         <View style={styles.driverDot} />
       </View>
 
-      {/* RECENTER BUTTON (FLOATS ABOVE TRAY) */}
       {showRecenter && (
         <TouchableOpacity
           style={[styles.recenterButton, { bottom: trayPadding + 16 }]}
           onPress={handleRecenter}
-          activeOpacity={0.8}
         >
           <Ionicons name="navigate" size={24} color={theme.colors.primary} />
         </TouchableOpacity>
       )}
 
-      {/* TOP LAYER: SCROLLABLE RIDE STACK */}
       {rides.length > 0 && (
         <View
           style={[
@@ -341,13 +365,20 @@ const DriverHome: React.FC<Props> = ({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f3f3f3" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   offlineContainer: {
     flex: 1,
     backgroundColor: "#0f172a",
     justifyContent: "center",
     alignItems: "center",
   },
+
   offlineIcon: {
     width: 100,
     height: 100,
@@ -357,6 +388,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
+
   radarLayer: {
     position: "absolute",
     left: 0,
@@ -365,6 +397,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 1,
   },
+
   pulseCircle: {
     width: 250,
     height: 250,
@@ -373,6 +406,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: theme.colors.primary + "40",
   },
+
   pulseCircleOuter: {
     position: "absolute",
     width: 320,
@@ -382,6 +416,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.primary + "10",
   },
+
   driverDot: {
     position: "absolute",
     width: 20,
@@ -392,6 +427,7 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     elevation: 5,
   },
+
   recenterButton: {
     position: "absolute",
     right: 16,
@@ -408,7 +444,14 @@ const styles = StyleSheet.create({
     elevation: 8,
     zIndex: 30,
   },
-  title: { fontSize: 24, fontWeight: "800", color: "#fff", marginTop: 10 },
+
+  title: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#fff",
+    marginTop: 10,
+  },
+
   subtitle: {
     fontSize: 15,
     color: "#94a3b8",
@@ -416,12 +459,14 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 40,
   },
+
   rideStackContainer: {
     position: "absolute",
     left: 0,
     right: 0,
     zIndex: 20,
   },
+
   cardWrapper: {
     marginBottom: 12,
     shadowColor: "#000",

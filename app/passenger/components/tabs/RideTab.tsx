@@ -4,7 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
 import { Wallet } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRideBooking } from "../../../../app/context/RideBookingContext";
 import { IRButton } from "../../../../components/IRButton";
@@ -192,11 +192,28 @@ const RideTab: React.FC<TabProps> = ({
   const handleFindRides = async () => {
     try {
       setIsBooking(true);
-      await submitRideBooking();
-      // Successfully extracted from props now:
+
+      // result is of type RideResponse | undefined
+      const result = await submitRideBooking();
+
+      // ✅ FIX: Instead of checking (result === false), check if result is null/undefined
+      if (!result) {
+        Alert.alert(
+          "Ride Request Error",
+          "We couldn't process your request. Please check your internet and try again.",
+          [{ text: "OK" }],
+        );
+        return;
+      }
+
+      // If we have a result, we successfully moved to 'searching' state
       onSwitchToSearching();
     } catch (error) {
       console.error("Booking failed:", error);
+      Alert.alert(
+        "Connection Issue",
+        "The server returned an unexpected response. Please try again in a moment.",
+      );
     } finally {
       setIsBooking(false);
     }

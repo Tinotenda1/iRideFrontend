@@ -1,3 +1,4 @@
+// app/driver/index.tsx
 import { theme } from "@/constants/theme";
 import { getUserInfo } from "@/utils/storage";
 import { useRouter } from "expo-router";
@@ -22,6 +23,8 @@ import {
   onRemoveRideRequest,
   onRideCancelled,
 } from "./socketConnectionUtility/driverSocketService";
+// app/driver/socketConnectionUtility/driverSocketService.ts
+
 
 type Screen = "home" | "wallet" | "revenue" | "notifications";
 export type SubmissionState = "idle" | "submitting" | "submitted";
@@ -39,9 +42,8 @@ const DriverDashboard: React.FC = () => {
   const [incomingRides, setIncomingRides] = useState<any[]>([]);
   const [online, setOnline] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [trayHeight, setTrayHeight] = useState(0);
+  const [trayHeight, setTrayHeight] = useState(0); // ✅ Unified Modal State
 
-  // ✅ Unified Modal State
   const [modalConfig, setModalConfig] = useState({
     visible: false,
     type: "cancellation" as ModalType,
@@ -54,9 +56,8 @@ const DriverDashboard: React.FC = () => {
   >({});
   const [submittedOffers, setSubmittedOffers] = useState<
     Record<string, number>
-  >({});
+  >({}); // ✅ Listener for Trip Cancellation (Reusable Modal)
 
-  // ✅ Listener for Trip Cancellation (Reusable Modal)
   useEffect(() => {
     if (!online) return;
 
@@ -66,14 +67,12 @@ const DriverDashboard: React.FC = () => {
         type: "cancellation",
         title: "Trip Cancelled",
         message: data.reason || "The passenger has cancelled the trip request.",
-      });
+      }); // Clean up local ride states
 
-      // Clean up local ride states
       setIncomingRides([]);
       setSubmissionStates({});
-      setSubmittedOffers({});
+      setSubmittedOffers({}); // Close the ride request tray if it's open
 
-      // Close the ride request tray if it's open
       rideTrayRef.current?.close();
     });
 
@@ -81,9 +80,8 @@ const DriverDashboard: React.FC = () => {
   }, [online]);
 
   const handleCloseModal = () => {
-    setModalConfig((prev) => ({ ...prev, visible: false }));
+    setModalConfig((prev) => ({ ...prev, visible: false })); // Transition the tray back to the "Online" state (radar mode)
 
-    // Transition the tray back to the "Online" state (radar mode)
     if (driverTrayRef.current) {
       driverTrayRef.current.goOnline();
     }
@@ -94,9 +92,7 @@ const DriverDashboard: React.FC = () => {
 
     const unsubscribe = onRemoveRideRequest((rideId) => {
       // 1. Remove from the global incoming list
-      setIncomingRides((prev) => prev.filter((r) => r.rideId !== rideId));
-
-      // 2. If the tray for this specific ride is open, close it
+      setIncomingRides((prev) => prev.filter((r) => r.rideId !== rideId)); // 2. If the tray for this specific ride is open, close it
       // (Assuming you want to kick the driver out of the view if the ride is gone)
       // You can check if the current rideId in the tray matches
     });
@@ -232,7 +228,6 @@ const DriverDashboard: React.FC = () => {
   return (
     <View style={styles.container}>
       <Sidebar ref={sidebarRef} userType="driver" />
-
       <DriverHeader
         onMenuPress={() => sidebarRef.current?.open()}
         onOpenSettings={() => settingsTrayRef.current?.open()}
@@ -248,11 +243,8 @@ const DriverDashboard: React.FC = () => {
         }}
         setIsConnecting={setIsConnecting}
       />
-
       <View style={styles.content}>{renderScreen()}</View>
-
       <DriverSettingsTray ref={settingsTrayRef} onClose={() => {}} />
-
       <DriverTray
         ref={driverTrayRef}
         onStatusChange={(status) => console.log("Tray Status:", status)}
@@ -263,16 +255,13 @@ const DriverDashboard: React.FC = () => {
           setSubmittedOffers({});
         }}
       />
-
       <RideRequestTray
         ref={rideTrayRef}
         driverId={driverInfo?.id}
         onOfferSubmitted={handleOfferSubmission}
         onClose={() => {}}
       />
-
       <DriverFooterNav active={activeScreen} onChange={setActiveScreen} />
-
       {/* ✅ REUSABLE STATUS MODAL */}
       <TripStatusModal
         visible={modalConfig.visible}

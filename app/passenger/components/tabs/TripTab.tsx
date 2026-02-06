@@ -3,6 +3,8 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Animated,
   Modal,
   StyleSheet,
   Text,
@@ -11,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { useRideBooking } from "../../../../app/context/RideBookingContext";
+import { ActionConfirmationModal } from "../../../../components/ActionConfirmationModal";
 import CancelButton from "../../../../components/CancelButton";
 import { IRAvatar } from "../../../../components/IRAvatar";
 import { IRButton } from "../../../../components/IRButton";
@@ -19,6 +22,7 @@ import { subscribeToRideCancellation } from "../../socketConnectionUtility/passe
 
 interface TripTabProps {
   onCancel: () => void;
+  onExpand?: (isExpanded: boolean) => void;
 }
 
 const PREDEFINED_REASONS = [
@@ -27,19 +31,22 @@ const PREDEFINED_REASONS = [
   "Driver asked me to cancel",
   "Incorrect pickup address",
   "No longer need the ride",
+  "Emergency / Drop me here", // Added relevant reason
 ];
 
-const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
+const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
   const { currentRide, rideData } = useRideBooking();
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [isExpanded, setIsExpanded] = useState(false);
   const [remoteCancelData, setRemoteCancelData] = useState<{
     reason: string;
     cancelledBy: string;
   } | null>(null);
 
   const isMounted = useRef(true);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const isOn_trip =
     rideData.status === "on_trip" || currentRide?.status === "on_trip";
@@ -50,6 +57,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
   const totalTrips = driver?.totalTrips ?? driver?.total_trips ?? 0;
   const displayOffer =
     rideData?.activeTrip?.offer ?? currentRide?.offer ?? rideData?.offer ?? 0;
+  const [showDropModal, setShowDropModal] = useState(false);
 
   useEffect(() => {
     isMounted.current = true;
@@ -62,6 +70,19 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
       isMounted.current = false;
     };
   }, []);
+
+  const handleToggleExpand = () => {
+    const nextState = !isExpanded;
+    setIsExpanded(nextState);
+    onExpand?.(nextState);
+
+    // Animate the button opacity and slight slide
+    Animated.timing(fadeAnim, {
+      toValue: nextState ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
 
   const handleConfirmCancel = useCallback(async () => {
     if (!isMounted.current || isCancelling) return;
@@ -78,18 +99,73 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
         },
         body: JSON.stringify({
           userPhone: formattedPhone,
-          reason: cancelReason || "No reason provided.",
+          reason:
+            cancelReason ||
+            (isExpanded
+              ? "Passenger requested immediate stop (Drop me here)"
+              : "No reason provided."),
         }),
       });
 
       onCancel();
-      if (isMounted.current) setShowCancelModal(false);
+      if (isMounted.current) {
+        setShowCancelModal(false);
+        setIsExpanded(false); // Reset expansion on success
+      }
     } catch (error) {
       console.error("❌ Cancel failed:", error);
     } finally {
       if (isMounted.current) setIsCancelling(false);
     }
-  }, [isCancelling, onCancel, cancelReason]);
+  }, [isCancelling, onCancel, cancelReason, isExpanded]);
+
+  const handleDropMeHere = useCallback(async () => {
+    if (!isMounted.current || isCancelling) return;
+
+    const rId = currentRide?.rideId || rideData?.activeTrip?.rideId;
+    if (!rId) {
+      Alert.alert("Error", "Could not find an active trip ID.");
+      return;
+    }
+
+    setIsCancelling(true);
+    try {
+      const userInfo = await getUserInfo();
+      const formattedPhone = userInfo?.phone?.replace("+", "") || "";
+
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/rides/passenger_ends_ride`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-device-id":
+              userInfo?.currentDeviceId || userInfo?.deviceId || "",
+          },
+          body: JSON.stringify({
+            userPhone: formattedPhone,
+            rideId: rId,
+            completedBy: "passenger",
+            reason: "Drop me here (Immediate stop requested)",
+          }),
+        },
+      );
+
+      const data = await response.json();
+      if (data.success) {
+        setShowDropModal(false); // Close modal on success
+        onCancel();
+        if (isMounted.current) setIsExpanded(false);
+      } else {
+        Alert.alert("Request Failed", "The server could not end the trip.");
+      }
+    } catch (error) {
+      console.error("❌ Drop me here failed:", error);
+      Alert.alert("Connection Error", "Unable to reach the server.");
+    } finally {
+      if (isMounted.current) setIsCancelling(false);
+    }
+  }, [isCancelling, onCancel, currentRide, rideData]);
 
   const handleCloseRemoteModal = () => {
     setRemoteCancelData(null);
@@ -108,29 +184,23 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
   return (
     <View style={styles.container}>
       <View style={styles.topSection}>
-        {/* ✅ Header row containing Badge and Safety Button */}
         {isOn_trip && (
           <View style={styles.headerRow}>
             <View style={styles.ongoingBadge}>
               <View style={styles.pulseDot} />
               <Text style={styles.ongoingText}>Trip in Progress</Text>
             </View>
-
-            <IRButton
-              title="Safety Toolkit"
-              variant="outline"
-              size="sm"
-              fullWidth={false}
-              onPress={() => {
-                /* your safety logic */
-              }}
-              leftIcon={
-                <Ionicons name="shield-checkmark" size={16} color="#007AFF" />
-              }
-              style={styles.safetyButton}
-              textStyle={styles.safetyButtonText}
-              borderColor="#E2E8F0"
-            />
+            <TouchableOpacity
+              style={styles.expandToggle}
+              onPress={handleToggleExpand}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={isExpanded ? "chevron-down" : "chevron-up"}
+                size={24}
+                color="#475569"
+              />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -185,16 +255,60 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
         </View>
       </View>
 
-      <View>
-        {!isOn_trip && (
+      <View style={styles.footer}>
+        {!isOn_trip ? (
           <CancelButton
             label="Cancel ride"
             onPress={() => setShowCancelModal(true)}
           />
+        ) : (
+          <View style={{ gap: 10, paddingBottom: 20 }}>
+            <IRButton
+              title="Safety Toolkit"
+              variant="outline"
+              onPress={() => {}}
+              leftIcon={
+                <Ionicons name="shield-checkmark" size={20} color="#007AFF" />
+              }
+              style={styles.safetyButton}
+              textStyle={styles.safetyButtonText}
+              borderColor="#E2E8F0"
+            />
+
+            {/* Premium Fade & Slide Animation */}
+            {isExpanded && (
+              <Animated.View
+                style={{
+                  opacity: fadeAnim,
+                  transform: [
+                    {
+                      translateY: fadeAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [10, 0], // Slides up 10px while fading in
+                      }),
+                    },
+                  ],
+                }}
+              >
+                <IRButton
+                  title="Drop me here"
+                  variant="outline"
+                  onPress={() => setShowDropModal(true)}
+                  loading={isCancelling}
+                  borderColor="#fee2e2"
+                  style={{
+                    backgroundColor: "#fef2f2",
+                    height: 56,
+                    borderRadius: 16,
+                  }}
+                  textStyle={{ color: "#ef4444", fontWeight: "700" }}
+                />
+              </Animated.View>
+            )}
+          </View>
         )}
       </View>
 
-      {/* Modals */}
       <Modal visible={showCancelModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -267,6 +381,16 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel }) => {
           </View>
         </View>
       </Modal>
+      <ActionConfirmationModal
+        visible={showDropModal}
+        title="End trip early?"
+        subtitle="Are you sure you want the driver to stop here? You will be charged for the distance covered."
+        confirmText="Yes, Drop Me Here"
+        confirmVariant="danger" // Using danger variant for visual emphasis
+        loading={isCancelling}
+        onConfirm={handleDropMeHere}
+        onClose={() => setShowDropModal(false)}
+      />
     </View>
   );
 };
@@ -279,16 +403,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   topSection: { flex: 1 },
-  // ✅ New Header Row Style
   headerRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 12,
   },
   center: { justifyContent: "center", alignItems: "center" },
   loadingText: {
-    marginTop: 12,
+    marginTop: 10,
     color: "#94a3b8",
     fontSize: 14,
     fontWeight: "500",
@@ -334,16 +457,13 @@ const styles = StyleSheet.create({
   },
   safetyButton: {
     backgroundColor: "#FFFFFF",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: 16,
+    //marginBottom: 20,
     borderWidth: 1,
-    width: "auto", // Ensure it doesn't take full width
+    height: 56,
+    justifyContent: "center",
   },
-  safetyButtonText: {
-    fontSize: 12,
-    color: "#475569",
-  },
+  safetyButtonText: { fontSize: 16, fontWeight: "700", color: "#475569" },
   carModel: {
     fontSize: 15,
     fontWeight: "600",
@@ -372,6 +492,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   priceText: { fontSize: 18, fontWeight: "800", color: "#10B981" },
+  footer: { marginTop: "auto" },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.7)",
@@ -398,11 +519,7 @@ const styles = StyleSheet.create({
     color: "#1e293b",
     marginBottom: 4,
   },
-  modalSubtitle: {
-    fontSize: 15,
-    color: "#64748b",
-    marginBottom: 20,
-  },
+  modalSubtitle: { fontSize: 15, color: "#64748b", marginBottom: 20 },
   reasonContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -417,18 +534,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "transparent",
   },
-  reasonChipActive: {
-    backgroundColor: "#ecfdf5",
-    borderColor: "#10B981",
-  },
-  reasonChipText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#475569",
-  },
-  reasonChipTextActive: {
-    color: "#10B981",
-  },
+  reasonChipActive: { backgroundColor: "#ecfdf5", borderColor: "#10B981" },
+  reasonChipText: { fontSize: 13, fontWeight: "600", color: "#475569" },
+  reasonChipTextActive: { color: "#10B981" },
   reasonInput: {
     width: "100%",
     backgroundColor: "#f8fafc",
@@ -442,10 +550,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
     marginBottom: 24,
   },
-  modalActions: {
-    width: "100%",
-    gap: 12,
-  },
+  modalActions: { width: "100%", gap: 12 },
   remoteModalPadding: {
     alignItems: "center",
     borderTopLeftRadius: 40,
@@ -497,6 +602,7 @@ const styles = StyleSheet.create({
     color: "#10B981",
     textTransform: "uppercase",
   },
+  expandToggle: { padding: 4 },
 });
 
 export default TripTab;

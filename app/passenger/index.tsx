@@ -2,6 +2,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   AppState,
   AppStateStatus,
@@ -43,8 +44,13 @@ const PassengerScreen: React.FC = () => {
 
   // --- Socket & Context ---
   const socket = getPassengerSocket();
-  const { rideData, updateRideData, currentRide, setCurrentRide } =
-    useRideBooking();
+  const {
+    rideData,
+    updateRideData,
+    currentRide,
+    setCurrentRide,
+    fetchRecentDestinations,
+  } = useRideBooking();
 
   // --- State ---
   const [trayHeight, setTrayHeight] = useState(0);
@@ -52,6 +58,7 @@ const PassengerScreen: React.FC = () => {
   const [offers, setOffers] = useState<any[]>([]);
   const [ratingVisible, setRatingVisible] = useState(false);
   const [ratingSnapshot, setRatingSnapshot] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false); // ✅ Added loading state
   const [activeInputField, setActiveInputField] = useState<
     "pickup" | "destination"
   >("pickup");
@@ -77,17 +84,45 @@ const PassengerScreen: React.FC = () => {
 
   const handleRatingSubmit = useCallback(
     async (stars: number, comment: string) => {
-      // ✅ Uses the snapshot so data isn't lost when context resets
       const rideId = ratingSnapshot?.rideId;
       const driverPhone = ratingSnapshot?.driverPhone;
 
-      if (rideId && driverPhone) {
-        await submitUserRating("driver", driverPhone, rideId, stars, comment);
+      if (!rideId || !driverPhone) {
+        Alert.alert("Error", "Could not find ride details. Please try again.");
+        return;
       }
 
-      setRatingVisible(false);
-      setRatingSnapshot(null);
-      setCurrentRide(null); // Fully clear current ride now
+      setIsSubmitting(true);
+
+      try {
+        const success = await submitUserRating(
+          "driver",
+          driverPhone,
+          rideId,
+          stars,
+          comment,
+        );
+
+        if (!success) {
+          // ✅ SAFEGUARD: Alert user and DO NOT close modal
+          Alert.alert(
+            "Rating Failed",
+            "We couldn't submit your rating. Please check your connection and try again.",
+            [{ text: "OK" }],
+          );
+          return;
+        }
+
+        // ✅ Cleanup ONLY happens on success
+        setRatingVisible(false);
+        setRatingSnapshot(null);
+        setCurrentRide(null);
+      } catch (error) {
+        console.error("Critical rating error:", error);
+        Alert.alert("Error", "An unexpected error occurred.");
+      } finally {
+        setIsSubmitting(false);
+      }
     },
     [ratingSnapshot, setCurrentRide],
   );
@@ -161,6 +196,43 @@ const PassengerScreen: React.FC = () => {
     setSubmissionStates({});
   }, []);
 
+  const handleDriverNoLongerAvailable = (data: { driverPhone: string }) => {
+    console.log(
+      `Driver ${data.driverPhone} is no longer available (matched elsewhere).`,
+    );
+    setOffers((prev) =>
+      prev.filter((o) => o.driver.phone !== data.driverPhone),
+    );
+    setSubmissionStates((prev) => {
+      const newState = { ...prev };
+      delete newState[data.driverPhone];
+      return newState;
+    });
+  };
+
+  const handleDriverBusy = useCallback(
+    (data: any) => {
+      setModalConfig({
+        visible: true,
+        type: "cancellation", // Using cancellation type for consistent UI feedback
+        title: "Driver Unavailable",
+        message:
+          data.reason === "already_matched"
+            ? "This driver just accepted another trip."
+            : "The driver is currently busy. Please try another offer.",
+      });
+
+      // Clean up that specific offer from the list
+      if (data.driverPhone) {
+        setOffers((prev) =>
+          prev.filter((o) => o.driver.phone !== data.driverPhone),
+        );
+      }
+      updateRideData({ status: "idle" });
+    },
+    [updateRideData],
+  );
+
   const handleCloseModal = () => {
     const wasCancellation = modalConfig.type === "cancellation";
     setModalConfig((prev) => ({ ...prev, visible: false }));
@@ -175,6 +247,7 @@ const PassengerScreen: React.FC = () => {
   // 2. LIFECYCLE: APP STATE
   // -------------------------------------------------
   useEffect(() => {
+    fetchRecentDestinations();
     connectPassenger();
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (
@@ -205,8 +278,8 @@ const PassengerScreen: React.FC = () => {
   useEffect(() => {
     if (!socket) return;
 
+    // 1. Define internal handlers
     const handleTripCompleted = (data: any) => {
-      // ✅ Capture context data into snapshot BEFORE clearing context
       if (currentRide) {
         setRatingSnapshot({
           rideId: currentRide.rideId,
@@ -216,11 +289,11 @@ const PassengerScreen: React.FC = () => {
         });
       }
 
+      // Show rating modal
       setRatingVisible(true);
-
-      // Trigger UI reset to input screen
       updateRideData({ status: "idle", destination: null });
       trayRef.current?.switchToInput();
+      fetchRecentDestinations();
     };
 
     const handleDriverResponse = (newOffer: any) => {
@@ -239,7 +312,6 @@ const PassengerScreen: React.FC = () => {
       console.log("🚖 Ride Matched:", data);
       setOffers([]);
       setSubmissionStates({});
-
       const { tripDetails, rideId } = data;
 
       const matchedRide: RideResponse = {
@@ -258,16 +330,14 @@ const PassengerScreen: React.FC = () => {
         vehicleType: tripDetails.ride.vehicleType,
         offer: tripDetails.offer,
         offerType: tripDetails.offerType || "fair",
-        // FIX: Accessing from tripDetails.ride as seen in logs
         paymentMethod: tripDetails.ride.paymentMethod || "Cash",
         timestamp: new Date().toISOString(),
-
         driver: {
           name: tripDetails.driver.name,
           phone: tripDetails.driver.phone,
           rating: parseFloat(tripDetails.driver.rating || "5.0"),
-          profilePic: tripDetails.driver.profilePic, // Ensure backend uses 'profilePic' not 'profile_pic'
-          totalTrips: tripDetails.driver.totalTrips || 0, // Matches your DB fetch
+          profilePic: tripDetails.driver.profilePic,
+          totalTrips: tripDetails.driver.totalTrips || 0,
           vehicle: {
             model: tripDetails.vehicle.model,
             color: tripDetails.vehicle.color,
@@ -278,10 +348,9 @@ const PassengerScreen: React.FC = () => {
       };
 
       setCurrentRide(matchedRide);
-
       updateRideData({
         status: "matched",
-        activeTrip: tripDetails, // This provides the raw data to TripTab's normalization
+        activeTrip: tripDetails,
         offer: tripDetails.offer,
       });
     };
@@ -290,22 +359,26 @@ const PassengerScreen: React.FC = () => {
       updateRideData({ status: "on_trip" });
       setModalConfig({
         visible: true,
-        type: "arrival",
+        type: "started",
         title: "Trip Started",
         message: "You are now on your way!",
       });
       setTimeout(() => {
         setModalConfig((prev) => ({ ...prev, visible: false }));
-      }, 2000);
+      }, 12000);
     };
 
+    // 2. Attach listeners
     socket.on("ride:driver_response", handleDriverResponse);
     socket.on("ride:matched", handleMatched);
     socket.on("ride:driver_arrived", handleDriverArrived);
     socket.on("ride_cancelled", handleRequestCancelled);
     socket.on("ride:completed", handleTripCompleted);
     socket.on("ride:trip_started", handleTripStarted);
+    socket.on("driver:no_longer_available", handleDriverNoLongerAvailable);
+    socket.on("ride:match_failed", handleDriverBusy);
 
+    // 3. Cleanup listeners
     return () => {
       socket.off("ride:driver_response", handleDriverResponse);
       socket.off("ride:matched", handleMatched);
@@ -313,16 +386,19 @@ const PassengerScreen: React.FC = () => {
       socket.off("ride_cancelled", handleRequestCancelled);
       socket.off("ride:completed", handleTripCompleted);
       socket.off("ride:trip_started", handleTripStarted);
+      socket.off("driver:no_longer_available", handleDriverNoLongerAvailable);
+      socket.off("ride:match_failed", handleDriverBusy);
     };
   }, [
     socket,
-    currentRide, // Needed so snapshot captures latest data
+    currentRide,
     updateRideData,
     setCurrentRide,
     handleRequestCancelled,
     handleDriverArrived,
+    handleDriverBusy,
+    fetchRecentDestinations,
   ]);
-
   // -------------------------------------------------
   // 4. UI ANIMATIONS & TRAY LOGIC
   // -------------------------------------------------

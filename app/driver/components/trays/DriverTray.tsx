@@ -1,4 +1,5 @@
 // app/driver/components/trays/DriverTray.tsx
+
 import { LinearGradient } from "expo-linear-gradient";
 import React, {
   forwardRef,
@@ -9,23 +10,29 @@ import React, {
   useState,
 } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   LayoutAnimation,
   Platform,
   StyleSheet,
+  TouchableWithoutFeedback,
   UIManager,
   View,
 } from "react-native";
-import { createStyles } from "../../../../utils/styles";
 
 import { useRideBooking } from "../../../../app/context/RideBookingContext";
-import RatingModal from "../../../../components/RatingModal"; // Adjust path
+import RatingModal from "../../../../components/RatingModal";
 import { submitUserRating } from "../../../../utils/ratingSubmittion";
+import { createStyles } from "../../../../utils/styles";
+
 import {
   getDriverSocket,
   onMatchedRide,
+  onRideCompletedByPassenger,
 } from "../../socketConnectionUtility/driverSocketService";
+
+import TripStatusModal from "../../../../components/TripStatusModal";
 import OnlineTab from "./tabs/OnlineTab";
 import TripTab from "./tabs/TripTab";
 import WelcomeTab from "./tabs/WelcomeTab";
@@ -42,7 +49,8 @@ const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
 
 const HEIGHT_WELCOME = windowHeight * 0.35;
 const HEIGHT_ONLINE = windowHeight * 0.3;
-const HEIGHT_ACTIVE = windowHeight * 0.55;
+const HEIGHT_ACTIVE_COMPACT = windowHeight * 0.2;
+const HEIGHT_ACTIVE_EXPANDED = windowHeight * 0.38;
 
 if (
   Platform.OS === "android" &&
@@ -54,12 +62,22 @@ if (
 const DriverTray = forwardRef<any, DriverTrayProps>(
   ({ onStatusChange, onHeightChange, onMatch }, ref) => {
     const [status, setStatus] = useState<DriverStatus>("welcome");
-    const { rideData, updateRideData } = useRideBooking();
-    const [ratingVisible, setRatingVisible] = useState(false);
+    const [isTripExpanded, setIsTripExpanded] = useState(false);
 
+    const { rideData, updateRideData } = useRideBooking();
+
+    const [ratingVisible, setRatingVisible] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false); // ✅ Added loading state
     const heightAnim = useRef(new Animated.Value(0)).current;
     const translateY = useRef(new Animated.Value(windowHeight)).current;
     const transitionAnim = useRef(new Animated.Value(0)).current;
+    const [statusModal, setStatusModal] = useState({
+      visible: false,
+      message: "",
+      title: "",
+    });
+
+    /* ---------------- Tray Controls ---------------- */
 
     const openTray = useCallback(() => {
       Animated.spring(translateY, {
@@ -78,15 +96,23 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
       }).start();
     }, [translateY]);
 
-    const handleTransition = useCallback(
-      (target: DriverStatus) => {
-        if (target === status) return;
+    /* ---------------- State Transitions ---------------- */
 
+    const handleTransition = useCallback(
+      (target: DriverStatus, expanded = false) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+
         setStatus(target);
+        setIsTripExpanded(expanded);
+
         onStatusChange?.(target);
 
-        const stateMap = { welcome: 0, online: 1, active: 2 };
+        const stateMap = {
+          welcome: 0,
+          online: 1,
+          active: 2,
+        };
+
         const targetValue = stateMap[target];
 
         Animated.spring(transitionAnim, {
@@ -96,84 +122,122 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
           stiffness: 100,
         }).start();
 
+        const animTargetHeight =
+          target === "active" ? (expanded ? 3 : 2) : targetValue;
+
         Animated.spring(heightAnim, {
-          toValue: targetValue,
+          toValue: animTargetHeight,
           useNativeDriver: false,
           speed: 12,
           bounciness: 4,
         }).start();
       },
-      [status, onStatusChange, transitionAnim, heightAnim],
+      [onStatusChange, transitionAnim, heightAnim],
     );
+
+    /* ---------------- Height Listener ---------------- */
 
     useEffect(() => {
       const listenerId = heightAnim.addListener(({ value }) => {
         let actualHeight = HEIGHT_WELCOME;
+
         if (value <= 1) {
           actualHeight =
             HEIGHT_WELCOME + value * (HEIGHT_ONLINE - HEIGHT_WELCOME);
+        } else if (value <= 2) {
+          actualHeight =
+            HEIGHT_ONLINE +
+            (value - 1) * (HEIGHT_ACTIVE_COMPACT - HEIGHT_ONLINE);
         } else {
           actualHeight =
-            HEIGHT_ONLINE + (value - 1) * (HEIGHT_ACTIVE - HEIGHT_ONLINE);
+            HEIGHT_ACTIVE_COMPACT +
+            (value - 2) * (HEIGHT_ACTIVE_EXPANDED - HEIGHT_ACTIVE_COMPACT);
         }
+
         onHeightChange?.(actualHeight);
       });
 
-      onHeightChange?.(HEIGHT_WELCOME);
       return () => heightAnim.removeListener(listenerId);
     }, [heightAnim, onHeightChange]);
+
+    /* ---------------- External Action Handlers ---------------- */
+
+    const handleTripEndedByPassenger = useCallback(
+      (data: { message: string }) => {
+        // 1. Move UI back to online/idle state
+        // We keep activeTrip data so the RatingModal can access passenger info
+        updateRideData({ status: "idle" });
+        handleTransition("online");
+
+        // 2. Show the "Completion" Modal
+        setStatusModal({
+          visible: true,
+          title: "Trip Finished",
+          message:
+            data.message ||
+            "The passenger ended the trip. Please rate your experience.",
+        });
+      },
+      [updateRideData, handleTransition],
+    );
+
+    /* ---------------- Socket Listeners ---------------- */
+
+    useEffect(() => {
+      // Listen for Completion (Passenger clicked "Drop me here")
+      const unsubscribeComplete = onRideCompletedByPassenger((data) => {
+        handleTripEndedByPassenger(data);
+      });
+
+      return () => {
+        unsubscribeComplete();
+      };
+    }, [handleTripEndedByPassenger]);
 
     useEffect(() => {
       openTray();
 
-      const unsubscribeMatched = onMatchedRide((matchedData: any) => {
-        console.log("📥 Driver matched payload:", matchedData);
-
-        // 1. Extract the ID from the root and the details from the nested object
+      const unsubscribe = onMatchedRide((matchedData: any) => {
         const rideId = matchedData.rideId;
         const details = matchedData.tripDetails;
 
-        // 2. Save them together in the activeTrip state
         updateRideData({
           requests: [],
-          activeTrip: {
-            ...details, // This brings in passenger, ride, vehicle, etc.
-            rideId: rideId, // This ensures the ID is attached for socket calls
-          },
+          activeTrip: { ...details, rideId },
           status: "matched",
         });
 
         onMatch?.();
-        handleTransition("active");
+
+        handleTransition("active", true);
       });
 
-      return () => unsubscribeMatched();
+      return () => unsubscribe();
     }, [openTray, handleTransition, updateRideData, onMatch]);
+
+    /* ---------------- Ref API ---------------- */
 
     useImperativeHandle(ref, () => ({
       openTray,
       closeTray,
       goOnline: () => handleTransition("online"),
-      startTrip: () => handleTransition("active"),
+      startTrip: () => handleTransition("active", false),
       goOffline: () => handleTransition("welcome"),
     }));
 
+    /* ---------------- Trip Actions ---------------- */
+
     const handleArrived = () => {
       const socket = getDriverSocket();
-      // Now that we've flattened the ID into activeTrip, we grab it here:
       const rId = rideData.activeTrip?.rideId;
 
-      if (!rId) {
-        console.error("❌ Cannot emit arrival: rideId is missing from state");
-        return;
-      }
+      if (!rId) return;
 
       socket?.emit("ride:driver_arrived", {
         rideId: rId,
         driverPhone: rideData.activeTrip?.driver?.phone,
       });
 
-      console.log("🚗 Driver arrived for ride:", rId);
       updateRideData({ status: "arrived" });
     };
 
@@ -181,19 +245,23 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
       const socket = getDriverSocket();
       const rId = rideData.activeTrip?.rideId;
 
-      if (rId) {
-        socket?.emit("ride:start_trip", { rideId: rId });
-        updateRideData({ status: "on_trip" });
-      }
+      if (!rId) return;
+
+      socket?.emit("ride:start_trip", { rideId: rId });
+
+      updateRideData({ status: "on_trip" });
+
+      handleTransition("active", false);
     };
 
     const handleEndTrip = async () => {
       const rId = rideData.activeTrip?.rideId;
+
       if (!rId) return;
 
       try {
         const response = await fetch(
-          `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/rides/end_ride`,
+          `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/rides/driver_ends_ride`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -204,9 +272,10 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         const result = await response.json();
 
         if (result.success) {
-          // ✅ Change status to "idle" and UI to "online", but KEEP activeTrip data
           updateRideData({ status: "idle" });
+
           handleTransition("online");
+
           setRatingVisible(true);
         }
       } catch (error) {
@@ -218,22 +287,46 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
       const rideId = rideData.activeTrip?.rideId;
       const passengerPhone = rideData.activeTrip?.passenger?.phone;
 
-      if (rideId && passengerPhone) {
-        await submitUserRating(
+      if (!rideId || !passengerPhone) {
+        Alert.alert("Error", "Missing trip information. Please try again.");
+        return;
+      }
+
+      setIsSubmitting(true); // ✅ Implementation of loading state
+
+      try {
+        const success = await submitUserRating(
           "passenger",
           passengerPhone,
           rideId,
           stars,
           comment,
         );
-      }
 
-      // ✅ FINALLY set activeTrip to null here
-      updateRideData({ activeTrip: null });
-      setRatingVisible(false);
+        if (!success) {
+          // ✅ SAFEGUARD: Alert user and STOP execution
+          Alert.alert(
+            "Rating Failed",
+            "We couldn't submit your rating for the passenger. Please try again.",
+            [{ text: "OK" }],
+          );
+          // We don't clear the activeTrip or close modal, allowing a retry
+          return;
+        }
+
+        // ✅ Success: Cleanup and reset
+        updateRideData({ activeTrip: null });
+        setRatingVisible(false);
+      } catch (error) {
+        console.error("Critical rating error (driver side):", error);
+        Alert.alert("Error", "An unexpected error occurred while rating.");
+      } finally {
+        setIsSubmitting(false);
+      }
     };
 
-    // Interpolations
+    /* ---------------- Animations ---------------- */
+
     const welcomeTranslateX = transitionAnim.interpolate({
       inputRange: [0, 1, 2],
       outputRange: [0, -windowWidth, -windowWidth * 2],
@@ -250,65 +343,98 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
     });
 
     const currentTrayHeight = heightAnim.interpolate({
-      inputRange: [0, 1, 2],
-      outputRange: [HEIGHT_WELCOME, HEIGHT_ONLINE, HEIGHT_ACTIVE],
+      inputRange: [0, 1, 2, 3],
+      outputRange: [
+        HEIGHT_WELCOME,
+        HEIGHT_ONLINE,
+        HEIGHT_ACTIVE_COMPACT,
+        HEIGHT_ACTIVE_EXPANDED,
+      ],
     });
 
+    /* ---------------- Render ---------------- */
+
     return (
-      <Animated.View
-        style={[styles.container, { transform: [{ translateY }] }]}
-      >
-        <Animated.View style={{ height: currentTrayHeight, width: "100%" }}>
-          <LinearGradient
-            colors={["#FFFFFF", "#F8FAFC"]}
-            style={styles.background}
-          />
-          <View style={styles.contentContainer}>
-            <View style={styles.tabsWrapper}>
-              <Animated.View
-                style={[
-                  StyleSheet.absoluteFill,
-                  { transform: [{ translateX: welcomeTranslateX }] },
-                ]}
-              >
-                <WelcomeTab onGoOnline={() => handleTransition("online")} />
-              </Animated.View>
+      <>
+        {isTripExpanded && (
+          <TouchableWithoutFeedback
+            onPress={() => handleTransition("active", false)}
+          >
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+        )}
 
-              <Animated.View
-                style={[
-                  StyleSheet.absoluteFill,
-                  { transform: [{ translateX: onlineTranslateX }] },
-                ]}
-              >
-                <OnlineTab onGoOffline={() => handleTransition("welcome")} />
-              </Animated.View>
+        <Animated.View
+          style={[styles.container, { transform: [{ translateY }] }]}
+        >
+          <Animated.View style={{ height: currentTrayHeight, width: "100%" }}>
+            <LinearGradient
+              colors={["#FFFFFF", "#F8FAFC"]}
+              style={styles.background}
+            />
 
-              <Animated.View
-                style={[
-                  StyleSheet.absoluteFill,
-                  { transform: [{ translateX: activeTranslateX }] },
-                ]}
-              >
-                <TripTab
-                  onArrived={handleArrived}
-                  onStartTrip={handleStartTrip}
-                  onCancel={() => handleTransition("online")}
-                  onEndTrip={handleEndTrip}
+            <View style={styles.contentContainer}>
+              <View style={styles.tabsWrapper}>
+                {/* Welcome */}
+                <Animated.View
+                  style={[
+                    StyleSheet.absoluteFill,
+                    { transform: [{ translateX: welcomeTranslateX }] },
+                  ]}
+                >
+                  <WelcomeTab onGoOnline={() => handleTransition("online")} />
+                </Animated.View>
+
+                {/* Online */}
+                <Animated.View
+                  style={[
+                    StyleSheet.absoluteFill,
+                    { transform: [{ translateX: onlineTranslateX }] },
+                  ]}
+                >
+                  <OnlineTab onGoOffline={() => handleTransition("welcome")} />
+                </Animated.View>
+
+                {/* Active */}
+                <Animated.View
+                  style={[
+                    StyleSheet.absoluteFill,
+                    { transform: [{ translateX: activeTranslateX }] },
+                  ]}
+                >
+                  <TripTab
+                    onArrived={handleArrived}
+                    onStartTrip={handleStartTrip}
+                    onCancel={() => handleTransition("online")}
+                    onEndTrip={handleEndTrip}
+                    isExpanded={isTripExpanded}
+                    onToggleExpand={(val) => handleTransition("active", val)}
+                  />
+                </Animated.View>
+                <TripStatusModal
+                  visible={statusModal.visible}
+                  type="completion"
+                  title={statusModal.title}
+                  message={statusModal.message}
+                  onClose={() => {
+                    setStatusModal((prev) => ({ ...prev, visible: false }));
+                    // Open rating modal after they acknowledge the trip status
+                    setRatingVisible(true);
+                  }}
                 />
-              </Animated.View>
-              <RatingModal
-                visible={ratingVisible}
-                title="Rate Your Passenger"
-                userName={rideData.activeTrip?.passenger?.name}
-                userImage={rideData.activeTrip?.passenger?.profilePic}
-                subtitle="Your feedback helps keep the community safe."
-                onSelectRating={handleRatingSubmit}
-                // Remove onClose
-              />
+                <RatingModal
+                  visible={ratingVisible}
+                  title="Rate Your Passenger"
+                  userName={rideData.activeTrip?.passenger?.name}
+                  userImage={rideData.activeTrip?.passenger?.profilePic}
+                  subtitle="Your feedback helps keep the community safe."
+                  onSelectRating={handleRatingSubmit}
+                />
+              </View>
             </View>
-          </View>
+          </Animated.View>
         </Animated.View>
-      </Animated.View>
+      </>
     );
   },
 );
@@ -330,9 +456,18 @@ const styles = createStyles({
     elevation: 24,
     overflow: "hidden",
   },
-  background: { ...StyleSheet.absoluteFillObject },
-  contentContainer: { flex: 1 },
-  tabsWrapper: { flex: 1 },
+
+  background: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  contentContainer: {
+    flex: 1,
+  },
+
+  tabsWrapper: {
+    flex: 1,
+  },
 });
 
 export default DriverTray;

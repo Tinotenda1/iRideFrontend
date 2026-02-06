@@ -111,10 +111,6 @@ const stopLocationUpdates = async () => {
   }
 };
 
-// app/driver/socketConnectionUtility/driverSocketService.ts
-
-// ... imports remain the same ...
-
 export const connectDriver = async () => {
   const user = await getUserInfo();
   const phone = user?.phone;
@@ -125,18 +121,15 @@ export const connectDriver = async () => {
   shouldStayOnline = true;
   setStatus("connecting");
 
-  socket = initializeSocket(phone);
+  socket = initializeSocket(phone); // CLEANUP existing listeners to prevent memory leaks/duplicate events
 
-  // CLEANUP existing listeners to prevent memory leaks/duplicate events
   socket.off("connect");
   socket.off("user:connected");
-  socket.off("disconnect");
+  socket.off("disconnect"); // ⚡ AUTO-HANDSHAKE: This fires on initial connect AND auto-reconnects
 
-  // ⚡ AUTO-HANDSHAKE: This fires on initial connect AND auto-reconnects
   socket.on("connect", async () => {
-    console.log("🔌 Connection established, handshaking...");
+    console.log("🔌 Connection established, handshaking..."); // Get fresh location for the handshake
 
-    // Get fresh location for the handshake
     const { status: locStatus } =
       await Location.getForegroundPermissionsAsync();
     let location = null;
@@ -241,6 +234,26 @@ export const onRemoveRideRequest = (
 ) => {
   if (!socket) return () => {};
   const eventName = "ride:remove_request";
+  socket.on(eventName, callback);
+  return () => {
+    socket?.off(eventName, callback);
+  };
+};
+
+export const onRideNoLongerAvailable = (
+  callback: (data: { rideId: string }) => void,
+) => {
+  if (!socket) return () => {};
+  const eventName = "ride:no_longer_available";
+  socket.on(eventName, callback);
+  return () => {
+    socket?.off(eventName, callback);
+  };
+};
+
+export const onRideCompletedByPassenger = (callback: (data: any) => void) => {
+  if (!socket) return () => {};
+  const eventName = "ride:completed";
   socket.on(eventName, callback);
   return () => {
     socket?.off(eventName, callback);

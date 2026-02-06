@@ -20,7 +20,7 @@ import { createStyles } from "../../../../utils/styles";
 import LocationInputTab from "./LocationInputTab";
 import RideTab from "./RideTab";
 import SearchingTab from "./SearchingTab";
-import TripTab from "./TripTab"; // Import the new TripTab
+import TripTab from "./TripTab";
 
 interface TrayProps {
   onTrayStateChange?: (open: boolean) => void;
@@ -34,7 +34,9 @@ const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
 const OPEN_HEIGHT_INPUT = windowHeight * 0.5;
 const OPEN_HEIGHT_RIDE = windowHeight * 0.4;
 const OPEN_HEIGHT_SEARCHING = windowHeight * 0.3;
-const OPEN_HEIGHT_MATCHED = windowHeight * 0.25; // Adjusted slightly for Bolt style (approx 0.28 of screen)
+const OPEN_HEIGHT_MATCHED = windowHeight * 0.25;
+const OPEN_HEIGHT_ON_TRIP = windowHeight * 0.32; // ✅ Extra height for Safety Toolkit & Badge
+const OPEN_HEIGHT_ON_TRIP_EXPANDED = windowHeight * 0.4;
 const CLOSED_HEIGHT = 140;
 
 const Tray = forwardRef<any, TrayProps>(
@@ -48,11 +50,10 @@ const Tray = forwardRef<any, TrayProps>(
     },
     ref,
   ) => {
-    const { setCurrentRide } = useRideBooking();
     const { rideData, updateRideData } = useRideBooking();
-    // Add 'matched' to the tab type
+    // ✅ Added 'on_trip' to currentTab state
     const [currentTab, setCurrentTab] = useState<
-      "input" | "ride" | "searching" | "matched"
+      "input" | "ride" | "searching" | "matched" | "on_trip"
     >("input");
 
     const heightAnim = useRef(new Animated.Value(0)).current;
@@ -61,11 +62,20 @@ const Tray = forwardRef<any, TrayProps>(
     ).current;
     const transitionAnim = useRef(new Animated.Value(0)).current;
 
-    // MONITOR RIDE STATUS: Auto-transition to TripTab when matched
+    // MONITOR RIDE STATUS
     useEffect(() => {
-      if (rideData.status === "matched" && currentTab !== "matched") {
+      if (rideData.status === "on_trip" && currentTab !== "on_trip") {
+        handleTransition("on_trip");
+      } else if (
+        rideData.status === "matched" &&
+        currentTab !== "matched" &&
+        currentTab !== "on_trip"
+      ) {
         handleTransition("matched");
-      } else if (rideData.status === "idle" && currentTab === "matched") {
+      } else if (
+        rideData.status === "idle" &&
+        (currentTab === "matched" || currentTab === "on_trip")
+      ) {
         handleTransition("input");
       }
     }, [rideData.status]);
@@ -120,7 +130,6 @@ const Tray = forwardRef<any, TrayProps>(
           },
         );
         const data = await response.json();
-        console.log("DEBUG: API Suggestions:", data.suggestions); // <--- Add this
         const prices: Record<string, number> = {};
         data.suggestions.forEach((item: any) => {
           prices[item.vehicleType] = item.suggestedPrice;
@@ -138,19 +147,24 @@ const Tray = forwardRef<any, TrayProps>(
       switchToInput: () => handleTransition("input"),
       switchToSearching: () => handleTransition("searching"),
       switchToMatched: () => handleTransition("matched"),
+      toggleTripExpansion: (isExpanded: boolean) => {
+        const targetHeight = isExpanded
+          ? OPEN_HEIGHT_ON_TRIP_EXPANDED
+          : OPEN_HEIGHT_ON_TRIP;
+        onTrayHeightChange?.(targetHeight);
+        Animated.spring(heightAnim, {
+          toValue: isExpanded ? 5 : 4, // state 5 for expanded
+          useNativeDriver: false,
+        }).start();
+      },
     }));
 
-    // Inside Tray.tsx
-
-    // Inside Tray.tsx - Updated handleTransition
-
     const handleTransition = (
-      target: "input" | "ride" | "searching" | "matched",
+      target: "input" | "ride" | "searching" | "matched" | "on_trip",
     ) => {
       setCurrentTab(target);
 
       if (target === "input") {
-        // 🧹 CRITICAL: Clear everything so the next trip starts fresh
         updateRideData({
           status: "idle",
           destination: null,
@@ -158,51 +172,40 @@ const Tray = forwardRef<any, TrayProps>(
         });
       }
 
-      // ✅ NEW: Update global status based on the tab transition
       if (target === "searching") {
         updateRideData({ status: "searching" });
       } else if (target === "matched") {
         updateRideData({ status: "matched" });
-      } else if (target === "ride") {
-        // This is the "Setup/Booking" phase where the card IS alive
-        updateRideData({ status: "idle" });
+      } else if (target === "on_trip") {
+        updateRideData({ status: "on_trip" });
       }
 
-      // Ensure the height change is sent to the parent immediately
       const heights = {
         input: OPEN_HEIGHT_INPUT,
         ride: OPEN_HEIGHT_RIDE,
         searching: OPEN_HEIGHT_SEARCHING,
         matched: OPEN_HEIGHT_MATCHED,
+        on_trip: OPEN_HEIGHT_ON_TRIP,
+        OPEN_HEIGHT_ON_TRIP_EXPANDED,
       };
       onTrayHeightChange?.(heights[target]);
 
-      let transitionValue = 0;
-      let heightValue = 0;
-
-      if (target === "input") {
-        transitionValue = 0;
-        heightValue = 0;
-      } else if (target === "ride") {
-        transitionValue = 1;
-        heightValue = 1;
-      } else if (target === "searching") {
-        transitionValue = 2;
-        heightValue = 2;
-      } else if (target === "matched") {
-        transitionValue = 3;
-        heightValue = 3;
-      }
+      let stateValue = 0;
+      if (target === "input") stateValue = 0;
+      else if (target === "ride") stateValue = 1;
+      else if (target === "searching") stateValue = 2;
+      else if (target === "matched") stateValue = 3;
+      else if (target === "on_trip") stateValue = 4; // ✅ Target state 4 for height and layout
 
       Animated.parallel([
         Animated.spring(transitionAnim, {
-          toValue: transitionValue,
+          toValue: stateValue,
           useNativeDriver: true,
           tension: 40,
           friction: 8,
         }),
         Animated.spring(heightAnim, {
-          toValue: heightValue,
+          toValue: stateValue,
           useNativeDriver: false,
         }),
       ]).start();
@@ -222,8 +225,8 @@ const Tray = forwardRef<any, TrayProps>(
         ride: OPEN_HEIGHT_RIDE,
         searching: OPEN_HEIGHT_SEARCHING,
         matched: OPEN_HEIGHT_MATCHED,
+        on_trip: OPEN_HEIGHT_ON_TRIP,
       };
-      // ✅ Fix: Use currentTab here, not 'target'
       onTrayHeightChange?.(heights[currentTab]);
     };
 
@@ -234,6 +237,7 @@ const Tray = forwardRef<any, TrayProps>(
         ride: OPEN_HEIGHT_RIDE,
         searching: OPEN_HEIGHT_SEARCHING,
         matched: OPEN_HEIGHT_MATCHED,
+        on_trip: OPEN_HEIGHT_ON_TRIP,
       };
       Animated.spring(translateY, {
         toValue: heights[currentTab] - CLOSED_HEIGHT,
@@ -244,33 +248,55 @@ const Tray = forwardRef<any, TrayProps>(
       onTrayHeightChange?.(CLOSED_HEIGHT);
     };
 
+    // Interpolations updated to handle state index 4 (on_trip)
     const inputTranslateX = transitionAnim.interpolate({
-      inputRange: [0, 1, 2, 3],
-      outputRange: [0, -windowWidth, -windowWidth * 2, -windowWidth * 3],
+      inputRange: [0, 1, 2, 3, 4],
+      outputRange: [
+        0,
+        -windowWidth,
+        -windowWidth * 2,
+        -windowWidth * 3,
+        -windowWidth * 4,
+      ],
     });
 
     const rideTranslateX = transitionAnim.interpolate({
-      inputRange: [0, 1, 2, 3],
-      outputRange: [windowWidth, 0, -windowWidth, -windowWidth * 2],
+      inputRange: [0, 1, 2, 3, 4],
+      outputRange: [
+        windowWidth,
+        0,
+        -windowWidth,
+        -windowWidth * 2,
+        -windowWidth * 3,
+      ],
     });
 
     const searchingTranslateX = transitionAnim.interpolate({
-      inputRange: [0, 1, 2, 3],
-      outputRange: [windowWidth * 2, windowWidth, 0, -windowWidth],
+      inputRange: [0, 1, 2, 3, 4],
+      outputRange: [
+        windowWidth * 2,
+        windowWidth,
+        0,
+        -windowWidth,
+        -windowWidth * 2,
+      ],
     });
 
+    // ✅ Matched and OnTrip both live in the same visual slot, so they stay at 0 for both 3 and 4
     const matchedTranslateX = transitionAnim.interpolate({
-      inputRange: [0, 1, 2, 3],
-      outputRange: [windowWidth * 3, windowWidth * 2, windowWidth, 0],
+      inputRange: [0, 1, 2, 3, 4, 5],
+      outputRange: [windowWidth * 3, windowWidth * 2, windowWidth, 0, 0, 0],
     });
 
     const currentTrayHeight = heightAnim.interpolate({
-      inputRange: [0, 1, 2, 3],
+      inputRange: [0, 1, 2, 3, 4, 5],
       outputRange: [
         OPEN_HEIGHT_INPUT,
         OPEN_HEIGHT_RIDE,
         OPEN_HEIGHT_SEARCHING,
         OPEN_HEIGHT_MATCHED,
+        OPEN_HEIGHT_ON_TRIP,
+        OPEN_HEIGHT_ON_TRIP_EXPANDED, // Add this line
       ],
     });
 
@@ -321,9 +347,7 @@ const Tray = forwardRef<any, TrayProps>(
               ]}
             >
               <SearchingTab
-                isActive={
-                  currentTab === "searching" && rideData.status !== "matched"
-                }
+                isActive={currentTab === "searching"}
                 onCancel={() => {
                   updateRideData({ destination: null });
                   handleTransition("input");
@@ -333,14 +357,30 @@ const Tray = forwardRef<any, TrayProps>(
               />
             </Animated.View>
 
-            {/* New Trip Tab Transition */}
             <Animated.View
               style={[
                 StyleSheet.absoluteFill,
                 { transform: [{ translateX: matchedTranslateX }] },
               ]}
             >
-              <TripTab onCancel={() => handleTransition("input")} />
+              <TripTab
+                onCancel={() => handleTransition("input")}
+                onExpand={(isExpanded) => {
+                  // Use the ref logic to animate height
+                  const targetHeight = isExpanded
+                    ? OPEN_HEIGHT_ON_TRIP_EXPANDED
+                    : OPEN_HEIGHT_ON_TRIP;
+
+                  onTrayHeightChange?.(targetHeight);
+
+                  Animated.spring(heightAnim, {
+                    toValue: isExpanded ? 5 : 4, // 5 is expanded, 4 is standard on_trip
+                    useNativeDriver: false,
+                    tension: 40,
+                    friction: 8,
+                  }).start();
+                }}
+              />
             </Animated.View>
           </View>
         </View>

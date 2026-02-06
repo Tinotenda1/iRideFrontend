@@ -24,7 +24,7 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
   const [showNoDrivers, setShowNoDrivers] = useState(false);
 
   const isMounted = useRef(true);
-  const NO_DRIVERS_TIMEOUT = 10000;
+  const NO_DRIVERS_TIMEOUT = 60000; // 60 seconds
 
   useEffect(() => {
     isMounted.current = true;

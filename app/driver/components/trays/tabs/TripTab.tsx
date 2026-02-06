@@ -1,5 +1,6 @@
+// app/driver/components/trays/tabs/TripTab.tsx
 import { Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -10,8 +11,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 import { useRideBooking } from "../../../../../app/context/RideBookingContext";
-import { IRAvatar } from "../../../../../components/IRAvatar"; // Added Import
+import { ActionConfirmationModal } from "../../../../../components/ActionConfirmationModal";
+import { IRAvatar } from "../../../../../components/IRAvatar";
 import { IRButton } from "../../../../../components/IRButton";
 import { getUserInfo } from "../../../../../utils/storage";
 
@@ -20,6 +23,8 @@ interface DriverTripTabProps {
   onArrived: () => void;
   onStartTrip: () => void;
   onEndTrip: () => void;
+  isExpanded?: boolean;
+  onToggleExpand?: (val: boolean) => void;
 }
 
 const PREDEFINED_REASONS = [
@@ -35,10 +40,20 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
   onArrived,
   onStartTrip,
   onEndTrip,
+  isExpanded = false,
+  onToggleExpand,
 }) => {
   const { rideData } = useRideBooking();
+
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+
+  // Single state for action modals
+  const [confirmModal, setConfirmModal] = useState<{
+    visible: boolean;
+    type: "arrived" | "end" | null;
+  }>({ visible: false, type: null });
+
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
 
@@ -53,9 +68,17 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
   const offer = rideData.activeTrip?.offer;
   const status = rideData.status;
 
-  React.useEffect(() => {
-    if (status === "arrived") setIsArriving(false);
+  useEffect(() => {
+    if (status === "arrived") {
+      setIsArriving(false);
+    }
     if (status === "on_trip") {
+      setIsArriving(false);
+      setIsStarting(false);
+      setConfirmModal({ visible: false, type: null });
+    }
+    if (status === "completed" || status === "idle") {
+      setIsEnding(false);
       setIsArriving(false);
       setIsStarting(false);
     }
@@ -67,9 +90,10 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
     }
   };
 
-  const handleArrivedPress = () => {
+  const handleConfirmArrived = () => {
     setIsArriving(true);
     onArrived();
+    setConfirmModal({ visible: false, type: null });
   };
 
   const handleStartTripPress = () => {
@@ -77,21 +101,20 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
     onStartTrip();
   };
 
-  const handleEndTripPress = () => {
+  const handleConfirmEndTrip = () => {
     setIsEnding(true);
     onEndTrip();
+    setConfirmModal({ visible: false, type: null });
   };
 
   const handleConfirmCancel = useCallback(async () => {
     if (!isMounted.current || isCancelling) return;
-
     setIsCancelling(true);
     setIsActionLoading(true);
 
     try {
       const userInfo = await getUserInfo();
       const phoneToCancel = passenger?.phone?.replace(/\D/g, "") || "";
-
       const response = await fetch(
         `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/rides/cancel`,
         {
@@ -107,7 +130,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
           }),
         },
       );
-
       const data = await response.json();
       if (data.success) {
         setShowCancelModal(false);
@@ -137,7 +159,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
       <View style={styles.topSection}>
         <View style={styles.passengerRow}>
           <View style={styles.personInfo}>
-            {/* Passenger Avatar Implementation */}
             <IRAvatar
               source={
                 passenger.profilePic ? { uri: passenger.profilePic } : undefined
@@ -145,7 +166,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
               name={passenger.name}
               size={56}
             />
-
             <View>
               <Text style={styles.label}>PASSENGER</Text>
               <Text style={styles.passengerName}>{passenger.name}</Text>
@@ -155,18 +175,35 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
                   {passenger.rating || "5.0"}
                 </Text>
                 <Text style={styles.tripCount}>
-                  {" "}
                   • {passenger.totalRides || 0} trips
                 </Text>
               </View>
             </View>
           </View>
-          <TouchableOpacity
-            style={styles.callButton}
-            onPress={handleCallPassenger}
-          >
-            <Ionicons name="call" size={22} color="#fff" />
-          </TouchableOpacity>
+
+          {status === "on_trip" ? (
+            <TouchableOpacity
+              style={styles.smartToggle}
+              onPress={() => onToggleExpand?.(!isExpanded)}
+            >
+              <View style={styles.onTripBadge}>
+                <View style={styles.pulseDot} />
+                <Text style={styles.onTripText}>ON TRIP</Text>
+              </View>
+              <Ionicons
+                name={isExpanded ? "chevron-down" : "chevron-up"}
+                size={24}
+                color="#64748b"
+              />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.callButton}
+              onPress={handleCallPassenger}
+            >
+              <Ionicons name="call" size={22} color="#fff" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.divider} />
@@ -216,30 +253,27 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
             style={{ backgroundColor: "#10B981" }}
             onPress={handleStartTripPress}
             loading={isStarting}
+            disabled={isActionLoading}
           />
         ) : status === "on_trip" ? (
-          <IRButton
-            title="TRIP IN PROGRESS"
-            variant="ghost"
-            disabled
-            textStyle={{ color: "#94a3b8" }}
-          />
+          isExpanded && (
+            <IRButton
+              title="END TRIP"
+              variant="danger"
+              onPress={() => setConfirmModal({ visible: true, type: "end" })}
+              loading={isEnding}
+              disabled={isStarting}
+            />
+          )
         ) : (
           <IRButton
             title="I HAVE ARRIVED"
-            onPress={handleArrivedPress}
+            onPress={() => setConfirmModal({ visible: true, type: "arrived" })}
             loading={isArriving}
           />
         )}
 
-        {status === "on_trip" ? (
-          <IRButton
-            title="END TRIP"
-            variant="danger"
-            onPress={handleEndTripPress}
-            loading={isEnding}
-          />
-        ) : (
+        {status !== "on_trip" && (
           <IRButton
             title="Cancel Trip"
             variant="ghost"
@@ -252,15 +286,18 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
         )}
       </View>
 
-      <Modal visible={showCancelModal} transparent animationType="slide">
+      {/* CANCEL MODAL */}
+      <Modal
+        visible={showCancelModal}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalIndicator} />
             <Text style={styles.modalTitle}>Cancel trip?</Text>
-            <Text style={styles.modalSubtitle}>
-              Please select a reason for cancelling
-            </Text>
-
+            <Text style={styles.modalSubtitle}>Please select a reason</Text>
             <View style={styles.reasonContainer}>
               {PREDEFINED_REASONS.map((reason) => (
                 <TouchableOpacity
@@ -282,16 +319,13 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
                 </TouchableOpacity>
               ))}
             </View>
-
             <TextInput
               style={styles.reasonInput}
               placeholder="Other reason..."
-              placeholderTextColor="#94a3b8"
               value={cancelReason}
               onChangeText={setCancelReason}
               multiline
             />
-
             <View style={styles.modalActions}>
               <IRButton
                 title="Keep Trip"
@@ -311,10 +345,37 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
           </View>
         </View>
       </Modal>
+
+      {/* REUSABLE ACTION MODAL (Arrived & End) */}
+      <ActionConfirmationModal
+        visible={confirmModal.visible}
+        title={
+          confirmModal.type === "arrived" ? "Confirm Arrival?" : "End trip?"
+        }
+        subtitle={
+          confirmModal.type === "arrived"
+            ? "At the pickup location?"
+            : "Reached destination?"
+        }
+        confirmText={
+          confirmModal.type === "arrived"
+            ? "Yes, I've Arrived"
+            : "Complete Trip"
+        }
+        confirmColor={confirmModal.type === "arrived" ? "#007AFF" : "#10B981"}
+        loading={confirmModal.type === "arrived" ? isArriving : isEnding}
+        onConfirm={
+          confirmModal.type === "arrived"
+            ? handleConfirmArrived
+            : handleConfirmEndTrip
+        }
+        onClose={() => setConfirmModal({ visible: false, type: null })}
+      />
     </View>
   );
 };
 
+// ... styles remain the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -344,14 +405,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   passengerName: { fontSize: 20, fontWeight: "700", color: "#1e293b" },
-  // These are now handled by IRAvatar, kept in styles to prevent unmapped references if used elsewhere
-  avatarWrapper: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    overflow: "hidden",
-    backgroundColor: "#f1f5f9",
-  },
   ratingRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
   ratingText: {
     fontSize: 14,
@@ -369,7 +422,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     elevation: 3,
   },
-  divider: { height: 1, backgroundColor: "#f1f5f9", marginVertical: 5 },
+  smartToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
+  onTripBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#10B981",
+  },
+  onTripText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#10B981",
+    textTransform: "uppercase",
+  },
+  divider: { height: 1, backgroundColor: "#f1f5f9", marginVertical: 10 },
   addressSection: { paddingVertical: 2 },
   addressRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   dot: { width: 8, height: 8, borderRadius: 4 },
@@ -416,7 +491,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 32,
     padding: 24,
     paddingBottom: 40,
-    alignItems: "flex-start",
   },
   modalIndicator: {
     width: 40,
@@ -457,8 +531,6 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     borderRadius: 16,
     padding: 16,
-    fontSize: 15,
-    color: "#1e293b",
     minHeight: 80,
     textAlignVertical: "top",
     marginBottom: 24,

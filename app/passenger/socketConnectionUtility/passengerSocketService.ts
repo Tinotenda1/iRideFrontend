@@ -155,7 +155,12 @@ export const connectPassenger = async () => {
 
   socket.on("connect_error", (err) => {
     isConnecting = false;
-    console.error("❌ Socket Connect Error:", err.message);
+    // This will tell you if it's a Timeout, Connection Refused, or 404
+    console.error("❌ Socket Connect Error Details:", {
+      message: err.message,
+      description: (err as any).description,
+      context: (err as any).context,
+    });
     setStatus("error");
 
     // ✅ Recursive Retry: Try again in 5 seconds if we are supposed to be online

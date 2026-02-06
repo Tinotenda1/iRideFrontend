@@ -1,3 +1,4 @@
+// components/RatingModal.tsx
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
@@ -10,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { IRAvatar } from "./IRAvatar"; // ✅ Added Import
+import { IRAvatar } from "./IRAvatar";
 import { IRButton } from "./IRButton";
 
 interface RatingModalProps {
@@ -48,7 +49,12 @@ const RatingModal: React.FC<RatingModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent={true} // ✅ Extends backdrop behind the status bar
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.backdrop}
@@ -59,11 +65,10 @@ const RatingModal: React.FC<RatingModalProps> = ({
           {/* User Profile Section */}
           <View style={styles.profileSection}>
             <View style={styles.imageWrapper}>
-              {/* ✅ Implemented IRAvatar */}
               <IRAvatar
                 source={userImage ? { uri: userImage } : undefined}
                 name={userName}
-                size={84} // Fits within the 90px wrapper minus border
+                size={84}
               />
             </View>
             {userName && <Text style={styles.userNameText}>{userName}</Text>}

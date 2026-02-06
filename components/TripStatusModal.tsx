@@ -1,7 +1,8 @@
+// components/TripStatusModal.tsx
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Modal, StyleSheet, Text, View } from "react-native";
-import { IRButton } from "./IRButton"; // ✅ Imported IRButton
+import { IRButton } from "./IRButton";
 
 export type ModalType = "arrival" | "cancellation" | "completion" | "started";
 
@@ -20,10 +21,9 @@ const TripStatusModal: React.FC<TripStatusModalProps> = ({
   message,
   onClose,
 }) => {
-  // Config map with premium icon selection
   const config = {
     arrival: {
-      icon: "map", // Premium bolt-style choice
+      icon: "map",
       color: "#34C759",
       btnText: "I'm coming",
       btnBg: "#000",
@@ -35,7 +35,7 @@ const TripStatusModal: React.FC<TripStatusModalProps> = ({
       btnBg: "#34C759",
     },
     completion: {
-      icon: "medal", // Premium completion feel
+      icon: "medal",
       color: "#34C759",
       btnText: "Done",
       btnBg: "#000",
@@ -56,6 +56,7 @@ const TripStatusModal: React.FC<TripStatusModalProps> = ({
       transparent
       animationType="fade"
       onRequestClose={onClose}
+      statusBarTranslucent={true} // ✅ This ensures it covers the status bar area
     >
       <View style={styles.modalBackdrop}>
         <View style={styles.boltModal}>
@@ -67,7 +68,7 @@ const TripStatusModal: React.FC<TripStatusModalProps> = ({
           >
             <Ionicons
               name={current.icon as any}
-              size={42} // Adjusted for premium visual weight
+              size={42}
               color={current.color}
             />
           </View>
@@ -75,7 +76,6 @@ const TripStatusModal: React.FC<TripStatusModalProps> = ({
           <Text style={styles.modalTitle}>{title}</Text>
           <Text style={styles.modalReason}>{message}</Text>
 
-          {/* ✅ Implemented IRButton */}
           <IRButton
             title={current.btnText}
             onPress={onClose}
@@ -92,7 +92,7 @@ const TripStatusModal: React.FC<TripStatusModalProps> = ({
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.8)", // Darker backdrop for premium feel
+    backgroundColor: "rgba(15, 23, 42, 0.8)",
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
   boltModal: {
     backgroundColor: "#fff",
     width: "100%",
-    borderRadius: 32, // More rounded for modern look
+    borderRadius: 32,
     padding: 24,
     alignItems: "center",
     shadowColor: "#000",

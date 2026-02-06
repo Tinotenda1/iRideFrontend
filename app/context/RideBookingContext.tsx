@@ -1,4 +1,4 @@
-// app/context/RideBookingContext.tsx
+// RideBookingContext.tsx
 import React, { createContext, ReactNode, useContext, useState } from "react";
 import { api } from "../../utils/api";
 import { getUserInfo } from "../../utils/storage";
@@ -17,9 +17,10 @@ export interface RideBookingData {
   additionalInfo?: string;
   offer?: number;
   offerType?: "poor" | "fair" | "good";
-  vehiclePrices?: Record<string, number>;
+  vehiclePrices?: Record<string, number>; // ✅ ADD RECENT DESTINATIONS FIELD
 
-  // ✅ ADD THESE TWO FIELDS
+  recentDestinations?: Place[];
+
   status?:
     | "idle"
     | "searching"
@@ -27,7 +28,7 @@ export interface RideBookingData {
     | "arrived"
     | "on_trip"
     | "completed";
-  activeTrip?: any; // You can replace 'any' with a Trip interface later
+  activeTrip?: any;
   requests?: any[];
 }
 
@@ -44,7 +45,6 @@ export interface RideResponse {
   offerType: string;
   paymentMethod: string;
   timestamp: string;
-  // ✅ Add the driver object here
   driver?: {
     name: string;
     phone: string;
@@ -70,10 +70,12 @@ interface RideBookingContextType {
   currentRide: RideResponse | null;
 
   updateRideData: (updates: Partial<RideBookingData>) => void;
-  setCurrentRide: (ride: RideResponse | null) => void; // ✅ Add this
+  setCurrentRide: (ride: RideResponse | null) => void;
   clearRideData: () => void;
   submitRideBooking: () => Promise<RideResponse>;
   cancelRide: () => Promise<void>;
+  fetchRecentDestinations: () => Promise<void>; // <--- Add this line
+  hideRecentDestination: (rideId: string) => Promise<void>; // ✅ New Function
 }
 
 /**
@@ -96,7 +98,8 @@ const initialRideData: RideBookingData = {
   offer: 0,
   offerType: "fair",
   vehiclePrices: {},
-  status: "idle", // Initialize as idle
+  recentDestinations: [], // ✅ Initialize as empty array
+  status: "idle",
   activeTrip: null,
 };
 
@@ -113,29 +116,25 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
   const [rideData, setRideData] = useState<RideBookingData>(initialRideData);
   const [currentRide, setCurrentRide] = useState<RideResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  /**
+  const [error, setError] = useState<string | null>(null); /**
    * Update ride booking data
    */
+
   const updateRideData = (updates: Partial<RideBookingData>) => {
     setRideData((prev) => ({ ...prev, ...updates }));
-  };
-
-  /**
+  }; /**
    * Clear ride booking form + ride state
    */
+
   const clearRideData = () => {
     setRideData(initialRideData);
     setCurrentRide(null);
     setError(null);
     setLoading(false);
-  };
-
-  /**
+  }; /**
    * Submit ride request to backend
-   * Matches: controllers/ridesControllers/requestRide.js
    */
+
   const submitRideBooking = async (): Promise<RideResponse> => {
     if (loading) return Promise.reject();
 
@@ -143,7 +142,6 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
       setLoading(true);
       setError(null);
 
-      // Get logged-in user info
       const userInfo = await getUserInfo();
       if (!userInfo?.phone) {
         throw new Error("User phone not found");
@@ -168,30 +166,21 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
         offerType: rideData.offerType || "fair",
       };
 
-      console.log("Submitting ride request:", bookingData);
-
       const response = await api.post("/rides/request", bookingData);
 
       if (!response.data?.success) {
         throw new Error(response.data?.message || "Ride request failed");
       }
 
-      // ✅ Save active ride
       setCurrentRide(response.data.ride);
 
-      console.log("Ride created successfully:", response.data.ride);
-
       if (response.data.ride && response.data.ride.rideId) {
-        // ✅ TELL THE SOCKET TO JOIN THE ROOM IMMEDIATELY
-        console.log("Joining ride room:", response.data.ride.rideId);
-
         const socket = getPassengerSocket();
         socket?.emit("ride:join_room", { rideId: response.data.ride.rideId });
       }
 
       return response.data.ride;
     } catch (err: any) {
-      console.error("Ride booking failed:", err?.response?.data || err);
       setError(err?.response?.data?.message || "Failed to request a ride");
       throw err;
     } finally {
@@ -205,22 +194,72 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
       const userInfo = await getUserInfo();
       const rideId = currentRide?.rideId;
 
-      // 1. Notify backend (using your existing cancellation pattern)
       await api.post("/rides/cancel", {
         passengerPhone: userInfo?.phone,
         rideId: rideId,
       });
 
-      // 2. Local State Cleanup
       setCurrentRide(null);
       updateRideData({ status: "idle", activeTrip: null });
-
-      console.log("✅ Trip cancelled successfully");
     } catch (err) {
       console.error("❌ Failed to cancel trip:", err);
       throw err;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchRecentDestinations = async () => {
+    // 1. If we already have data, don't show the global loading spinner
+    const hasExistingData =
+      rideData.recentDestinations && rideData.recentDestinations.length > 0;
+
+    if (!hasExistingData) {
+      setLoading(true);
+    }
+
+    try {
+      const userInfo = await getUserInfo();
+      if (!userInfo?.phone) return;
+
+      const sanitizedPhone = userInfo.phone.replace(/\+/g, "").trim();
+
+      const response = await api.get(
+        `/rides/recent-destinations?phone=${sanitizedPhone}`,
+      );
+
+      if (response.data.success) {
+        // 2. Only update state if the data has actually changed
+        // This prevents unnecessary UI re-renders
+        const newDestinations = response.data.destinations;
+        if (
+          JSON.stringify(newDestinations) !==
+          JSON.stringify(rideData.recentDestinations)
+        ) {
+          updateRideData({ recentDestinations: newDestinations });
+        }
+      }
+    } catch (err) {
+      console.error("❌ Context History Fetch Error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const hideRecentDestination = async (rideId: string) => {
+    try {
+      console.log("Attempting to hide destination with rideId:", rideId); // Change .post to .patch to match your backend route definition
+
+      const response = await api.patch("/rides/hide-destination", { rideId });
+
+      if (response.data.success) {
+        const updatedDestinations = (rideData.recentDestinations || []).filter(
+          (dest) => dest.id !== rideId,
+        );
+        updateRideData({ recentDestinations: updatedDestinations });
+      }
+    } catch (err) {
+      console.error("❌ Failed to hide destination:", err);
     }
   };
 
@@ -232,10 +271,12 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
         error,
         currentRide,
         updateRideData,
-        setCurrentRide, // ✅ Add this so PassengerScreen can call it
+        setCurrentRide,
         clearRideData,
         submitRideBooking,
         cancelRide,
+        fetchRecentDestinations,
+        hideRecentDestination,
       }}
     >
       {children}
