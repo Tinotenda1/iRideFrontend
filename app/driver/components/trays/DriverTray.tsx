@@ -160,13 +160,41 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
       return () => heightAnim.removeListener(listenerId);
     }, [heightAnim, onHeightChange]);
 
+    /* ---------------- State Resumption ---------------- */
+    useEffect(() => {
+      // Check if we have an active trip but the tray is not in "active" status
+      // This handles the resumption when checkExistingState finishes
+      if (
+        (rideData.status === "matched" ||
+          rideData.status === "arrived" ||
+          rideData.status === "on_trip") &&
+        rideData.activeTrip &&
+        status !== "active"
+      ) {
+        // If it's a fresh resumption, we might want it expanded to show the passenger
+        const shouldExpand = rideData.status === "matched";
+        handleTransition("active", shouldExpand);
+      }
+    }, [rideData.status, rideData.activeTrip, status, handleTransition]);
+
+    useEffect(() => {
+      if (
+        (rideData.status === "completed" || rideData.status === "on_rating") &&
+        rideData.activeTrip &&
+        !ratingVisible
+      ) {
+        setRatingVisible(true);
+      }
+    }, [rideData.status, rideData.activeTrip, ratingVisible]);
+
     /* ---------------- External Action Handlers ---------------- */
 
     const handleTripEndedByPassenger = useCallback(
       (data: { message: string }) => {
         // 1. Move UI back to online/idle state
         // We keep activeTrip data so the RatingModal can access passenger info
-        updateRideData({ status: "idle" });
+        updateRideData({ status: "on_rating" });
+
         handleTransition("online");
 
         // 2. Show the "Completion" Modal
@@ -272,11 +300,9 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         const result = await response.json();
 
         if (result.success) {
-          updateRideData({ status: "idle" });
+          updateRideData({ status: "on_rating" });
 
           handleTransition("online");
-
-          setRatingVisible(true);
         }
       } catch (error) {
         console.error(error);
@@ -315,7 +341,10 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         }
 
         // ✅ Success: Cleanup and reset
-        updateRideData({ activeTrip: null });
+        updateRideData({
+          activeTrip: null,
+          status: "idle",
+        });
         setRatingVisible(false);
       } catch (error) {
         console.error("Critical rating error (driver side):", error);
@@ -418,8 +447,6 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
                   message={statusModal.message}
                   onClose={() => {
                     setStatusModal((prev) => ({ ...prev, visible: false }));
-                    // Open rating modal after they acknowledge the trip status
-                    setRatingVisible(true);
                   }}
                 />
                 <RatingModal

@@ -1,9 +1,19 @@
-// RideBookingContext.tsx
-import React, { createContext, ReactNode, useContext, useState } from "react";
+// app/context/RideBookingContext.tsx
+
+import React, {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useRef,
+  useState,
+} from "react";
 import { api } from "../../utils/api";
 import { getUserInfo } from "../../utils/storage";
+import { getDriverSocket } from "../driver/socketConnectionUtility/driverSocketService";
 import { Place } from "../passenger/components/map/LocationSearch";
 import { getPassengerSocket } from "../passenger/socketConnectionUtility/passengerSocketService";
+import { restoreSessionOnce } from "../services/sessionRestore";
 
 /**
  * Interface for the ride booking data (form state)
@@ -17,8 +27,7 @@ export interface RideBookingData {
   additionalInfo?: string;
   offer?: number;
   offerType?: "poor" | "fair" | "good";
-  vehiclePrices?: Record<string, number>; // ✅ ADD RECENT DESTINATIONS FIELD
-
+  vehiclePrices?: Record<string, number>;
   recentDestinations?: Place[];
 
   status?:
@@ -27,7 +36,11 @@ export interface RideBookingData {
     | "matched"
     | "arrived"
     | "on_trip"
-    | "completed";
+    | "completed"
+    | "on_rating"
+    | "active"
+    | "welcome"
+    | "online";
   activeTrip?: any;
   requests?: any[];
 }
@@ -45,6 +58,15 @@ export interface RideResponse {
   offerType: string;
   paymentMethod: string;
   timestamp: string;
+  additionalInfo?: string;
+  passenger?: {
+    id: number;
+    name: string;
+    phone: string;
+    profilePic?: string;
+    rating?: number;
+    totalTrips?: number;
+  };
   driver?: {
     name: string;
     phone: string;
@@ -68,26 +90,21 @@ interface RideBookingContextType {
   loading: boolean;
   error: string | null;
   currentRide: RideResponse | null;
-
   updateRideData: (updates: Partial<RideBookingData>) => void;
   setCurrentRide: (ride: RideResponse | null) => void;
   clearRideData: () => void;
   submitRideBooking: () => Promise<RideResponse>;
   cancelRide: () => Promise<void>;
-  fetchRecentDestinations: () => Promise<void>; // <--- Add this line
-  hideRecentDestination: (rideId: string) => Promise<void>; // ✅ New Function
+  fetchRecentDestinations: () => Promise<void>;
+  hideRecentDestination: (rideId: string) => Promise<void>;
+  reconnecting: boolean;
+  checkExistingState: () => Promise<void>;
 }
 
-/**
- * Create context
- */
 const RideBookingContext = createContext<RideBookingContextType | undefined>(
   undefined,
 );
 
-/**
- * Initial state
- */
 const initialRideData: RideBookingData = {
   passengerPhone: "",
   pickupLocation: null,
@@ -98,14 +115,11 @@ const initialRideData: RideBookingData = {
   offer: 0,
   offerType: "fair",
   vehiclePrices: {},
-  recentDestinations: [], // ✅ Initialize as empty array
+  recentDestinations: [],
   status: "idle",
   activeTrip: null,
 };
 
-/**
- * Provider
- */
 interface RideBookingProviderProps {
   children: ReactNode;
 }
@@ -116,36 +130,135 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
   const [rideData, setRideData] = useState<RideBookingData>(initialRideData);
   const [currentRide, setCurrentRide] = useState<RideResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null); /**
-   * Update ride booking data
-   */
+  const [reconnecting, setReconnecting] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const hasResumedRef = useRef(false);
 
-  const updateRideData = (updates: Partial<RideBookingData>) => {
+  /**
+   * Memoized update function
+   */
+  const updateRideData = useCallback((updates: Partial<RideBookingData>) => {
     setRideData((prev) => ({ ...prev, ...updates }));
-  }; /**
-   * Clear ride booking form + ride state
-   */
+  }, []);
 
-  const clearRideData = () => {
+  /**
+   * Memoized clear function
+   */
+  const clearRideData = useCallback(() => {
+    hasResumedRef.current = false; // reset
     setRideData(initialRideData);
     setCurrentRide(null);
     setError(null);
     setLoading(false);
+  }, []);
+
+  /**
+   * Memoized Handshake
+   */
+  /**
+   * Helper to ensure socket is ready before emitting
+   */
+  const waitForSocket = (role: "driver" | "passenger"): Promise<any> => {
+    return new Promise((resolve) => {
+      const socket =
+        role === "driver" ? getDriverSocket() : getPassengerSocket();
+      if (socket?.connected) {
+        resolve(socket);
+      } else {
+        // Wait for the connect event, but set a timeout so we don't hang forever
+        const timeout = setTimeout(() => resolve(null), 5000);
+        socket?.once("connect", () => {
+          clearTimeout(timeout);
+          resolve(socket);
+        });
+      }
+    });
   }; /**
-   * Submit ride request to backend
+   * Memoized Handshake
    */
 
-  const submitRideBooking = async (): Promise<RideResponse> => {
-    if (loading) return Promise.reject();
+  const checkExistingState = useCallback(async () => {
+    await restoreSessionOnce(async () => {
+      try {
+        setReconnecting(true);
+
+        const userInfo = await getUserInfo();
+        if (!userInfo?.phone) return;
+
+        const response = await api.post("/reconnect/resume", {
+          phone: userInfo.phone.replace(/\D/g, ""),
+        });
+
+        if (response.data.success) {
+          const { state, tripDetails, role } = response.data;
+
+          if (
+            (state === "matched" ||
+              state === "on_trip" ||
+              state === "arrived") &&
+            tripDetails
+          ) {
+            const resumedRide: RideResponse = {
+              rideId: tripDetails.rideId,
+              status: tripDetails.status,
+              pickup: tripDetails.pickup,
+              destination: tripDetails.destination,
+              vehicleType: tripDetails.vehicleType,
+              offer: tripDetails.offer,
+              offerType: "fair",
+              paymentMethod: tripDetails.paymentMethod,
+              timestamp: tripDetails.timestamp,
+              additionalInfo: tripDetails.additionalInfo,
+              passenger: tripDetails.passenger,
+              driver: tripDetails.driver
+                ? {
+                    ...tripDetails.driver,
+                    rating: tripDetails.driver?.rating || 5.0,
+                    totalTrips: tripDetails.driver?.totalTrips || 0,
+                    vehicle: tripDetails.vehicle,
+                  }
+                : undefined,
+            }; // ⚡ WAITING FOR CONNECTION BEFORE FINISHING RESUMPTION
+
+            const socket = await waitForSocket(role);
+            if (socket) {
+              socket.emit("ride:join_room", { rideId: tripDetails.rideId });
+            }
+
+            setCurrentRide(resumedRide);
+            updateRideData({
+              status: state,
+              activeTrip: tripDetails,
+            });
+          } else if (state === "on_rating") {
+            updateRideData({
+              status: "completed",
+              activeTrip: tripDetails,
+            });
+          } else {
+            clearRideData();
+          }
+        }
+      } catch (err) {
+        console.error("❌ App Resumption Error:", err);
+      } finally {
+        setReconnecting(false);
+      }
+    });
+  }, [updateRideData, clearRideData]);
+
+  /**
+   * Memoized Booking Submission
+   */
+  const submitRideBooking = useCallback(async (): Promise<RideResponse> => {
+    if (loading) return Promise.reject("Request already in progress");
 
     try {
       setLoading(true);
       setError(null);
 
       const userInfo = await getUserInfo();
-      if (!userInfo?.phone) {
-        throw new Error("User phone not found");
-      }
+      if (!userInfo?.phone) throw new Error("User phone not found");
 
       const bookingData = {
         passengerPhone: userInfo.phone,
@@ -174,9 +287,10 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
 
       setCurrentRide(response.data.ride);
 
-      if (response.data.ride && response.data.ride.rideId) {
-        const socket = getPassengerSocket();
-        socket?.emit("ride:join_room", { rideId: response.data.ride.rideId });
+      if (response.data.ride?.rideId) {
+        getPassengerSocket()?.emit("ride:join_room", {
+          rideId: response.data.ride.rideId,
+        });
       }
 
       return response.data.ride;
@@ -186,9 +300,21 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    loading,
+    rideData.pickupLocation,
+    rideData.destination,
+    rideData.vehicleType,
+    rideData.paymentMethod,
+    rideData.additionalInfo,
+    rideData.offer,
+    rideData.offerType,
+  ]);
 
-  const cancelRide = async () => {
+  /**
+   * Memoized Cancellation
+   */
+  const cancelRide = useCallback(async () => {
     try {
       setLoading(true);
       const userInfo = await getUserInfo();
@@ -207,31 +333,28 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentRide?.rideId, updateRideData]);
 
-  const fetchRecentDestinations = async () => {
-    // 1. If we already have data, don't show the global loading spinner
+  /**
+   * Memoized Fetch History
+   */
+  const fetchRecentDestinations = useCallback(async () => {
     const hasExistingData =
       rideData.recentDestinations && rideData.recentDestinations.length > 0;
-
-    if (!hasExistingData) {
-      setLoading(true);
-    }
+    if (!hasExistingData) setLoading(true);
 
     try {
       const userInfo = await getUserInfo();
       if (!userInfo?.phone) return;
 
       const sanitizedPhone = userInfo.phone.replace(/\+/g, "").trim();
-
       const response = await api.get(
         `/rides/recent-destinations?phone=${sanitizedPhone}`,
       );
 
       if (response.data.success) {
-        // 2. Only update state if the data has actually changed
-        // This prevents unnecessary UI re-renders
         const newDestinations = response.data.destinations;
+        // Check for actual changes to prevent render loops
         if (
           JSON.stringify(newDestinations) !==
           JSON.stringify(rideData.recentDestinations)
@@ -244,30 +367,35 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [rideData.recentDestinations, updateRideData]);
 
-  const hideRecentDestination = async (rideId: string) => {
-    try {
-      console.log("Attempting to hide destination with rideId:", rideId); // Change .post to .patch to match your backend route definition
+  /**
+   * Memoized Hide History
+   */
+  const hideRecentDestination = useCallback(
+    async (rideId: string) => {
+      try {
+        const response = await api.patch("/rides/hide-destination", { rideId });
 
-      const response = await api.patch("/rides/hide-destination", { rideId });
-
-      if (response.data.success) {
-        const updatedDestinations = (rideData.recentDestinations || []).filter(
-          (dest) => dest.id !== rideId,
-        );
-        updateRideData({ recentDestinations: updatedDestinations });
+        if (response.data.success) {
+          const updatedDestinations = (
+            rideData.recentDestinations || []
+          ).filter((dest) => dest.id !== rideId);
+          updateRideData({ recentDestinations: updatedDestinations });
+        }
+      } catch (err) {
+        console.error("❌ Failed to hide destination:", err);
       }
-    } catch (err) {
-      console.error("❌ Failed to hide destination:", err);
-    }
-  };
+    },
+    [rideData.recentDestinations, updateRideData],
+  );
 
   return (
     <RideBookingContext.Provider
       value={{
         rideData,
         loading,
+        reconnecting,
         error,
         currentRide,
         updateRideData,
@@ -277,6 +405,7 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
         cancelRide,
         fetchRecentDestinations,
         hideRecentDestination,
+        checkExistingState,
       }}
     >
       {children}
@@ -284,9 +413,6 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
   );
 };
 
-/**
- * Hook
- */
 export const useRideBooking = () => {
   const context = useContext(RideBookingContext);
   if (!context) {

@@ -21,6 +21,7 @@ interface RatingModalProps {
   userName?: string;
   userImage?: string;
   onSelectRating: (rating: number, comment: string) => void;
+  isLoading?: boolean;
 }
 
 const RatingModal: React.FC<RatingModalProps> = ({

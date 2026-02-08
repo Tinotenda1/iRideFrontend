@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 import TripStatusModal, { ModalType } from "../../components/TripStatusModal";
+import { useRideBooking } from "../context/RideBookingContext";
 import DriverFooterNav from "./components/DriverFooterNav";
 import DriverHeader from "./components/DriverHeader";
 import Sidebar from "./components/DriverSideBar";
@@ -25,7 +26,6 @@ import {
 } from "./socketConnectionUtility/driverSocketService";
 // app/driver/socketConnectionUtility/driverSocketService.ts
 
-
 type Screen = "home" | "wallet" | "revenue" | "notifications";
 export type SubmissionState = "idle" | "submitting" | "submitted";
 
@@ -44,6 +44,9 @@ const DriverDashboard: React.FC = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [trayHeight, setTrayHeight] = useState(0); // ✅ Unified Modal State
 
+  const { checkExistingState, reconnecting } = useRideBooking();
+  const hasCheckedState = useRef(false);
+
   const [modalConfig, setModalConfig] = useState({
     visible: false,
     type: "cancellation" as ModalType,
@@ -57,6 +60,31 @@ const DriverDashboard: React.FC = () => {
   const [submittedOffers, setSubmittedOffers] = useState<
     Record<string, number>
   >({}); // ✅ Listener for Trip Cancellation (Reusable Modal)
+
+  useEffect(() => {
+    const initDriver = async () => {
+      if (hasCheckedState.current) return; // ✅ Exit if already checked
+      setLoading(true);
+      try {
+        // 1. Load basic user info
+        const user = await getUserInfo();
+        if (!user) {
+          router.replace("/auth/get-started" as any);
+          return;
+        }
+        setDriverInfo(user);
+
+        //  check if we need to restore session state (only on initial load, not on reconnects)
+        await checkExistingState(); // now guarded globally
+      } catch (err) {
+        console.error("❌ Driver Init Error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initDriver();
+  }, []);
 
   useEffect(() => {
     if (!online) return;
@@ -111,24 +139,6 @@ const DriverDashboard: React.FC = () => {
     });
     return () => unsubscribe();
   }, [online]);
-
-  useEffect(() => {
-    const loadDriver = async () => {
-      try {
-        const user = await getUserInfo();
-        if (!user) {
-          router.replace("/auth/login" as any);
-          return;
-        }
-        setDriverInfo(user);
-      } catch (err) {
-        console.error("❌ Failed to load driver info:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadDriver();
-  }, [router]);
 
   useEffect(() => {
     return () => disconnectDriver();

@@ -1,9 +1,19 @@
+// app/_layout.tsx
 import { Stack } from "expo-router";
 import { useEffect, useRef } from "react";
-import { AppState, AppStateStatus } from "react-native";
+import {
+  ActivityIndicator,
+  AppState,
+  AppStateStatus,
+  StyleSheet,
+  View,
+} from "react-native";
 import { initializeAuthToken } from "../utils/api";
 import { getUserInfo } from "../utils/storage";
-import { RideBookingProvider } from "./context/RideBookingContext";
+import {
+  RideBookingProvider,
+  useRideBooking,
+} from "./context/RideBookingContext";
 import {
   connectDriver,
   getDriverSocketStatus,
@@ -13,28 +23,37 @@ import {
   getPassengerSocketStatus,
 } from "./passenger/socketConnectionUtility/passengerSocketService";
 
-export default function RootLayout() {
+function RootContent() {
+  const { checkExistingState, reconnecting } = useRideBooking();
   const appState = useRef(AppState.currentState);
 
   useEffect(() => {
-    // 1. Initialize API Token for Axios/Fetch
     initializeAuthToken();
 
-    // 2. Set up AppState Listener for Socket Persistence
     const subscription = AppState.addEventListener(
       "change",
       handleAppStateChange,
     );
 
-    // 3. Initial connection attempt on app launch
     const initialSync = async () => {
       const user = await getUserInfo();
-      if (user?.userType === "driver") {
+      if (!user) {
+        // If no user, we can't reconnect, so stop loading
+        // (Assuming you have a way to set reconnecting to false in context if needed)
+        return;
+      }
+
+      // 1. Establish Socket Connection
+      if (user.userType === "driver") {
         await connectDriver();
-      } else if (user?.userType === "passenger") {
+      } else if (user.userType === "passenger") {
         await connectPassenger();
       }
+
+      // 2. Fetch Source of Truth from Backend
+      await checkExistingState();
     };
+
     initialSync();
 
     return () => {
@@ -43,43 +62,50 @@ export default function RootLayout() {
   }, []);
 
   const handleAppStateChange = async (nextAppState: AppStateStatus) => {
-    // Check if the app is coming to the foreground
     if (
       appState.current.match(/inactive|background/) &&
       nextAppState === "active"
     ) {
-      console.log("📱 App foregrounded. Syncing socket connection...");
-
       const user = await getUserInfo();
       if (!user) return;
 
-      /**
-       * ⚡ HEAVY LIFTING: Reconnection Logic
-       * We only call connect if the status isn't "offline".
-       * "offline" means the user manually disconnected or hasn't logged in.
-       * "error", "reconnecting", or "connected" (but stale) will trigger a re-sync.
-       */
       if (user.userType === "driver") {
-        const status = getDriverSocketStatus();
-        if (status !== "offline") {
-          console.log("🚚 Syncing Driver Socket...");
-          await connectDriver();
-        }
+        if (getDriverSocketStatus() !== "offline") await connectDriver();
       } else if (user.userType === "passenger") {
-        const status = getPassengerSocketStatus();
-        if (status !== "offline") {
-          console.log("乘客 Syncing Passenger Socket...");
-          await connectPassenger();
-        }
+        if (getPassengerSocketStatus() !== "offline") await connectPassenger();
       }
-    }
 
+      // Re-sync state whenever app comes to foreground
+      await checkExistingState();
+    }
     appState.current = nextAppState;
   };
 
+  // ⚡ IMPLEMENTING LOADING STATE
+  if (reconnecting) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#ffffff" />
+      </View>
+    );
+  }
+
+  return <Stack screenOptions={{ headerShown: false }} />;
+}
+
+export default function RootLayout() {
   return (
     <RideBookingProvider>
-      <Stack screenOptions={{ headerShown: false }} />
+      <RootContent />
     </RideBookingProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  loaderContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#10B981",
+  },
+});
