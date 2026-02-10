@@ -5,6 +5,7 @@ import React, {
   ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -15,9 +16,6 @@ import { Place } from "../passenger/components/map/LocationSearch";
 import { getPassengerSocket } from "../passenger/socketConnectionUtility/passengerSocketService";
 import { restoreSessionOnce } from "../services/sessionRestore";
 
-/**
- * Interface for the ride booking data (form state)
- */
 export interface RideBookingData {
   passengerPhone: string;
   pickupLocation: Place | null;
@@ -29,7 +27,6 @@ export interface RideBookingData {
   offerType?: "poor" | "fair" | "good";
   vehiclePrices?: Record<string, number>;
   recentDestinations?: Place[];
-
   status?:
     | "idle"
     | "searching"
@@ -45,9 +42,6 @@ export interface RideBookingData {
   requests?: any[];
 }
 
-/**
- * Interface for backend ride response
- */
 export interface RideResponse {
   rideId: string;
   status: string;
@@ -82,9 +76,6 @@ export interface RideResponse {
   };
 }
 
-/**
- * Context interface
- */
 interface RideBookingContextType {
   rideData: RideBookingData;
   loading: boolean;
@@ -99,6 +90,7 @@ interface RideBookingContextType {
   hideRecentDestination: (rideId: string) => Promise<void>;
   reconnecting: boolean;
   checkExistingState: () => Promise<void>;
+  fetchPrices: (pickup: Place, destination: Place) => Promise<void>;
 }
 
 const RideBookingContext = createContext<RideBookingContextType | undefined>(
@@ -120,11 +112,7 @@ const initialRideData: RideBookingData = {
   activeTrip: null,
 };
 
-interface RideBookingProviderProps {
-  children: ReactNode;
-}
-
-export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
+export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [rideData, setRideData] = useState<RideBookingData>(initialRideData);
@@ -134,38 +122,28 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
   const [error, setError] = useState<string | null>(null);
   const hasResumedRef = useRef(false);
 
-  /**
-   * Memoized update function
-   */
+  useEffect(() => {
+    console.log(`[RideBookingContext] Status: ${rideData.status}`);
+  }, [rideData.status]);
+
   const updateRideData = useCallback((updates: Partial<RideBookingData>) => {
     setRideData((prev) => ({ ...prev, ...updates }));
   }, []);
 
-  /**
-   * Memoized clear function
-   */
   const clearRideData = useCallback(() => {
-    hasResumedRef.current = false; // reset
+    hasResumedRef.current = false;
     setRideData(initialRideData);
     setCurrentRide(null);
     setError(null);
     setLoading(false);
   }, []);
 
-  /**
-   * Memoized Handshake
-   */
-  /**
-   * Helper to ensure socket is ready before emitting
-   */
   const waitForSocket = (role: "driver" | "passenger"): Promise<any> => {
     return new Promise((resolve) => {
       const socket =
         role === "driver" ? getDriverSocket() : getPassengerSocket();
-      if (socket?.connected) {
-        resolve(socket);
-      } else {
-        // Wait for the connect event, but set a timeout so we don't hang forever
+      if (socket?.connected) resolve(socket);
+      else {
         const timeout = setTimeout(() => resolve(null), 5000);
         socket?.once("connect", () => {
           clearTimeout(timeout);
@@ -173,71 +151,42 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
         });
       }
     });
-  }; /**
-   * Memoized Handshake
-   */
+  };
 
   const checkExistingState = useCallback(async () => {
     await restoreSessionOnce(async () => {
       try {
         setReconnecting(true);
-
         const userInfo = await getUserInfo();
         if (!userInfo?.phone) return;
-
         const response = await api.post("/reconnect/resume", {
           phone: userInfo.phone.replace(/\D/g, ""),
         });
-
         if (response.data.success) {
           const { state, tripDetails, role } = response.data;
-
           if (
-            (state === "matched" ||
-              state === "on_trip" ||
-              state === "arrived") &&
+            ["matched", "on_trip", "arrived"].includes(state) &&
             tripDetails
           ) {
             const resumedRide: RideResponse = {
-              rideId: tripDetails.rideId,
-              status: tripDetails.status,
-              pickup: tripDetails.pickup,
-              destination: tripDetails.destination,
-              vehicleType: tripDetails.vehicleType,
-              offer: tripDetails.offer,
+              ...tripDetails,
               offerType: "fair",
-              paymentMethod: tripDetails.paymentMethod,
-              timestamp: tripDetails.timestamp,
-              additionalInfo: tripDetails.additionalInfo,
-              passenger: tripDetails.passenger,
               driver: tripDetails.driver
                 ? {
                     ...tripDetails.driver,
                     rating: tripDetails.driver?.rating || 5.0,
-                    totalTrips: tripDetails.driver?.totalTrips || 0,
                     vehicle: tripDetails.vehicle,
                   }
                 : undefined,
-            }; // ⚡ WAITING FOR CONNECTION BEFORE FINISHING RESUMPTION
-
+            };
             const socket = await waitForSocket(role);
-            if (socket) {
+            if (socket)
               socket.emit("ride:join_room", { rideId: tripDetails.rideId });
-            }
-
             setCurrentRide(resumedRide);
-            updateRideData({
-              status: state,
-              activeTrip: tripDetails,
-            });
+            updateRideData({ status: state, activeTrip: tripDetails });
           } else if (state === "on_rating") {
-            updateRideData({
-              status: "completed",
-              activeTrip: tripDetails,
-            });
-          } else {
-            clearRideData();
-          }
+            updateRideData({ status: "completed", activeTrip: tripDetails });
+          } else clearRideData();
         }
       } catch (err) {
         console.error("❌ App Resumption Error:", err);
@@ -247,19 +196,47 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
     });
   }, [updateRideData, clearRideData]);
 
-  /**
-   * Memoized Booking Submission
-   */
+  const fetchPrices = useCallback(
+    async (pickup: Place, destination: Place) => {
+      try {
+        if (!pickup.latitude || !destination.latitude) return;
+
+        const response = await api.post("/pricing/suggest", {
+          pickup: { latitude: pickup.latitude, longitude: pickup.longitude },
+          destination: {
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+          },
+        });
+
+        console.log("[Context] Price fetch response:", response.data);
+
+        if (response.data && response.data.suggestions) {
+          // ✅ Transform array [{vehicleType: '4seater', suggestedPrice: 4.5}, ...]
+          // to Record { "4seater": 4.5, "7seater": 7.5 }
+          const priceMap: Record<string, number> = {};
+          response.data.suggestions.forEach((item: any) => {
+            priceMap[item.vehicleType] = item.suggestedPrice;
+          });
+
+          console.log("[Context] Prices mapped successfully:", priceMap);
+
+          updateRideData({ vehiclePrices: priceMap });
+        }
+      } catch (err) {
+        console.error("❌ Failed to fetch price estimates:", err);
+      }
+    },
+    [updateRideData],
+  );
+
   const submitRideBooking = useCallback(async (): Promise<RideResponse> => {
     if (loading) return Promise.reject("Request already in progress");
-
     try {
       setLoading(true);
       setError(null);
-
       const userInfo = await getUserInfo();
       if (!userInfo?.phone) throw new Error("User phone not found");
-
       const bookingData = {
         passengerPhone: userInfo.phone,
         pickup: {
@@ -278,21 +255,14 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
         offer: Number(rideData.offer) || 0,
         offerType: rideData.offerType || "fair",
       };
-
       const response = await api.post("/rides/request", bookingData);
-
-      if (!response.data?.success) {
+      if (!response.data?.success)
         throw new Error(response.data?.message || "Ride request failed");
-      }
-
       setCurrentRide(response.data.ride);
-
-      if (response.data.ride?.rideId) {
+      if (response.data.ride?.rideId)
         getPassengerSocket()?.emit("ride:join_room", {
           rideId: response.data.ride.rideId,
         });
-      }
-
       return response.data.ride;
     } catch (err: any) {
       setError(err?.response?.data?.message || "Failed to request a ride");
@@ -300,31 +270,16 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [
-    loading,
-    rideData.pickupLocation,
-    rideData.destination,
-    rideData.vehicleType,
-    rideData.paymentMethod,
-    rideData.additionalInfo,
-    rideData.offer,
-    rideData.offerType,
-  ]);
+  }, [loading, rideData]);
 
-  /**
-   * Memoized Cancellation
-   */
   const cancelRide = useCallback(async () => {
     try {
       setLoading(true);
       const userInfo = await getUserInfo();
-      const rideId = currentRide?.rideId;
-
       await api.post("/rides/cancel", {
         passengerPhone: userInfo?.phone,
-        rideId: rideId,
+        rideId: currentRide?.rideId,
       });
-
       setCurrentRide(null);
       updateRideData({ status: "idle", activeTrip: null });
     } catch (err) {
@@ -335,33 +290,16 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
     }
   }, [currentRide?.rideId, updateRideData]);
 
-  /**
-   * Memoized Fetch History
-   */
   const fetchRecentDestinations = useCallback(async () => {
-    const hasExistingData =
-      rideData.recentDestinations && rideData.recentDestinations.length > 0;
-    if (!hasExistingData) setLoading(true);
-
+    if (!rideData.recentDestinations?.length) setLoading(true);
     try {
       const userInfo = await getUserInfo();
       if (!userInfo?.phone) return;
-
-      const sanitizedPhone = userInfo.phone.replace(/\+/g, "").trim();
       const response = await api.get(
-        `/rides/recent-destinations?phone=${sanitizedPhone}`,
+        `/rides/recent-destinations?phone=${userInfo.phone.replace(/\+/g, "").trim()}`,
       );
-
-      if (response.data.success) {
-        const newDestinations = response.data.destinations;
-        // Check for actual changes to prevent render loops
-        if (
-          JSON.stringify(newDestinations) !==
-          JSON.stringify(rideData.recentDestinations)
-        ) {
-          updateRideData({ recentDestinations: newDestinations });
-        }
-      }
+      if (response.data.success)
+        updateRideData({ recentDestinations: response.data.destinations });
     } catch (err) {
       console.error("❌ Context History Fetch Error:", err);
     } finally {
@@ -369,19 +307,15 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
     }
   }, [rideData.recentDestinations, updateRideData]);
 
-  /**
-   * Memoized Hide History
-   */
   const hideRecentDestination = useCallback(
     async (rideId: string) => {
       try {
         const response = await api.patch("/rides/hide-destination", { rideId });
-
         if (response.data.success) {
-          const updatedDestinations = (
-            rideData.recentDestinations || []
-          ).filter((dest) => dest.id !== rideId);
-          updateRideData({ recentDestinations: updatedDestinations });
+          const updated = (rideData.recentDestinations || []).filter(
+            (dest) => dest.id !== rideId,
+          );
+          updateRideData({ recentDestinations: updated });
         }
       } catch (err) {
         console.error("❌ Failed to hide destination:", err);
@@ -406,6 +340,7 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
         fetchRecentDestinations,
         hideRecentDestination,
         checkExistingState,
+        fetchPrices,
       }}
     >
       {children}
@@ -415,8 +350,7 @@ export const RideBookingProvider: React.FC<RideBookingProviderProps> = ({
 
 export const useRideBooking = () => {
   const context = useContext(RideBookingContext);
-  if (!context) {
+  if (!context)
     throw new Error("useRideBooking must be used within a RideBookingProvider");
-  }
   return context;
 };

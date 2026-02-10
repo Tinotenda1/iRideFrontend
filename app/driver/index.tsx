@@ -21,8 +21,7 @@ import {
   handleDriverResponse,
   isDriverOnline,
   onNewRideRequest,
-  onRemoveRideRequest,
-  onRideCancelled,
+  onRemoveRideRequest
 } from "./socketConnectionUtility/driverSocketService";
 // app/driver/socketConnectionUtility/driverSocketService.ts
 
@@ -85,27 +84,6 @@ const DriverDashboard: React.FC = () => {
 
     initDriver();
   }, []);
-
-  useEffect(() => {
-    if (!online) return;
-
-    const unsubscribe = onRideCancelled((data: any) => {
-      setModalConfig({
-        visible: true,
-        type: "cancellation",
-        title: "Trip Cancelled",
-        message: data.reason || "The passenger has cancelled the trip request.",
-      }); // Clean up local ride states
-
-      setIncomingRides([]);
-      setSubmissionStates({});
-      setSubmittedOffers({}); // Close the ride request tray if it's open
-
-      rideTrayRef.current?.close();
-    });
-
-    return () => unsubscribe();
-  }, [online]);
 
   const handleCloseModal = () => {
     setModalConfig((prev) => ({ ...prev, visible: false })); // Transition the tray back to the "Online" state (radar mode)

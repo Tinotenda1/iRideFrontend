@@ -12,14 +12,13 @@ import {
   View,
 } from "react-native";
 
-import { useRideBooking } from "../../../../../app/context/RideBookingContext";
 import { ActionConfirmationModal } from "../../../../../components/ActionConfirmationModal";
 import { IRAvatar } from "../../../../../components/IRAvatar";
 import { IRButton } from "../../../../../components/IRButton";
-import { getUserInfo } from "../../../../../utils/storage";
+import { useRideBooking } from "../../../../context/RideBookingContext";
 
 interface DriverTripTabProps {
-  onCancel: () => void;
+  onCancel: (reason: string) => Promise<boolean>; // Updated interface
   onArrived: () => void;
   onStartTrip: () => void;
   onEndTrip: () => void;
@@ -109,41 +108,27 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
 
   const handleConfirmCancel = useCallback(async () => {
     if (!isMounted.current || isCancelling) return;
+
     setIsCancelling(true);
     setIsActionLoading(true);
 
     try {
-      const userInfo = await getUserInfo();
-      const phoneToCancel = passenger?.phone?.replace(/\D/g, "") || "";
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/rides/cancel`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-device-id":
-              userInfo?.currentDeviceId || userInfo?.deviceId || "",
-          },
-          body: JSON.stringify({
-            userPhone: phoneToCancel,
-            reason: cancelReason || "No reason provided",
-          }),
-        },
-      );
-      const data = await response.json();
-      if (data.success) {
+      // Call the parent handler moved to DriverTray
+      const success = await onCancel(cancelReason);
+
+      if (success && isMounted.current) {
         setShowCancelModal(false);
-        onCancel();
+        setCancelReason("");
       }
     } catch (error) {
-      console.error("❌ Cancel failed:", error);
+      console.error("❌ UI Cancel error:", error);
     } finally {
       if (isMounted.current) {
         setIsCancelling(false);
         setIsActionLoading(false);
       }
     }
-  }, [isCancelling, onCancel, passenger?.phone, cancelReason]);
+  }, [isCancelling, onCancel, cancelReason]);
 
   if (!passenger) {
     return (

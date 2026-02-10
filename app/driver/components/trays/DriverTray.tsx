@@ -21,18 +21,22 @@ import {
   View,
 } from "react-native";
 
-import { useRideBooking } from "../../../../app/context/RideBookingContext";
 import RatingModal from "../../../../components/RatingModal";
 import { submitUserRating } from "../../../../utils/ratingSubmittion";
 import { createStyles } from "../../../../utils/styles";
+import { useRideBooking } from "../../../context/RideBookingContext";
 
 import {
   getDriverSocket,
   onMatchedRide,
+  onRideCancelled,
   onRideCompletedByPassenger,
 } from "../../socketConnectionUtility/driverSocketService";
 
-import TripStatusModal from "../../../../components/TripStatusModal";
+import { getUserInfo } from "@/utils/storage";
+import TripStatusModal, {
+  ModalType,
+} from "../../../../components/TripStatusModal";
 import OnlineTab from "./tabs/OnlineTab";
 import TripTab from "./tabs/TripTab";
 import WelcomeTab from "./tabs/WelcomeTab";
@@ -71,8 +75,14 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
     const heightAnim = useRef(new Animated.Value(0)).current;
     const translateY = useRef(new Animated.Value(windowHeight)).current;
     const transitionAnim = useRef(new Animated.Value(0)).current;
-    const [statusModal, setStatusModal] = useState({
+    const [statusModal, setStatusModal] = useState<{
+      visible: boolean;
+      type: ModalType; // Use the specific union type here
+      message: string;
+      title: string;
+    }>({
       visible: false,
+      type: "cancellation", // Default to a valid ModalType
       message: "",
       title: "",
     });
@@ -189,6 +199,35 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
 
     /* ---------------- External Action Handlers ---------------- */
 
+    /* ---------------- Cancellation Listener ---------------- */
+    useEffect(() => {
+      const unsubscribeCancel = onRideCancelled((data: any) => {
+        // 1. Reset Global Ride Context
+        updateRideData({
+          status: "idle",
+          activeTrip: null,
+          requests: [],
+        });
+
+        // 2. Clear local tray/dashboard states via the callback
+        onMatch?.();
+
+        // 3. Move Tray back to Online radar
+        handleTransition("online");
+
+        // 4. Show the Cancellation Modal
+        setStatusModal({
+          visible: true,
+          type: "cancellation",
+          title: "Trip Cancelled",
+          message:
+            data.reason || "The passenger has cancelled the trip request.",
+        });
+      });
+
+      return () => unsubscribeCancel();
+    }, [updateRideData, handleTransition, onMatch]);
+
     const handleTripEndedByPassenger = useCallback(
       (data: { message: string }) => {
         // 1. Move UI back to online/idle state
@@ -200,6 +239,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         // 2. Show the "Completion" Modal
         setStatusModal({
           visible: true,
+          type: "completion",
           title: "Trip Finished",
           message:
             data.message ||
@@ -254,6 +294,49 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
     }));
 
     /* ---------------- Trip Actions ---------------- */
+
+    const handleDriverCancelTrip = async (reason: string) => {
+      const rId = rideData.activeTrip?.rideId;
+      const passengerPhone = rideData.activeTrip?.passenger?.phone;
+
+      if (!rId || !passengerPhone) return;
+
+      try {
+        const userInfo = await getUserInfo();
+        const phoneToCancel = passengerPhone.replace(/\D/g, "");
+
+        const response = await fetch(
+          `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/rides/cancel`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-device-id":
+                userInfo?.currentDeviceId || userInfo?.deviceId || "",
+            },
+            body: JSON.stringify({
+              userPhone: phoneToCancel,
+              reason: reason || "No reason provided",
+            }),
+          },
+        );
+
+        const data = await response.json();
+        if (data.success) {
+          updateRideData({
+            status: "idle",
+            activeTrip: null,
+            requests: [],
+          });
+          onMatch?.(); // Clear dashboard states
+          handleTransition("online");
+        }
+        return data.success;
+      } catch (error) {
+        console.error("❌ Driver Cancel failed:", error);
+        return false;
+      }
+    };
 
     const handleArrived = () => {
       const socket = getDriverSocket();
@@ -434,7 +517,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
                   <TripTab
                     onArrived={handleArrived}
                     onStartTrip={handleStartTrip}
-                    onCancel={() => handleTransition("online")}
+                    onCancel={handleDriverCancelTrip}
                     onEndTrip={handleEndTrip}
                     isExpanded={isTripExpanded}
                     onToggleExpand={(val) => handleTransition("active", val)}
@@ -442,7 +525,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
                 </Animated.View>
                 <TripStatusModal
                   visible={statusModal.visible}
-                  type="completion"
+                  type={statusModal.type}
                   title={statusModal.title}
                   message={statusModal.message}
                   onClose={() => {
@@ -456,6 +539,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
                   userImage={rideData.activeTrip?.passenger?.profilePic}
                   subtitle="Your feedback helps keep the community safe."
                   onSelectRating={handleRatingSubmit}
+                  isLoading={isSubmitting}
                 />
               </View>
             </View>

@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRideBooking } from "../../../../app/context/RideBookingContext";
+import { useRideBooking } from "../../../context/RideBookingContext";
 import LocationSearch, { Place } from "../map/LocationSearch";
 
 const { height: windowHeight } = Dimensions.get("window");
@@ -57,10 +57,20 @@ const InputTray = forwardRef<any, InputTrayProps>(
       onClose?.();
     };
 
+    // app/components/trays/InputTray.tsx
+
     const handlePlaceSelect = (place: Place | null) => {
       if (!place) return;
-      if (activeField === "pickup") updateRideData({ pickupLocation: place });
-      else updateRideData({ destination: place });
+
+      if (activeField === "pickup") {
+        updateRideData({ pickupLocation: place });
+      } else {
+        // ✅ Add status: "active" here to trigger the UI Controller
+        updateRideData({
+          destination: place,
+          status: "active",
+        });
+      }
       handleClose();
     };
 

@@ -1,218 +1,136 @@
 // app/passenger/components/tabs/RideTab.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import * as Location from "expo-location";
 import { Wallet } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRideBooking } from "../../../../app/context/RideBookingContext";
 import { IRButton } from "../../../../components/IRButton";
 import { theme } from "../../../../constants/theme";
 import { createStyles } from "../../../../utils/styles";
+import { useRideBooking } from "../../../context/RideBookingContext";
 import { OfferFareControl } from "../PassengerOfferFareControl";
 import RideTypeCard from "../RideTypeCard";
 
 interface TabProps {
   id: string;
   onOpenAdditionalInfo: () => void;
-  onSwitchToSearching: () => void; // Added to interface
+  onSwitchToSearching: () => void;
 }
 
 const RideTab: React.FC<TabProps> = ({
-  id,
   onOpenAdditionalInfo,
   onSwitchToSearching,
 }) => {
   const insets = useSafeAreaInsets();
-  const { rideData, updateRideData, submitRideBooking } = useRideBooking();
+  const { rideData, updateRideData, submitRideBooking, fetchPrices } =
+    useRideBooking();
+
   const [isBooking, setIsBooking] = useState(false);
-  const [, setPickupText] = useState("Here");
-  const [, setLoadingCurrentLocation] = useState(false);
-  const [isReady, setIsReady] = useState(false); // Added to track when the tab is ready
+  const [isFetchingPrices, setIsFetchingPrices] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+
+  // Computed values
   const selectedVehiclePrice =
     rideData.vehiclePrices?.[rideData.vehicleType] || 0;
   const isSelectionComplete =
     !!rideData.vehicleType && !!rideData.paymentMethod;
 
-  // 1. DEFAULT VEHICLE (Run once)
+  // ✅ LOGGING: Observe prices arriving in the tab
   useEffect(() => {
-    if (!rideData.vehicleType) {
-      updateRideData({ vehicleType: "4seater" });
+    if (
+      rideData.vehiclePrices &&
+      Object.keys(rideData.vehiclePrices).length > 0
+    ) {
+      console.log(
+        "[RideTab] Prices available in state:",
+        rideData.vehiclePrices,
+      );
     }
+  }, [rideData.vehiclePrices]);
+
+  // 1. INITIALIZATION & PRICE FETCHING
+  useEffect(() => {
+    const initTab = async () => {
+      // Set default vehicle if none selected
+      if (!rideData.vehicleType) {
+        updateRideData({ vehicleType: "4seater" });
+      }
+
+      if (rideData.pickupLocation && rideData.destination) {
+        try {
+          setIsFetchingPrices(true);
+          // fetchPrices now updates vehiclePrices in context correctly
+          await fetchPrices(rideData.pickupLocation, rideData.destination);
+        } catch (error) {
+          console.error("Failed to fetch prices:", error);
+        } finally {
+          setIsFetchingPrices(false);
+        }
+      }
+
+      setTimeout(() => setIsReady(true), 500);
+    };
+
+    initTab();
   }, []);
 
-  // 2. SYNC OFFER ON VEHICLE CHANGE
-  // Only update the offer if the VEHICLE TYPE changes or the PRICES just loaded (went from 0 to X)
+  // 2. SYNC OFFER WITH SELECTED VEHICLE PRICE
+  // This ensures that when prices arrive OR the user switches vehicles,
+  // the 'offer' state is updated to the new base price.
   useEffect(() => {
-    const price = rideData.vehiclePrices?.[rideData.vehicleType || "4seater"];
-
-    // Safety check: only update if we have a real price
-    if (price && price > 0) {
-      // We update the offer to the standard price in two cases:
-      // A. The offer is currently 0 or null (first load)
-      // B. The user just switched vehicle types (we don't want the 4-seater price persisting on a 7-seater)
-
-      // Note: We are deliberately NOT checking "if (offer !== price)" here to avoid the loop.
-      // Instead, we rely on the dependency array.
-      updateRideData({ offer: price });
+    const currentPrice = rideData.vehiclePrices?.[rideData.vehicleType];
+    if (currentPrice && currentPrice > 0) {
+      updateRideData({ offer: currentPrice, offerType: "fair" });
     }
-  }, [
-    rideData.vehicleType,
-    rideData.vehiclePrices?.[rideData.vehicleType || "4seater"],
-  ]);
-  // ^^^ Dependency trick: This only re-runs if the specific price for THIS vehicle changes,
-  // or if the vehicle ID changes. It won't run if you just update the 'offer' elsewhere.
-  // Added rideData.vehiclePrices as a specific dependency
+  }, [rideData.vehicleType, rideData.vehiclePrices]);
 
-  // READY CHECK
-  useEffect(() => {
-    // 500ms is usually enough for the tray transition to finish
-    const timer = setTimeout(() => {
-      setIsReady(true);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // inside your RideTab component
-  const rideTypes = React.useMemo(
+  const rideTypes = useMemo(
     () => [
       {
         id: "4seater",
         icon: require("../../../../assets/cars/4seat.png"),
-        title: (
-          <>
-            4{" "}
-            <Ionicons
-              name="person"
-              size={16}
-              color={theme.colors.textSecondary}
-            />
-          </>
-        ),
+        label: "4 Seater",
         seats: 4,
-        price: rideData.vehiclePrices?.["4seater"] ?? 0,
       },
       {
         id: "7seater",
         icon: require("../../../../assets/cars/7seat.png"),
-        title: (
-          <>
-            7{" "}
-            <Ionicons
-              name="person"
-              size={16}
-              color={theme.colors.textSecondary}
-            />
-          </>
-        ),
+        label: "7 Seater",
         seats: 7,
-        price: rideData.vehiclePrices?.["7seater"] ?? 0,
       },
       {
         id: "pickup2seater",
         icon: require("../../../../assets/cars/pickup2.png"),
-        title: (
-          <>
-            Pickup (2{" "}
-            <Ionicons
-              name="person"
-              size={16}
-              color={theme.colors.textSecondary}
-            />
-            )
-          </>
-        ),
+        label: "2 Seater Pickup",
         seats: 2,
-        price: rideData.vehiclePrices?.["pickup2seater"] ?? 0,
       },
       {
         id: "pickup4seater",
         icon: require("../../../../assets/cars/pickup4.png"),
-        title: (
-          <>
-            Pickup (4{" "}
-            <Ionicons
-              name="person"
-              size={16}
-              color={theme.colors.textSecondary}
-            />
-            )
-          </>
-        ),
+        label: "4 Seater Pickup",
         seats: 4,
-        price: rideData.vehiclePrices?.["pickup4seater"] ?? 0,
       },
     ],
-    [rideData.vehiclePrices],
+    [],
   );
-
-  const paymentMethods = [
-    { id: "ecocash", label: "Ecocash" },
-    { id: "cash", label: "Cash" },
-  ];
-
-  useEffect(() => {
-    let mounted = true;
-    const setInitialLocation = async () => {
-      if (rideData.pickupLocation) return;
-      setLoadingCurrentLocation(true);
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setPickupText("Permission denied");
-        setLoadingCurrentLocation(false);
-        return;
-      }
-      try {
-        const current = await Location.getCurrentPositionAsync({});
-        if (!mounted) return;
-        const place = {
-          id: "current",
-          name: "Here",
-          address: "Current Location",
-          latitude: current.coords.latitude,
-          longitude: current.coords.longitude,
-        };
-        updateRideData({ pickupLocation: place });
-        setPickupText("Here");
-      } catch (error) {
-        console.error("❌ Error getting current location:", error);
-        setPickupText("Unable to get location");
-      } finally {
-        setLoadingCurrentLocation(false);
-      }
-    };
-    setInitialLocation();
-    return () => {
-      mounted = false;
-    };
-  }, [rideData.pickupLocation, updateRideData]);
 
   const handleFindRides = async () => {
     try {
       setIsBooking(true);
-
-      // result is of type RideResponse | undefined
       const result = await submitRideBooking();
-
-      // ✅ FIX: Instead of checking (result === false), check if result is null/undefined
       if (!result) {
         Alert.alert(
-          "Ride Request Error",
-          "We couldn't process your request. Please check your internet and try again.",
-          [{ text: "OK" }],
+          "Error",
+          "We couldn't process your request. Please try again. If the issue persists, contact support.",
         );
         return;
       }
-
-      // If we have a result, we successfully moved to 'searching' state
       onSwitchToSearching();
     } catch (error) {
-      console.error("Booking failed:", error);
       Alert.alert(
         "Connection Issue",
-        "The server returned an unexpected response. Please try again in a moment.",
+        "Please check your internet and try again.",
       );
     } finally {
       setIsBooking(false);
@@ -237,15 +155,27 @@ const RideTab: React.FC<TabProps> = ({
               <View key={type.id} style={styles.rideTypeWrapper}>
                 <RideTypeCard
                   icon={type.icon}
-                  title={type.title}
-                  price={type.price}
+                  title={
+                    <>
+                      {type.seats}{" "}
+                      <Ionicons
+                        name="person"
+                        size={14}
+                        color={theme.colors.textSecondary}
+                      />
+                    </>
+                  }
+                  price={
+                    isFetchingPrices
+                      ? "..."
+                      : (rideData.vehiclePrices?.[type.id] ?? 0)
+                  }
                   selected={rideData.vehicleType === type.id}
                   onPress={() => updateRideData({ vehicleType: type.id })}
                 />
               </View>
             ))}
           </ScrollView>
-
           <LinearGradient
             colors={[theme.colors.surface, "transparent"]}
             start={{ x: 0, y: 0 }}
@@ -253,7 +183,6 @@ const RideTab: React.FC<TabProps> = ({
             style={styles.leftFade}
             pointerEvents="none"
           />
-
           <LinearGradient
             colors={["transparent", theme.colors.surface]}
             start={{ x: 0, y: 0 }}
@@ -265,41 +194,38 @@ const RideTab: React.FC<TabProps> = ({
 
         <View style={styles.sectionHeader}>
           <Wallet size={16} color={theme.colors.textSecondary} />
-          <Text style={styles.sectionHeaderText}>
-            How I will pay for my Ride
-          </Text>
+          <Text style={styles.sectionHeaderText}>Payment Method</Text>
         </View>
 
         <View style={styles.actionRow}>
           <View style={styles.paymentSection}>
-            {paymentMethods.map((method) => {
-              const isSelected = rideData.paymentMethod === method.id;
-              return (
-                <TouchableOpacity
-                  key={method.id}
-                  style={styles.radioItem}
-                  onPress={() => updateRideData({ paymentMethod: method.id })}
-                  disabled={isBooking}
+            {["ecocash", "cash"].map((method) => (
+              <TouchableOpacity
+                key={method}
+                style={styles.radioItem}
+                onPress={() => updateRideData({ paymentMethod: method })}
+              >
+                <View
+                  style={[
+                    styles.radioOuter,
+                    rideData.paymentMethod === method &&
+                      styles.radioOuterSelected,
+                  ]}
                 >
-                  <View
-                    style={[
-                      styles.radioOuter,
-                      isSelected && styles.radioOuterSelected,
-                    ]}
-                  >
-                    {isSelected && <View style={styles.radioInner} />}
-                  </View>
-                  <Text
-                    style={[
-                      styles.radioLabel,
-                      isSelected && styles.textPrimary,
-                    ]}
-                  >
-                    {method.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+                  {rideData.paymentMethod === method && (
+                    <View style={styles.radioInner} />
+                  )}
+                </View>
+                <Text
+                  style={[
+                    styles.radioLabel,
+                    rideData.paymentMethod === method && styles.textPrimary,
+                  ]}
+                >
+                  {method.charAt(0).toUpperCase() + method.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
           <TouchableOpacity
@@ -331,31 +257,16 @@ const RideTab: React.FC<TabProps> = ({
           ]}
           pointerEvents={isSelectionComplete ? "auto" : "none"}
         >
-          {isReady && (
+          {isReady && selectedVehiclePrice > 0 && (
             <OfferFareControl
-              minOffer={
-                selectedVehiclePrice > 0 ? selectedVehiclePrice * 0.75 : 1
-              }
-              maxOffer={
-                selectedVehiclePrice > 0 ? selectedVehiclePrice * 1.5 : 50
-              }
+              minOffer={selectedVehiclePrice * 0.8}
+              maxOffer={selectedVehiclePrice * 1.5}
               initialOffer={rideData.offer || selectedVehiclePrice}
               onOfferChange={(newOffer) => {
-                // --- NEW OFFER TYPE LOGIC ---
-                let offerType: "poor" | "fair" | "good" = "fair";
-
-                if (newOffer < selectedVehiclePrice) {
-                  offerType = "poor";
-                } else if (newOffer > selectedVehiclePrice) {
-                  offerType = "good";
-                } else {
-                  offerType = "fair";
-                }
-                // Update both the value and the classification
-                updateRideData({
-                  offer: newOffer,
-                  offerType: offerType,
-                });
+                let type: "poor" | "fair" | "good" = "fair";
+                if (newOffer < selectedVehiclePrice) type = "poor";
+                else if (newOffer > selectedVehiclePrice) type = "good";
+                updateRideData({ offer: newOffer, offerType: type });
               }}
             />
           )}
@@ -365,21 +276,12 @@ const RideTab: React.FC<TabProps> = ({
             title={
               isBooking
                 ? ""
-                : `Find ${
-                    {
-                      "4seater": "4 Seater",
-                      "7seater": "7 Seater",
-                      pickup2seater: "2 Seater Pickup",
-                      pickup4seater: "4 Seater Pickup",
-                    }[rideData.vehicleType] || "Ride"
-                  } Ride`
+                : `Find ${rideTypes.find((t) => t.id === rideData.vehicleType)?.label || "Ride"}`
             }
             onPress={handleFindRides}
-            variant="primary"
-            size="md"
-            fullWidth
             loading={isBooking}
-            disabled={isBooking || !isSelectionComplete}
+            disabled={isBooking || !isSelectionComplete || isFetchingPrices}
+            fullWidth
           />
         </View>
       </View>

@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import {
   BackHandler,
   Dimensions,
@@ -6,13 +6,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
-} from 'react-native';
-import { useRideBooking } from '../../../../app/context/RideBookingContext';
-import { IRButton } from '../../../../components/IRButton';
-import { theme } from '../../../../constants/theme';
+  View,
+} from "react-native";
+import { IRButton } from "../../../../components/IRButton";
+import { theme } from "../../../../constants/theme";
+import { useRideBooking } from "../../../context/RideBookingContext";
 
-const { height: windowHeight } = Dimensions.get('window');
+const { height: windowHeight } = Dimensions.get("window");
 const OPEN_HEIGHT = windowHeight * 0.9; // same height as InputTray
 
 const AdditionalInfoTray = forwardRef<any, { onClose?: () => void }>(
@@ -29,7 +29,7 @@ const AdditionalInfoTray = forwardRef<any, { onClose?: () => void }>(
         () => {
           handleClose();
           return true;
-        }
+        },
       );
       return () => backHandler.remove();
     }, [isOpen]);
@@ -86,7 +86,7 @@ const AdditionalInfoTray = forwardRef<any, { onClose?: () => void }>(
         </View>
       </>
     );
-  }
+  },
 );
 
 AdditionalInfoTray.displayName = "AdditionalInfoTray";
@@ -113,6 +113,21 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     zIndex: 999,
   },
-  label: { fontSize: 16, fontWeight: "600", marginBottom: theme.spacing.md, color: theme.colors.text },
-  textArea: { backgroundColor: theme.colors.background, borderRadius: theme.borderRadius.md, padding: theme.spacing.md, height: 200, textAlignVertical: "top", fontSize: 16, color: theme.colors.text, borderWidth: 1, borderColor: theme.colors.border },
+  label: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: theme.spacing.md,
+    color: theme.colors.text,
+  },
+  textArea: {
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    height: 200,
+    textAlignVertical: "top",
+    fontSize: 16,
+    color: theme.colors.text,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
 });

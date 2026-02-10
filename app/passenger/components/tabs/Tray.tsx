@@ -35,7 +35,7 @@ const OPEN_HEIGHT_INPUT = windowHeight * 0.5;
 const OPEN_HEIGHT_RIDE = windowHeight * 0.4;
 const OPEN_HEIGHT_SEARCHING = windowHeight * 0.3;
 const OPEN_HEIGHT_MATCHED = windowHeight * 0.25;
-const OPEN_HEIGHT_ON_TRIP = windowHeight * 0.32; // ✅ Extra height for Safety Toolkit & Badge
+const OPEN_HEIGHT_ON_TRIP = windowHeight * 0.32;
 const OPEN_HEIGHT_ON_TRIP_EXPANDED = windowHeight * 0.4;
 const CLOSED_HEIGHT = 140;
 
@@ -51,7 +51,8 @@ const Tray = forwardRef<any, TrayProps>(
     ref,
   ) => {
     const { rideData, updateRideData } = useRideBooking();
-    // ✅ Added 'on_trip' to currentTab state
+
+    // ✅ Initial state is now dynamic based on context, but defaulting to input
     const [currentTab, setCurrentTab] = useState<
       "input" | "ride" | "searching" | "matched" | "on_trip"
     >("input");
@@ -62,29 +63,48 @@ const Tray = forwardRef<any, TrayProps>(
     ).current;
     const transitionAnim = useRef(new Animated.Value(0)).current;
 
-    // MONITOR RIDE STATUS
+    // --- MONITOR CONTEXT STATUS ---
+    // If context changes (e.g. server updates status), update the tab
     useEffect(() => {
       if (rideData.status === "on_trip" && currentTab !== "on_trip") {
         handleTransition("on_trip");
       } else if (
-        rideData.status === "matched" &&
+        (rideData.status === "matched" || rideData.status === "arrived") &&
         currentTab !== "matched" &&
         currentTab !== "on_trip"
       ) {
         handleTransition("matched");
       } else if (
         rideData.status === "idle" &&
-        (currentTab === "matched" || currentTab === "on_trip")
+        (currentTab === "matched" ||
+          currentTab === "on_trip" ||
+          currentTab === "searching")
       ) {
         handleTransition("input");
       }
     }, [rideData.status]);
 
+    // --- MOUNT LOGIC (Session Restoration) ---
     useEffect(() => {
-      handleTransition("input");
-      openTray();
-    }, []);
+      // ✅ "Ride-Aware" Mount: Check context to determine initial state
+      const restoredStatus = rideData.status;
 
+      if (restoredStatus === "matched" || restoredStatus === "arrived") {
+        handleTransition("matched");
+      } else if (restoredStatus === "on_trip") {
+        handleTransition("on_trip");
+      } else if (restoredStatus === "searching") {
+        handleTransition("searching");
+      } else if (rideData.destination) {
+        handleTransition("ride");
+      } else {
+        handleTransition("input");
+      }
+
+      openTray();
+    }, []); // Runs once on mount
+
+    // Hardware Back Button Handler
     useEffect(() => {
       const backAction = () => {
         if (currentTab === "ride") {
@@ -102,44 +122,7 @@ const Tray = forwardRef<any, TrayProps>(
       return () => backHandler.remove();
     }, [currentTab, updateRideData]);
 
-    useEffect(() => {
-      if (rideData.pickupLocation && rideData.destination) {
-        fetchPricingSuggestions();
-      }
-    }, [rideData.pickupLocation, rideData.destination]);
-
-    const fetchPricingSuggestions = async () => {
-      if (!rideData.pickupLocation || !rideData.destination) return;
-      try {
-        const payload = {
-          pickup: {
-            latitude: rideData.pickupLocation.latitude,
-            longitude: rideData.pickupLocation.longitude,
-          },
-          destination: {
-            latitude: rideData.destination.latitude,
-            longitude: rideData.destination.longitude,
-          },
-        };
-        const response = await fetch(
-          `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/pricing/suggest`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          },
-        );
-        const data = await response.json();
-        const prices: Record<string, number> = {};
-        data.suggestions.forEach((item: any) => {
-          prices[item.vehicleType] = item.suggestedPrice;
-        });
-        updateRideData({ vehiclePrices: prices });
-      } catch (error) {
-        console.error("❌ Error fetching pricing:", error);
-      }
-    };
-
+    // --- IMPERATIVE API ---
     useImperativeHandle(ref, () => ({
       openTray,
       closeTray,
@@ -147,56 +130,66 @@ const Tray = forwardRef<any, TrayProps>(
       switchToInput: () => handleTransition("input"),
       switchToSearching: () => handleTransition("searching"),
       switchToMatched: () => handleTransition("matched"),
+      switchToOnTrip: () => handleTransition("on_trip"),
       toggleTripExpansion: (isExpanded: boolean) => {
         const targetHeight = isExpanded
           ? OPEN_HEIGHT_ON_TRIP_EXPANDED
           : OPEN_HEIGHT_ON_TRIP;
         onTrayHeightChange?.(targetHeight);
         Animated.spring(heightAnim, {
-          toValue: isExpanded ? 5 : 4, // state 5 for expanded
+          toValue: isExpanded ? 5 : 4,
           useNativeDriver: false,
         }).start();
       },
     }));
 
+    // --- TRANSITION LOGIC ---
     const handleTransition = (
       target: "input" | "ride" | "searching" | "matched" | "on_trip",
     ) => {
       setCurrentTab(target);
 
-      if (target === "input") {
+      // ✅ GUARD: Only update context if state is actually changing
+      if (target === "input" && rideData.status !== "idle") {
         updateRideData({
           status: "idle",
           destination: null,
           vehiclePrices: {},
         });
-      }
-
-      if (target === "searching") {
+      } else if (target === "searching" && rideData.status !== "searching") {
         updateRideData({ status: "searching" });
-      } else if (target === "matched") {
+      } else if (target === "matched" && rideData.status !== "matched") {
         updateRideData({ status: "matched" });
-      } else if (target === "on_trip") {
+      } else if (target === "on_trip" && rideData.status !== "on_trip") {
         updateRideData({ status: "on_trip" });
       }
 
+      // 1. Update Layout Heights
       const heights = {
         input: OPEN_HEIGHT_INPUT,
         ride: OPEN_HEIGHT_RIDE,
         searching: OPEN_HEIGHT_SEARCHING,
         matched: OPEN_HEIGHT_MATCHED,
         on_trip: OPEN_HEIGHT_ON_TRIP,
-        OPEN_HEIGHT_ON_TRIP_EXPANDED,
       };
-      onTrayHeightChange?.(heights[target]);
 
+      // If we are moving to or staying in on_trip, check if we were expanded
+      const isExpandedState = (heightAnim as any)._value === 5; // Using the cast to satisfy compiler
+
+      if (target === "on_trip" && isExpandedState) {
+        onTrayHeightChange?.(OPEN_HEIGHT_ON_TRIP_EXPANDED);
+      } else {
+        onTrayHeightChange?.(heights[target as keyof typeof heights]);
+      }
+      // 2. Determine Animation State Index
       let stateValue = 0;
       if (target === "input") stateValue = 0;
       else if (target === "ride") stateValue = 1;
       else if (target === "searching") stateValue = 2;
       else if (target === "matched") stateValue = 3;
-      else if (target === "on_trip") stateValue = 4; // ✅ Target state 4 for height and layout
+      else if (target === "on_trip") stateValue = 4;
 
+      // 3. Animate Transition
       Animated.parallel([
         Animated.spring(transitionAnim, {
           toValue: stateValue,
@@ -248,7 +241,7 @@ const Tray = forwardRef<any, TrayProps>(
       onTrayHeightChange?.(CLOSED_HEIGHT);
     };
 
-    // Interpolations updated to handle state index 4 (on_trip)
+    // --- INTERPOLATIONS ---
     const inputTranslateX = transitionAnim.interpolate({
       inputRange: [0, 1, 2, 3, 4],
       outputRange: [
@@ -282,7 +275,6 @@ const Tray = forwardRef<any, TrayProps>(
       ],
     });
 
-    // ✅ Matched and OnTrip both live in the same visual slot, so they stay at 0 for both 3 and 4
     const matchedTranslateX = transitionAnim.interpolate({
       inputRange: [0, 1, 2, 3, 4, 5],
       outputRange: [windowWidth * 3, windowWidth * 2, windowWidth, 0, 0, 0],
@@ -296,7 +288,7 @@ const Tray = forwardRef<any, TrayProps>(
         OPEN_HEIGHT_SEARCHING,
         OPEN_HEIGHT_MATCHED,
         OPEN_HEIGHT_ON_TRIP,
-        OPEN_HEIGHT_ON_TRIP_EXPANDED, // Add this line
+        OPEN_HEIGHT_ON_TRIP_EXPANDED,
       ],
     });
 
@@ -366,15 +358,12 @@ const Tray = forwardRef<any, TrayProps>(
               <TripTab
                 onCancel={() => handleTransition("input")}
                 onExpand={(isExpanded) => {
-                  // Use the ref logic to animate height
                   const targetHeight = isExpanded
                     ? OPEN_HEIGHT_ON_TRIP_EXPANDED
                     : OPEN_HEIGHT_ON_TRIP;
-
                   onTrayHeightChange?.(targetHeight);
-
                   Animated.spring(heightAnim, {
-                    toValue: isExpanded ? 5 : 4, // 5 is expanded, 4 is standard on_trip
+                    toValue: isExpanded ? 5 : 4,
                     useNativeDriver: false,
                     tension: 40,
                     friction: 8,

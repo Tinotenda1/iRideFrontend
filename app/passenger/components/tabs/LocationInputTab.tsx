@@ -1,5 +1,7 @@
 // app/passenger/components/tabs/LocationInputTab.tsx
 
+import * as Location from "expo-location"; // Ensure this is installed
+import { Clock, Navigation, Search, Star, Trash2 } from "lucide-react-native";
 import React, { useEffect } from "react";
 import {
   ActivityIndicator,
@@ -11,29 +13,24 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-import { Clock, Navigation, Search, Star, Trash2 } from "lucide-react-native";
-
 import {
   GestureHandlerRootView,
   PanGestureHandler,
 } from "react-native-gesture-handler";
-
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
 
-import { useRideBooking } from "../../../../app/context/RideBookingContext";
 import { theme } from "../../../../constants/theme";
 import { createStyles } from "../../../../utils/styles";
+import { useRideBooking } from "../../../context/RideBookingContext";
 import { Place } from "../map/LocationSearch";
 
 /* =====================================================
-   Elastic Swipe Item (No Spring)
+    Elastic Swipe Item (No Spring)
 ===================================================== */
-
 const SWIPE_TRIGGER = -70;
 const ELASTIC_FACTOR = 0.35;
 
@@ -55,20 +52,11 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
   const translateX = useSharedValue(0);
   const isArmed = useSharedValue(false);
 
-  /* -------------------------------
-     Reset
-  -------------------------------- */
   const reset = () => {
     isArmed.value = false;
-
-    translateX.value = withTiming(0, {
-      duration: 180,
-    });
+    translateX.value = withTiming(0, { duration: 180 });
   };
 
-  /* -------------------------------
-     Android Back Button
-  -------------------------------- */
   useEffect(() => {
     const backAction = () => {
       if (isArmed.value) {
@@ -77,38 +65,22 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
       }
       return false;
     };
-
     const sub = BackHandler.addEventListener("hardwareBackPress", backAction);
-
     return () => sub.remove();
   }, []);
 
-  /* -------------------------------
-     Gesture
-  -------------------------------- */
   const onGestureEvent = (e: any) => {
     const x = e.nativeEvent.translationX;
-
-    if (x < 0) {
-      // Elastic resistance
-      translateX.value = x * ELASTIC_FACTOR;
-    }
+    if (x < 0) translateX.value = x * ELASTIC_FACTOR;
   };
 
   const onEnd = () => {
     if (translateX.value < SWIPE_TRIGGER * ELASTIC_FACTOR) {
       isArmed.value = true;
     }
-
-    // Smooth snap back (no bounce)
-    translateX.value = withTiming(0, {
-      duration: 180,
-    });
+    translateX.value = withTiming(0, { duration: 180 });
   };
 
-  /* -------------------------------
-     Animations
-  -------------------------------- */
   const rowStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
@@ -116,34 +88,18 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
   const deleteStyle = useAnimatedStyle(() => ({
     opacity: isArmed.value ? 1 : 0,
     transform: [
-      {
-        scale: withTiming(isArmed.value ? 1 : 0.8, {
-          duration: 150,
-        }),
-      },
+      { scale: withTiming(isArmed.value ? 1 : 0.8, { duration: 150 }) },
     ],
   }));
 
-  /* -------------------------------
-     UI
-  -------------------------------- */
   return (
     <View style={{ position: "relative" }}>
-      {/* Delete Icon */}
       <Animated.View style={[styles.elasticDelete, deleteStyle]}>
         <TouchableOpacity
           onPress={() => {
             Alert.alert("Remove Destination", item.name, [
-              {
-                text: "Cancel",
-                style: "cancel",
-                onPress: reset,
-              },
-              {
-                text: "Delete",
-                style: "destructive",
-                onPress: onDelete,
-              },
+              { text: "Cancel", style: "cancel", onPress: reset },
+              { text: "Delete", style: "destructive", onPress: onDelete },
             ]);
           }}
         >
@@ -151,16 +107,13 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
         </TouchableOpacity>
       </Animated.View>
 
-      {/* Row */}
       <PanGestureHandler onGestureEvent={onGestureEvent} onEnded={onEnd}>
         <Animated.View style={rowStyle}>
           <TouchableOpacity
             style={[styles.suggestionItem, isLast && styles.noBorder]}
             activeOpacity={0.85}
             onPress={() => {
-              if (!isArmed.value) {
-                onPress();
-              }
+              if (!isArmed.value) onPress();
             }}
           >
             <View style={styles.iconCircle}>
@@ -170,15 +123,12 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
                 <Clock size={18} color={theme.colors.textSecondary} />
               )}
             </View>
-
             <View style={styles.textContainer}>
               <Text style={styles.placeName}>{item.name}</Text>
-
               <Text style={styles.placeAddress} numberOfLines={1}>
                 {item.address}
               </Text>
             </View>
-
             <Navigation size={16} color={theme.colors.border} />
           </TouchableOpacity>
         </Animated.View>
@@ -188,9 +138,8 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
 };
 
 /* =====================================================
-   Main Component
+    Main Component
 ===================================================== */
-
 interface LocationInputTabProps {
   onFocus?: (field: "pickup" | "destination") => void;
   onSuggestionSelect?: (place: Place) => void;
@@ -200,19 +149,63 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
   onFocus,
   onSuggestionSelect,
 }) => {
-  const { rideData, updateRideData, loading, hideRecentDestination } =
-    useRideBooking();
+  const {
+    rideData,
+    updateRideData,
+    loading,
+    hideRecentDestination,
+    fetchPrices,
+  } = useRideBooking();
 
+  // 1. Auto-set Pickup to Current Location on mount
   useEffect(() => {
-    updateRideData({ destination: null });
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+
+      let location = await Location.getCurrentPositionAsync({});
+      let reverse = await Location.reverseGeocodeAsync({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      const currentPlace: Place = {
+        id: "current",
+        name: "Current Location",
+        address: reverse[0]
+          ? `${reverse[0].name || ""} ${reverse[0].street || ""}`.trim()
+          : "Current Location",
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+
+      updateRideData({ pickupLocation: currentPlace });
+    })();
   }, []);
+
+  // 2. Fetch prices when destination is selected (and pickup exists)
+  // 2. Trigger fetch prices
+  useEffect(() => {
+    if (rideData.pickupLocation?.latitude && rideData.destination?.latitude) {
+      fetchPrices(rideData.pickupLocation, rideData.destination);
+    }
+  }, [rideData.destination, rideData.pickupLocation]);
+
+  // ✅ 3. Log prices in the Tab whenever they are updated in context
+  useEffect(() => {
+    if (
+      rideData.vehiclePrices &&
+      Object.keys(rideData.vehiclePrices).length > 0
+    ) {
+      console.log("[RideTab] Received updated prices:", rideData.vehiclePrices);
+    }
+  }, [rideData.vehiclePrices]);
 
   const handleSelect = (
     field: "pickup" | "destination",
     place: Place | null,
   ) => {
     updateRideData({ [field]: place });
-
     if (field === "destination" && place) {
       onSuggestionSelect?.(place);
     }
@@ -223,7 +216,6 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.container}>
-        {/* Input Section */}
         <View style={styles.inputSection}>
           <View style={styles.lineDecorator}>
             <View style={styles.dotPickup} />
@@ -232,7 +224,6 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
           </View>
 
           <View style={styles.fieldsWrapper}>
-            {/* Pickup */}
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.textInput}
@@ -242,10 +233,7 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
                 onFocus={() => onFocus?.("pickup")}
               />
             </View>
-
             <View style={styles.inputSeparator} />
-
-            {/* Destination */}
             <View style={styles.inputContainer}>
               <TextInput
                 style={[styles.textInput, { fontWeight: "600" }]}
@@ -254,7 +242,6 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
                 value={rideData.destination?.name || ""}
                 onFocus={() => onFocus?.("destination")}
               />
-
               <Search
                 size={18}
                 color={theme.colors.textSecondary}
@@ -264,7 +251,6 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
           </View>
         </View>
 
-        {/* Suggestions */}
         <ScrollView
           style={styles.scrollContainer}
           contentContainerStyle={styles.suggestionsContainer}
@@ -296,86 +282,49 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
   );
 };
 
-/* =====================================================
-   Styles
-===================================================== */
-
 const styles = createStyles({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.surface,
-  },
-
+  container: { flex: 1, backgroundColor: theme.colors.surface },
   scrollContainer: { flex: 1 },
-
   inputSection: {
     flexDirection: "row",
     paddingHorizontal: theme.spacing.md,
     paddingTop: theme.spacing.md,
     backgroundColor: theme.colors.surface,
   },
-
   lineDecorator: {
     alignItems: "center",
     width: 20,
     marginVertical: 15,
     marginRight: theme.spacing.sm,
   },
-
   dotPickup: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: theme.colors.primary,
   },
-
   line: {
     flex: 1,
     width: 1,
     backgroundColor: theme.colors.border,
     marginVertical: 4,
   },
-
-  squareDestination: {
-    width: 8,
-    height: 8,
-    backgroundColor: "#d34444ff",
-  },
-
+  squareDestination: { width: 8, height: 8, backgroundColor: "#d34444ff" },
   fieldsWrapper: {
     flex: 1,
     backgroundColor: theme.colors.background,
     borderRadius: 12,
     paddingHorizontal: theme.spacing.md,
   },
-
-  inputContainer: {
-    height: 50,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  textInput: {
-    flex: 1,
-    fontSize: 15,
-    color: theme.colors.text,
-  },
-
-  inputSeparator: {
-    height: 1,
-    backgroundColor: theme.colors.border + "50",
-  },
-
-  searchIcon: {
-    marginLeft: theme.spacing.xs,
-  },
-
+  inputContainer: { height: 50, flexDirection: "row", alignItems: "center" },
+  textInput: { flex: 1, fontSize: 15, color: theme.colors.text },
+  inputSeparator: { height: 1, backgroundColor: theme.colors.border + "50" },
+  searchIcon: { marginLeft: theme.spacing.xs },
   suggestionsContainer: {
     marginTop: theme.spacing.lg,
     paddingHorizontal: theme.spacing.md,
     paddingBottom: theme.spacing.xl,
   },
-
   sectionTitle: {
     fontSize: 12,
     fontWeight: "700",
@@ -384,7 +333,6 @@ const styles = createStyles({
     textTransform: "uppercase",
     letterSpacing: 1.2,
   },
-
   suggestionItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -393,9 +341,7 @@ const styles = createStyles({
     borderBottomColor: theme.colors.border + "30",
     backgroundColor: theme.colors.surface,
   },
-
   noBorder: { borderBottomWidth: 0 },
-
   iconCircle: {
     width: 40,
     height: 40,
@@ -405,39 +351,24 @@ const styles = createStyles({
     justifyContent: "center",
     marginRight: theme.spacing.md,
   },
-
   textContainer: { flex: 1 },
-
-  placeName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: theme.colors.text,
-  },
-
+  placeName: { fontSize: 16, fontWeight: "600", color: theme.colors.text },
   placeAddress: {
     fontSize: 13,
     color: theme.colors.textSecondary,
     marginTop: 2,
   },
-
-  loaderContainer: {
-    paddingVertical: 20,
-    alignItems: "center",
-  },
-
+  loaderContainer: { paddingVertical: 20, alignItems: "center" },
   emptyText: {
     fontSize: 14,
     color: theme.colors.textSecondary,
     textAlign: "center",
     marginTop: 20,
   },
-
-  /* Elastic Delete */
   elasticDelete: {
     position: "absolute",
     right: 15,
     top: "50%",
-    //transform: [{ translateY: -22 }],
     backgroundColor: "#FF3B30",
     width: 25,
     height: 25,

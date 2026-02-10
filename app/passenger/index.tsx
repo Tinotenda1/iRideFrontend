@@ -402,8 +402,19 @@ const PassengerScreen: React.FC = () => {
   // -------------------------------------------------
   // 4. UI ANIMATIONS & TRAY LOGIC
   // -------------------------------------------------
+  // app/passenger/index.tsx
+
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    // ✅ Identify all "Active" ride states
+    const isActiveOrSearching = [
+      "searching",
+      "matched",
+      "arrived",
+      "on_trip",
+    ].includes(rideData.status || "");
+
     if (rideData.destination) {
       timeout = setTimeout(() => {
         Animated.timing(menuOpacity, {
@@ -411,20 +422,20 @@ const PassengerScreen: React.FC = () => {
           duration: 300,
           useNativeDriver: true,
         }).start();
-        trayRef.current?.switchToRides();
+
+        // ✅ ONLY auto-switch to Ride Selection if we are NOT searching or in a ride
+        if (!isActiveOrSearching) {
+          trayRef.current?.switchToRides();
+        }
       }, RIDE_DELAY);
     } else {
-      Animated.timing(menuOpacity, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-      trayRef.current?.switchToInput();
+      // ... logic for switchToInput ...
     }
     return () => {
       if (timeout) clearTimeout(timeout);
     };
-  }, [rideData.destination, RIDE_DELAY, menuOpacity]);
+  }, [rideData.destination, rideData.status, RIDE_DELAY, menuOpacity]);
+  // Added rideData.status to dependency array ^
 
   const handleTrayHeightChange = useCallback(
     (height: number) => {
