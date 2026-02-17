@@ -50,13 +50,15 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
 
   const isOn_trip =
     rideData.status === "on_trip" || currentRide?.status === "on_trip";
-
-  const driver = rideData?.activeTrip?.driver || currentRide?.driver;
-  const vehicle = rideData?.activeTrip?.vehicle || currentRide?.driver?.vehicle;
-  const profilePic = driver?.profilePic || driver?.profile_pic;
-  const totalTrips = driver?.totalTrips ?? driver?.total_trips ?? 0;
-  const displayOffer =
-    rideData?.activeTrip?.offer ?? currentRide?.offer ?? rideData?.offer ?? 0;
+  // console.log("currentRide - passenger", currentRide);
+  const driver = currentRide?.driver;
+  const vehicle = currentRide?.driver?.vehicle;
+  const profilePic = driver?.profilePic;
+  const totalTrips = driver?.totalTrips;
+  const rating = currentRide?.driver?.rating;
+  const vehiclePic = vehicle?.pic;
+  const vehicleLicencePlate = vehicle?.licensePlate;
+  const displayOffer = currentRide?.offer;
   const [showDropModal, setShowDropModal] = useState(false);
 
   useEffect(() => {
@@ -215,9 +217,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
               <View style={styles.ratingBadge}>
                 <Ionicons name="star" size={12} color="#FFC107" />
                 <Text style={styles.ratingText}>
-                  {typeof driver.rating === "number"
-                    ? driver.rating.toFixed(2)
-                    : "5.00"}
+                  {typeof rating === "number" ? rating.toFixed(2) : "5.00"}
                 </Text>
                 <Text style={styles.tripCount}> • {totalTrips} rides</Text>
               </View>
@@ -231,7 +231,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
         <View style={styles.vehicleRow}>
           <View style={styles.vehicleInfo}>
             <IRAvatar
-              source={vehicle?.pic ? { uri: vehicle.pic } : undefined}
+              source={vehiclePic ? { uri: vehiclePic } : undefined}
               variant="rounded"
               size={50}
               style={{ backgroundColor: "#f8fafc" }}
@@ -242,7 +242,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
               </Text>
               <View style={styles.plateBadge}>
                 <Text style={styles.plateNumber}>
-                  {vehicle?.licensePlate || "No Plate"}
+                  {vehicleLicencePlate || "No Plate"}
                 </Text>
               </View>
             </View>

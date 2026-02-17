@@ -14,9 +14,9 @@ import { getUserInfo } from "../../utils/storage";
 import { getDriverSocket } from "../driver/socketConnectionUtility/driverSocketService";
 import { Place } from "../passenger/components/map/LocationSearch";
 import { getPassengerSocket } from "../passenger/socketConnectionUtility/passengerSocketService";
-import { restoreSessionOnce } from "../services/sessionRestore";
 
 export interface RideBookingData {
+  rideId?: string;
   passengerPhone: string;
   pickupLocation: Place | null;
   destination: Place | null;
@@ -27,6 +27,15 @@ export interface RideBookingData {
   offerType?: "poor" | "fair" | "good";
   vehiclePrices?: Record<string, number>;
   recentDestinations?: Place[];
+
+  pickup?: any;
+  passenger?: any;
+  driver?: any;
+  vehicle?: any;
+  fare?: number;
+  startedAt?: string;
+  arrivedAt?: string;
+
   status?:
     | "idle"
     | "searching"
@@ -45,14 +54,61 @@ export interface RideBookingData {
 export interface RideResponse {
   rideId: string;
   status: string;
-  pickup: any;
-  destination: any;
-  vehicleType: string;
-  offer: number;
-  offerType: string;
-  paymentMethod: string;
-  timestamp: string;
+  pickup?: any;
+  destination?: any;
+  vehicleType?: string;
+  offer?: number;
+  offerType?: string;
+  paymentMethod?: string;
+  timestamp?: string;
   additionalInfo?: string;
+
+  // This is the structure appearing in your logs after reload
+  tripDetails?: {
+    offer: number;
+    passenger: {
+      id?: number;
+      name: string;
+      phone: string;
+      profilePic?: string;
+      rating?: string | number;
+      totalRides?: number; // Used in Passenger logs
+      totalTrips?: number; // Used in Driver logs
+    };
+    driver?: {
+      id?: number;
+      name: string;
+      phone: string;
+      rating: string | number;
+      profilePic?: string;
+      totalTrips?: number;
+      vehicle: {
+        model: string;
+        color: string;
+        licensePlate: string;
+        pic: string;
+        year?: number;
+      };
+    };
+    ride: {
+      pickup: any;
+      destination: any;
+      pickupAddress: string;
+      destinationAddress: string;
+      vehicleType: string;
+      paymentMethod: string;
+      additionalInfo?: string;
+    };
+    vehicle?: {
+      model: string;
+      color: string;
+      licensePlate: string;
+      pic: string;
+      year?: number;
+    };
+  };
+
+  // Optional flat mapping for backward compatibility with TripTab.tsx
   passenger?: {
     id: number;
     name: string;
@@ -64,7 +120,7 @@ export interface RideResponse {
   driver?: {
     name: string;
     phone: string;
-    rating: number;
+    rating: number | string;
     profilePic?: string;
     totalTrips?: number;
     vehicle: {
@@ -88,8 +144,6 @@ interface RideBookingContextType {
   cancelRide: () => Promise<void>;
   fetchRecentDestinations: () => Promise<void>;
   hideRecentDestination: (rideId: string) => Promise<void>;
-  reconnecting: boolean;
-  checkExistingState: () => Promise<void>;
   fetchPrices: (pickup: Place, destination: Place) => Promise<void>;
 }
 
@@ -118,7 +172,6 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
   const [rideData, setRideData] = useState<RideBookingData>(initialRideData);
   const [currentRide, setCurrentRide] = useState<RideResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [reconnecting, setReconnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const hasResumedRef = useRef(false);
 
@@ -152,49 +205,6 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
       }
     });
   };
-
-  const checkExistingState = useCallback(async () => {
-    await restoreSessionOnce(async () => {
-      try {
-        setReconnecting(true);
-        const userInfo = await getUserInfo();
-        if (!userInfo?.phone) return;
-        const response = await api.post("/reconnect/resume", {
-          phone: userInfo.phone.replace(/\D/g, ""),
-        });
-        if (response.data.success) {
-          const { state, tripDetails, role } = response.data;
-          if (
-            ["matched", "on_trip", "arrived"].includes(state) &&
-            tripDetails
-          ) {
-            const resumedRide: RideResponse = {
-              ...tripDetails,
-              offerType: "fair",
-              driver: tripDetails.driver
-                ? {
-                    ...tripDetails.driver,
-                    rating: tripDetails.driver?.rating || 5.0,
-                    vehicle: tripDetails.vehicle,
-                  }
-                : undefined,
-            };
-            const socket = await waitForSocket(role);
-            if (socket)
-              socket.emit("ride:join_room", { rideId: tripDetails.rideId });
-            setCurrentRide(resumedRide);
-            updateRideData({ status: state, activeTrip: tripDetails });
-          } else if (state === "on_rating") {
-            updateRideData({ status: "completed", activeTrip: tripDetails });
-          } else clearRideData();
-        }
-      } catch (err) {
-        console.error("❌ App Resumption Error:", err);
-      } finally {
-        setReconnecting(false);
-      }
-    });
-  }, [updateRideData, clearRideData]);
 
   const fetchPrices = useCallback(
     async (pickup: Place, destination: Place) => {
@@ -329,7 +339,6 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
       value={{
         rideData,
         loading,
-        reconnecting,
         error,
         currentRide,
         updateRideData,
@@ -339,7 +348,6 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
         cancelRide,
         fetchRecentDestinations,
         hideRecentDestination,
-        checkExistingState,
         fetchPrices,
       }}
     >

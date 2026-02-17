@@ -1,12 +1,10 @@
-// app/driver/index.tsx
-import { theme } from "@/constants/theme";
 import { getUserInfo } from "@/utils/storage";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native"; // Added ActivityIndicator
 
 import TripStatusModal, { ModalType } from "../../components/TripStatusModal";
-import { useRideBooking } from "../context/RideBookingContext";
+import { useSessionRestoration } from "../services/useSessionRestoration"; // ✅ Import the new hook
 import DriverFooterNav from "./components/DriverFooterNav";
 import DriverHeader from "./components/DriverHeader";
 import Sidebar from "./components/DriverSideBar";
@@ -21,9 +19,8 @@ import {
   handleDriverResponse,
   isDriverOnline,
   onNewRideRequest,
-  onRemoveRideRequest
+  onRemoveRideRequest,
 } from "./socketConnectionUtility/driverSocketService";
-// app/driver/socketConnectionUtility/driverSocketService.ts
 
 type Screen = "home" | "wallet" | "revenue" | "notifications";
 export type SubmissionState = "idle" | "submitting" | "submitted";
@@ -41,10 +38,11 @@ const DriverDashboard: React.FC = () => {
   const [incomingRides, setIncomingRides] = useState<any[]>([]);
   const [online, setOnline] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [trayHeight, setTrayHeight] = useState(0); // ✅ Unified Modal State
+  const [trayHeight, setTrayHeight] = useState(0);
 
-  const { checkExistingState, reconnecting } = useRideBooking();
-  const hasCheckedState = useRef(false);
+  // ✅ Use the restoration hook
+  const { restoreSession, isRestoring } = useSessionRestoration();
+  const hasInitialized = useRef(false);
 
   const [modalConfig, setModalConfig] = useState({
     visible: false,
@@ -58,14 +56,16 @@ const DriverDashboard: React.FC = () => {
   >({});
   const [submittedOffers, setSubmittedOffers] = useState<
     Record<string, number>
-  >({}); // ✅ Listener for Trip Cancellation (Reusable Modal)
+  >({});
 
+  // 1. Unified Initialization Logic
   useEffect(() => {
     const initDriver = async () => {
-      if (hasCheckedState.current) return; // ✅ Exit if already checked
+      if (hasInitialized.current) return;
+      hasInitialized.current = true;
+
       setLoading(true);
       try {
-        // 1. Load basic user info
         const user = await getUserInfo();
         if (!user) {
           router.replace("/auth/get-started" as any);
@@ -73,8 +73,8 @@ const DriverDashboard: React.FC = () => {
         }
         setDriverInfo(user);
 
-        //  check if we need to restore session state (only on initial load, not on reconnects)
-        await checkExistingState(); // now guarded globally
+        // ✅ Extracting logic to the service module
+        await restoreSession();
       } catch (err) {
         console.error("❌ Driver Init Error:", err);
       } finally {
@@ -83,33 +83,29 @@ const DriverDashboard: React.FC = () => {
     };
 
     initDriver();
-  }, []);
+  }, [restoreSession, router]);
 
+  // 2. Existing Handlers
   const handleCloseModal = () => {
-    setModalConfig((prev) => ({ ...prev, visible: false })); // Transition the tray back to the "Online" state (radar mode)
-
+    setModalConfig((prev) => ({ ...prev, visible: false }));
     if (driverTrayRef.current) {
       driverTrayRef.current.goOnline();
     }
   };
 
+  // 3. Socket Listeners
   useEffect(() => {
     if (!online) return;
-
     const unsubscribe = onRemoveRideRequest((rideId) => {
-      // 1. Remove from the global incoming list
-      setIncomingRides((prev) => prev.filter((r) => r.rideId !== rideId)); // 2. If the tray for this specific ride is open, close it
-      // (Assuming you want to kick the driver out of the view if the ride is gone)
-      // You can check if the current rideId in the tray matches
+      console.log("📡 Driver - Ride removed:", rideId);
+      setIncomingRides((prev) => prev.filter((r) => r.rideId !== rideId));
     });
-
     return () => unsubscribe();
   }, [online]);
 
   useEffect(() => {
     if (!online) return;
     const unsubscribe = onNewRideRequest((newRide: any) => {
-      console.log("New ride request received:", newRide);
       setIncomingRides((prev) => {
         if (prev.find((r) => r.rideId === newRide.rideId)) return prev;
         return [...prev, newRide];
@@ -122,6 +118,7 @@ const DriverDashboard: React.FC = () => {
     return () => disconnectDriver();
   }, []);
 
+  // 4. Status Polling
   useEffect(() => {
     const interval = setInterval(() => {
       const currentOnline = isDriverOnline();
@@ -140,7 +137,6 @@ const DriverDashboard: React.FC = () => {
   }, [online]);
 
   const handleDecline = (ride: any) => {
-    // This triggers the removal of the ride from the state
     setIncomingRides((prev) =>
       prev.filter((r) => r.rideId !== (ride.rideId || ride)),
     );
@@ -189,6 +185,15 @@ const DriverDashboard: React.FC = () => {
     );
   };
 
+  // ✅ Added Loading State UI
+  if (loading || isRestoring) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#000" />
+      </View>
+    );
+  }
+
   const renderScreen = () => {
     switch (activeScreen) {
       default:
@@ -205,13 +210,6 @@ const DriverDashboard: React.FC = () => {
         );
     }
   };
-
-  if (loading)
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    );
 
   return (
     <View style={styles.container}>
@@ -250,7 +248,6 @@ const DriverDashboard: React.FC = () => {
         onClose={() => {}}
       />
       <DriverFooterNav active={activeScreen} onChange={setActiveScreen} />
-      {/* ✅ REUSABLE STATUS MODAL */}
       <TripStatusModal
         visible={modalConfig.visible}
         type={modalConfig.type}
@@ -265,18 +262,12 @@ const DriverDashboard: React.FC = () => {
 export default DriverDashboard;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  content: {
-    flex: 1,
-    backgroundColor: "transparent",
-    zIndex: 1,
-  },
+  container: { flex: 1, backgroundColor: "#fff" },
+  content: { flex: 1, backgroundColor: "transparent", zIndex: 1 },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#fff",
   },
 });

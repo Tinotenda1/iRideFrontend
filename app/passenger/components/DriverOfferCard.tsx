@@ -125,9 +125,7 @@ export const DriverOfferCard: React.FC<Props> = ({
           />
           <View style={styles.ratingBadge}>
             <Ionicons name="star" size={10} color="#FFC107" />
-            <Text style={styles.ratingText}>
-              {offer.driver.rating || "5.0"}
-            </Text>
+            <Text style={styles.ratingText}>{offer.driver.rating}</Text>
           </View>
           <Text style={styles.ridesText}>
             {offer.driver.totalTrips || 0} rides

@@ -15,7 +15,7 @@ const HIDDEN_POSITION = -300;
 
 const TripLocationCard: React.FC<TripLocationCardProps> = ({ onPress }) => {
   const insets = useSafeAreaInsets();
-  const { rideData } = useRideBooking();
+  const { rideData, currentRide } = useRideBooking();
   const RIDE_DELAY = Number(
     process.env.ride_Tab_And_Trip_Location_Card_Delay || 600,
   );
@@ -77,7 +77,7 @@ const TripLocationCard: React.FC<TripLocationCardProps> = ({ onPress }) => {
               ]}
               numberOfLines={1}
             >
-              {rideData.pickupLocation?.name || "Current Location"}
+              {currentRide?.pickup?.address || rideData.pickupLocation?.name}
             </Text>
           </View>
           <View style={styles.divider} />
@@ -90,7 +90,7 @@ const TripLocationCard: React.FC<TripLocationCardProps> = ({ onPress }) => {
               ]}
               numberOfLines={1}
             >
-              {rideData.destination?.name || "Select Destination"}
+              {currentRide?.destination?.address || rideData.destination?.name}
             </Text>
           </View>
         </View>

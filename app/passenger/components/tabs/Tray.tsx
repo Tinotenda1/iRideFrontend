@@ -28,6 +28,7 @@ interface TrayProps {
   onLocationInputFocus?: (field: "pickup" | "destination") => void;
   onOpenAdditionalInfo?: () => void;
   hasOffers?: boolean;
+  onClearOffers?: () => void;
 }
 
 const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
@@ -47,6 +48,7 @@ const Tray = forwardRef<any, TrayProps>(
       onLocationInputFocus,
       onOpenAdditionalInfo,
       hasOffers,
+      onClearOffers, // ✅ ADD THIS
     },
     ref,
   ) => {
@@ -346,6 +348,8 @@ const Tray = forwardRef<any, TrayProps>(
                 }}
                 onBackToRide={() => handleTransition("ride")}
                 hasOffers={!!hasOffers}
+                // ✅ Pass it through (verify this line exists)
+                onClearOffers={onClearOffers}
               />
             </Animated.View>
 

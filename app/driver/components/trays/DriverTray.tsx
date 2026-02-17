@@ -182,7 +182,8 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         status !== "active"
       ) {
         // If it's a fresh resumption, we might want it expanded to show the passenger
-        const shouldExpand = rideData.status === "matched";
+        const shouldExpand =
+          rideData.status === "matched" || rideData.status === "arrived";
         handleTransition("active", shouldExpand);
       }
     }, [rideData.status, rideData.activeTrip, status, handleTransition]);

@@ -1,5 +1,3 @@
-// app/services/sessionRestore.ts
-
 let hasRestored = false;
 let isRestoring = false;
 
@@ -16,13 +14,9 @@ export async function restoreSessionOnce(restoreFn: () => Promise<void>) {
 
   try {
     isRestoring = true;
-
     console.log("🔄 Restoring session...");
-
     await restoreFn();
-
     hasRestored = true;
-
     console.log("✅ Session restored");
   } catch (err) {
     console.error("❌ Restore failed:", err);
@@ -35,3 +29,6 @@ export function resetSessionRestore() {
   hasRestored = false;
   isRestoring = false;
 }
+
+// ✅ Fix the WARN: Route missing required default export
+export default { restoreSessionOnce, resetSessionRestore };

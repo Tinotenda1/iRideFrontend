@@ -1,31 +1,96 @@
 // app/_layout.tsx
 import { Stack } from "expo-router";
-import { useEffect, useRef } from "react";
-import {
-  ActivityIndicator,
-  AppState,
-  AppStateStatus,
-  StyleSheet,
-  View,
-} from "react-native";
+import { useCallback, useEffect, useRef } from "react";
+import { AppState, AppStateStatus, StyleSheet } from "react-native";
+
 import { initializeAuthToken } from "../utils/api";
-import { getUserInfo } from "../utils/storage";
 import {
-  RideBookingProvider,
-  useRideBooking,
+  checkUserSession,
+  getUserInfo,
+  validateDeviceId,
+} from "../utils/storage";
+
+import {
+  RideBookingProvider
 } from "./context/RideBookingContext";
+
 import {
   connectDriver,
   getDriverSocketStatus,
 } from "./driver/socketConnectionUtility/driverSocketService";
+
 import {
   connectPassenger,
   getPassengerSocketStatus,
 } from "./passenger/socketConnectionUtility/passengerSocketService";
 
 function RootContent() {
-  const { checkExistingState, reconnecting } = useRideBooking();
-  const appState = useRef(AppState.currentState);
+  const appState = useRef<AppStateStatus>(AppState.currentState);
+
+  // 🔄 Handle app going to background/foreground
+  const handleAppStateChange = useCallback(
+    async (nextAppState: AppStateStatus) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === "active"
+      ) {
+        const user = await getUserInfo();
+        if (!user) return;
+
+        // 1️⃣ Device validation
+        const { isValid: deviceValid } = await validateDeviceId();
+        if (!deviceValid) return;
+
+        // 2️⃣ Session check
+        const session = await checkUserSession();
+        if (!session.isAuthenticated || !session.onboardingCompleted) return;
+
+        // 4️⃣ Socket reconnect
+        if (
+          user.userType === "driver" &&
+          getDriverSocketStatus() !== "offline"
+        ) {
+          await connectDriver();
+        } else if (
+          user.userType === "passenger" &&
+          getPassengerSocketStatus() !== "offline"
+        ) {
+          await connectPassenger();
+        }
+      }
+      appState.current = nextAppState;
+    },
+    [],
+  );
+
+  // 🔄 Initial boot sequence
+  const initialSync = useCallback(async () => {
+    const user = await getUserInfo();
+    if (!user) return;
+
+    // 1️⃣ Device validation
+    const { isValid: deviceValid } = await validateDeviceId();
+    if (!deviceValid) {
+      console.warn("Device not valid, stopping reconnection.");
+      return;
+    }
+
+    // 2️⃣ Session check
+    const session = await checkUserSession();
+    if (!session.isAuthenticated || !session.onboardingCompleted) {
+      console.warn("Session invalid, redirect to login.");
+      return;
+    }
+
+    // 3️⃣ Restore previous session (ride state)
+
+    // 4️⃣ Connect socket AFTER session restored
+    if (user.userType === "driver") {
+      await connectDriver();
+    } else {
+      await connectPassenger();
+    }
+  }, []);
 
   useEffect(() => {
     initializeAuthToken();
@@ -35,60 +100,19 @@ function RootContent() {
       handleAppStateChange,
     );
 
-    const initialSync = async () => {
-      const user = await getUserInfo();
-      if (!user) {
-        // If no user, we can't reconnect, so stop loading
-        // (Assuming you have a way to set reconnecting to false in context if needed)
-        return;
-      }
-
-      // 1. Establish Socket Connection
-      if (user.userType === "driver") {
-        await connectDriver();
-      } else if (user.userType === "passenger") {
-        await connectPassenger();
-      }
-
-      // 2. Fetch Source of Truth from Backend
-      await checkExistingState();
-    };
-
     initialSync();
 
-    return () => {
-      subscription.remove();
-    };
-  }, []);
+    return () => subscription.remove();
+  }, [handleAppStateChange, initialSync]);
 
-  const handleAppStateChange = async (nextAppState: AppStateStatus) => {
-    if (
-      appState.current.match(/inactive|background/) &&
-      nextAppState === "active"
-    ) {
-      const user = await getUserInfo();
-      if (!user) return;
-
-      if (user.userType === "driver") {
-        if (getDriverSocketStatus() !== "offline") await connectDriver();
-      } else if (user.userType === "passenger") {
-        if (getPassengerSocketStatus() !== "offline") await connectPassenger();
-      }
-
-      // Re-sync state whenever app comes to foreground
-      await checkExistingState();
-    }
-    appState.current = nextAppState;
-  };
-
-  // ⚡ IMPLEMENTING LOADING STATE
+  /*/ ⚡ Show loader while reconnecting
   if (reconnecting) {
     return (
       <View style={styles.loaderContainer}>
         <ActivityIndicator size="large" color="#ffffff" />
       </View>
     );
-  }
+  }*/
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

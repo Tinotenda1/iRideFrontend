@@ -15,7 +15,9 @@ import {
 import RatingModal from "../../components/RatingModal";
 import TripStatusModal, { ModalType } from "../../components/TripStatusModal";
 import { submitUserRating } from "../../utils/ratingSubmittion";
+import { getUserInfo } from "../../utils/storage";
 import { RideResponse, useRideBooking } from "../context/RideBookingContext";
+import { useSessionRestoration } from "../services/useSessionRestoration";
 import { DriverOfferCard } from "./components/DriverOfferCard";
 import MapContainer from "./components/map/MapContainer";
 import Sidebar from "./components/passengerSidebar";
@@ -41,6 +43,9 @@ const PassengerScreen: React.FC = () => {
   const RIDE_DELAY = Number(
     process.env.ride_Tab_And_Trip_Location_Card_Delay || 600,
   );
+
+  // --- Session Restoration ---
+  const { restoreSession, isRestoring } = useSessionRestoration();
 
   // --- Socket & Context ---
   const socket = getPassengerSocket();
@@ -93,6 +98,13 @@ const PassengerScreen: React.FC = () => {
       }
 
       setIsSubmitting(true);
+
+      console.log("🚀 Submitting rating:", {
+        stars,
+        comment,
+        driverPhone,
+        rideId,
+      });
 
       try {
         const success = await submitUserRating(
@@ -148,16 +160,37 @@ const PassengerScreen: React.FC = () => {
     });
   }, []);
 
+  const removeOfferForUnmatchedDrivers = useCallback(async (rideId: string) => {
+    console.log(`Removing offer for unmatched drivers for ride ${rideId}`);
+
+    const userData = await getUserInfo(); // ✅ Await
+
+    if (!userData?.phone) {
+      console.warn("⚠️ No user phone found");
+      return;
+    }
+
+    const activeSocket = getPassengerSocket();
+
+    if (activeSocket?.connected) {
+      activeSocket.emit("driver:offer_cancelled", {
+        rideId,
+        passengerPhone: userData.phone, // ✅ Now valid
+      });
+    }
+  }, []);
+
   const handleAcceptOffer = useCallback(
     async (offer: any) => {
       updateRideData({ status: "matched" });
+      setCurrentRide(offer);
       const activeSocket = getPassengerSocket();
       activeSocket?.emit("passenger:select_driver", {
         rideId: offer.rideId,
         driverPhone: offer.driver.phone,
       });
     },
-    [updateRideData],
+    [updateRideData, setCurrentRide],
   );
 
   const handleDeclineOffer = useCallback(
@@ -247,8 +280,12 @@ const PassengerScreen: React.FC = () => {
   // 2. LIFECYCLE: APP STATE
   // -------------------------------------------------
   useEffect(() => {
+    // 1. Initial Data Fetching
     fetchRecentDestinations();
     connectPassenger();
+
+    // 2. Trigger Session Restoration Logic
+    restoreSession();
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (
         appState.current === "active" &&
@@ -272,6 +309,37 @@ const PassengerScreen: React.FC = () => {
     };
   }, []);
 
+  // This Effect handles the transition to the Rating Modal when a ride completes
+  useEffect(() => {
+    if (rideData.status === "completed" && currentRide) {
+      console.log("🏁 Ride completed detected. Opening rating modal...");
+
+      // 1. Capture the driver details for the Rating Modal
+      setRatingSnapshot({
+        rideId: currentRide.rideId,
+        driverPhone: currentRide.driver?.phone,
+        driverName: currentRide.driver?.name,
+        driverPic: currentRide.driver?.profilePic,
+      });
+
+      // 2. Show the modal
+      setRatingVisible(true);
+
+      // 3. Reset the UI state to idle so they can book again
+      // We keep currentRide until handleRatingSubmit cleans it up
+      updateRideData({
+        status: "idle",
+        destination: null,
+      });
+
+      // 4. Reset the UI tray to the search input
+      trayRef.current?.switchToInput();
+
+      // 5. Refresh history
+      fetchRecentDestinations();
+    }
+  }, [rideData.status, currentRide, updateRideData, fetchRecentDestinations]);
+
   // -------------------------------------------------
   // 3. LISTENERS (Socket Events)
   // -------------------------------------------------
@@ -291,7 +359,7 @@ const PassengerScreen: React.FC = () => {
 
       // Show rating modal
       setRatingVisible(true);
-      updateRideData({ status: "idle", destination: null });
+      updateRideData({ status: "completed", destination: null });
       trayRef.current?.switchToInput();
       fetchRecentDestinations();
     };
@@ -476,6 +544,21 @@ const PassengerScreen: React.FC = () => {
         }}
         onOpenAdditionalInfo={() => infoTrayRef.current?.open()}
         hasOffers={offers.length > 0}
+        // ✅ LOGGING ADDED HERE
+        onClearOffers={() => {
+          console.log("📢 [PassengerScreen] onClearOffers triggered.");
+
+          const rideId = currentRide?.rideId || rideData?.activeTrip?.rideId;
+
+          console.log("🆔 [PassengerScreen] Cancelling ride:", rideId);
+
+          if (!rideId) {
+            console.warn("⚠️ No rideId found for cancellation");
+            return;
+          }
+
+          removeOfferForUnmatchedDrivers(rideId);
+        }}
       />
 
       {offers.length > 0 && rideData.status !== "matched" && (

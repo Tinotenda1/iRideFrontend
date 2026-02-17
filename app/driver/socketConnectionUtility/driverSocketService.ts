@@ -229,9 +229,7 @@ export const onRideCancelled = (callback: (data: any) => void) => {
   };
 };
 
-export const onRemoveRideRequest = (
-  callback: (data: { rideId: string }) => void,
-) => {
+export const onRemoveRideRequest = (callback: (data: any) => void) => {
   if (!socket) return () => {};
   const eventName = "ride:remove_request";
   socket.on(eventName, callback);

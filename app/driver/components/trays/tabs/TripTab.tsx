@@ -262,7 +262,7 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
           <IRButton
             title="Cancel Trip"
             variant="ghost"
-            disabled={isArriving || status === "arrived" || isCancelling}
+            disabled={isArriving || isCancelling}
             style={
               isArriving || status === "arrived" ? { opacity: 0.5 } : undefined
             }

@@ -1,16 +1,18 @@
+// app/passenger/components/tabs/SearchingTab.tsx
+
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, BackHandler, StyleSheet, Text, View } from "react-native";
+import CancelButton from "../../../../components/CancelButton";
 import { theme } from "../../../../constants/theme";
 import { getUserInfo } from "../../../../utils/storage";
-// Import the new component
-import CancelButton from "../../../../components/CancelButton";
 
 interface SearchingTabProps {
   onCancel: () => void;
   onBackToRide: () => void;
   hasOffers: boolean;
   isActive: boolean;
+  onClearOffers?: () => void;
 }
 
 const SearchingTab: React.FC<SearchingTabProps> = ({
@@ -18,25 +20,33 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
   onBackToRide,
   hasOffers,
   isActive,
+  onClearOffers,
 }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [isCancelling, setIsCancelling] = useState(false);
   const [showNoDrivers, setShowNoDrivers] = useState(false);
 
   const isMounted = useRef(true);
-  const NO_DRIVERS_TIMEOUT = 60000; // 60 seconds
+  const NO_DRIVERS_TIMEOUT = 60000;
+
+  // ✅ Log on mount/prop change
+  useEffect(() => {
+    console.log("👀 [SearchingTab] Prop update:", {
+      isActive,
+      hasOnClearOffers: !!onClearOffers,
+    });
+  }, [isActive, onClearOffers]);
 
   useEffect(() => {
     isMounted.current = true;
     return () => {
       isMounted.current = false;
-      console.log("🚫 SearchingTab Unmounted: All background tasks blocked.");
+      console.log("🚫 [SearchingTab] Unmounted");
     };
   }, []);
 
   useEffect(() => {
     if (!isActive) return;
-
     const backAction = () => {
       if (showNoDrivers) {
         setShowNoDrivers(false);
@@ -45,7 +55,6 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
       }
       return true;
     };
-
     const backHandler = BackHandler.addEventListener(
       "hardwareBackPress",
       backAction,
@@ -58,7 +67,6 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
       pulseAnim.setValue(1);
       return;
     }
-
     const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -73,9 +81,7 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
         }),
       ]),
     );
-
     animation.start();
-
     return () => {
       animation.stop();
       pulseAnim.setValue(1);
@@ -84,16 +90,32 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
 
   const performCancellation = useCallback(
     async (isAutoCancel = false) => {
-      if (!isMounted.current || !isActive || isCancelling) return;
+      console.log("1️⃣ [SearchingTab] performCancellation started");
+
+      if (!isMounted.current) {
+        console.log("❌ [SearchingTab] Cancel aborted: Component unmounted");
+        return;
+      }
+
+      if (!isActive) {
+        console.log("❌ [SearchingTab] Cancel aborted: Tab not active");
+        return;
+      }
+
+      if (isCancelling) {
+        console.log("❌ [SearchingTab] Cancel aborted: Already cancelling");
+        return;
+      }
 
       setIsCancelling(true);
+
       try {
         const userInfo = await getUserInfo();
-        const formattedPhone = userInfo?.phone?.replace("+", "") || "";
 
-        console.log(
-          `📡 Sending ${isAutoCancel ? "Auto-" : "Manual "}Cancel Request...`,
-        );
+        const rawPhone = userInfo?.phone || "";
+        const formattedPhone = rawPhone.replace(/\D/g, "");
+
+        console.log("2️⃣ [SearchingTab] Sending cancel API request...");
 
         const response = await fetch(
           `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/rides/cancel`,
@@ -104,17 +126,64 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
               "x-device-id":
                 userInfo?.currentDeviceId || userInfo?.deviceId || "",
             },
-            body: JSON.stringify({ passengerPhone: formattedPhone }),
+            body: JSON.stringify({
+              userPhone: formattedPhone,
+              reason: isAutoCancel
+                ? "No drivers available"
+                : "Cancelled by passenger",
+            }),
           },
         );
 
         const result = await response.json();
-        console.log("✅ Cancel response:", result);
+
+        console.log("3️⃣ [SearchingTab] API Response:", result);
+
+        /* =====================================================
+         ✅ SOCKET NOTIFICATION (CRITICAL FIX)
+      ===================================================== */
+
+        if (result?.rideId) {
+          console.log("📡 [SearchingTab] Emitting driver:offer_cancelled:", {
+            rideId: result.rideId,
+            passengerPhone: formattedPhone,
+          });
+
+          // Lazy import to avoid circular deps
+          const { getPassengerSocket } =
+            await import("../../socketConnectionUtility/passengerSocketService");
+
+          const socket = getPassengerSocket();
+
+          if (socket?.connected) {
+            socket.emit("driver:offer_cancelled", {
+              rideId: result.rideId,
+              passengerPhone: formattedPhone,
+            });
+          } else {
+            console.warn(
+              "⚠️ [SearchingTab] Socket not connected, cancel not emitted",
+            );
+          }
+        } else {
+          console.warn(
+            "⚠️ [SearchingTab] Cancel API did not return rideId:",
+            result,
+          );
+        }
       } catch (error) {
-        console.error("❌ Cancel failed:", error);
+        console.error("❌ [SearchingTab] Cancel API failed:", error);
       } finally {
         if (isMounted.current) {
+          console.log("4️⃣ [SearchingTab] Finally block executing");
+
           setIsCancelling(false);
+
+          if (onClearOffers) {
+            console.log("5️⃣ [SearchingTab] Calling onClearOffers()...");
+            onClearOffers();
+          }
+
           if (!isAutoCancel) {
             setShowNoDrivers(false);
             onCancel();
@@ -122,28 +191,21 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
         }
       }
     },
-    [isCancelling, onCancel, isActive],
+    [isCancelling, onCancel, isActive, onClearOffers],
   );
 
   useEffect(() => {
     if (showNoDrivers || !isActive || hasOffers) {
       return;
     }
-
     const timer = setTimeout(() => {
       if (isMounted.current && isActive && !hasOffers) {
-        console.log("⏱️ Timeout triggered: No offers found.");
+        console.log("⏱️ [SearchingTab] Timeout: Auto-cancelling");
         setShowNoDrivers(true);
         performCancellation(true);
-      } else {
-        console.log("🛡️ Auto-cancel blocked: Match confirmed or tab exited.");
       }
     }, NO_DRIVERS_TIMEOUT);
-
-    return () => {
-      console.log("🧹 Clearing SearchingTab timer");
-      clearTimeout(timer);
-    };
+    return () => clearTimeout(timer);
   }, [hasOffers, showNoDrivers, performCancellation, isActive]);
 
   return (

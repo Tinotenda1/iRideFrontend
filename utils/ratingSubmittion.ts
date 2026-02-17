@@ -22,6 +22,7 @@ export const submitUserRating = async (
       submitter: submitterPhone,
       target: targetPhone,
       rideId,
+      comment,
     });
 
     const response = await fetch(
