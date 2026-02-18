@@ -163,7 +163,10 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
       }
     } catch (error) {
       console.error("❌ Drop me here failed:", error);
-      Alert.alert("Connection Error", "Unable to reach the server.");
+      Alert.alert(
+        "Connection Error",
+        "Please check your internet connection and try again.",
+      );
     } finally {
       if (isMounted.current) setIsCancelling(false);
     }

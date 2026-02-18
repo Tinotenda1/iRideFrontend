@@ -333,7 +333,7 @@ export default function RideRequestCard({
             <Text
               style={[styles.metaLabel, isSubmitted && styles.submittedText]}
             >
-              {rideData.rideDistanceKm || "0"}km trip
+              {parseFloat(rideData.rideDistanceKm || "0").toFixed(2)}km
             </Text>
           </View>
 

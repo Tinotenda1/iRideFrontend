@@ -87,14 +87,26 @@ const DriverDashboard: React.FC = () => {
   const { restoreSession } = useSessionRestoration();
 
   useEffect(() => {
+    console.log("🛠️ Initializing Reconnect Listener");
+
     const unsubscribe = onReconnectState((data) => {
-      restoreSession(data);
+      if (data) {
+        console.log("🔄 Reconnect Data Received, Restoring Session:", data);
+        restoreSession(data);
+
+        // If they were on a trip, clear the local pending requests to avoid clutter
+        if (data.activeTrip) {
+          setIncomingRides([]);
+          setSubmissionStates({});
+          setSubmittedOffers({});
+        }
+      }
     });
 
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [restoreSession]);
 
   // 2. Existing Handlers
   const handleCloseModal = () => {
@@ -240,6 +252,7 @@ const DriverDashboard: React.FC = () => {
           setIncomingRides([]);
           setSubmissionStates({});
           setSubmittedOffers({});
+          rideTrayRef.current?.close();
         }}
       />
       <RideRequestTray

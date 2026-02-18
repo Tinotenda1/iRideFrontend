@@ -75,6 +75,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
     const heightAnim = useRef(new Animated.Value(0)).current;
     const translateY = useRef(new Animated.Value(windowHeight)).current;
     const transitionAnim = useRef(new Animated.Value(0)).current;
+    const [isEndingTrip, setIsEndingTrip] = useState(false);
     const [statusModal, setStatusModal] = useState<{
       visible: boolean;
       type: ModalType; // Use the specific union type here
@@ -237,7 +238,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
 
         handleTransition("online");
 
-        // 2. Show the "Completion" Modal
+        /*// 2. Show the "Completion" Modal
         setStatusModal({
           visible: true,
           type: "completion",
@@ -245,7 +246,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
           message:
             data.message ||
             "The passenger ended the trip. Please rate your experience.",
-        });
+        });*/
       },
       [updateRideData, handleTransition],
     );
@@ -365,31 +366,85 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
 
       handleTransition("active", false);
     };
-
     const handleEndTrip = async () => {
       const rId = rideData.activeTrip?.rideId;
 
-      if (!rId) return;
+      if (!rId || isEndingTrip) return;
+
+      const MAX_RETRIES = 3;
+
+      let attempt = 0;
+      let success = false;
 
       try {
-        const response = await fetch(
-          `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/rides/driver_ends_ride`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rideId: rId }),
-          },
+        setIsEndingTrip(true);
+
+        // Small delay for smooth UX
+        await new Promise((r) => setTimeout(r, 300));
+
+        /* ============================
+        Retry Loop
+    ============================ */
+        while (attempt < MAX_RETRIES && !success) {
+          attempt++;
+
+          try {
+            console.log(`🏁 Ending trip (Attempt ${attempt})`);
+
+            const response = await fetch(
+              `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/rides/driver_ends_ride`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ rideId: rId }),
+              },
+            );
+
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+
+            const result = await response.json();
+
+            if (!result?.success) {
+              throw new Error("Server rejected request");
+            }
+
+            /* ============================
+            Success
+        ============================ */
+            console.log("✅ Trip ended by driver");
+
+            updateRideData({ status: "on_rating" });
+
+            handleTransition("online");
+
+            success = true;
+            return;
+          } catch (err) {
+            console.error(`❌ End trip failed (Attempt ${attempt})`, err);
+
+            if (attempt < MAX_RETRIES) {
+              // Small pause before retry
+              await new Promise((r) => setTimeout(r, 700));
+            }
+          }
+        }
+
+        /* ============================
+        Final Failure (No Auto Retry)
+    ============================ */
+        Alert.alert(
+          "Connection Problem",
+          "We could not end the trip. Please check your internet connection and try again, or ask the passenger to end the trip from their app.",
+          [{ text: "OK" }],
         );
 
-        const result = await response.json();
-
-        if (result.success) {
-          updateRideData({ status: "on_rating" });
-
-          handleTransition("online");
-        }
-      } catch (error) {
-        console.error(error);
+        console.warn("⚠️ End trip failed after all retries");
+      } finally {
+        setIsEndingTrip(false);
       }
     };
 

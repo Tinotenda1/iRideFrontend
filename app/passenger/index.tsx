@@ -140,13 +140,24 @@ const PassengerScreen: React.FC = () => {
         );
 
         if (!success) {
-          Alert.alert("Error", "Failed to submit rating.");
+          Alert.alert(
+            "Error",
+            "Could not submit rating. Please make sure you have an active internet connection and try again.",
+          );
           return;
         }
 
         setRatingVisible(false);
         setRatingSnapshot(null);
         setCurrentRide(null);
+
+        /* FORCE FULL RESET */
+        updateRideData({
+          status: "idle",
+          destination: null,
+          activeTrip: null,
+          //offer: null,
+        });
       } finally {
         setIsSubmitting(false);
       }
@@ -316,6 +327,7 @@ const PassengerScreen: React.FC = () => {
       updateRideData({
         status: "completed",
         destination: null,
+        activeTrip: null,
       });
 
       trayRef.current?.switchToInput();

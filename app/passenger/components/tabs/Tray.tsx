@@ -69,23 +69,28 @@ const Tray = forwardRef<any, TrayProps>(
     // If context changes (e.g. server updates status), update the tab
     // --- MONITOR CONTEXT STATUS ---
     useEffect(() => {
+      /* HARD RESET CASE */
+      if (!rideData.destination) {
+        if (currentTab !== "input") {
+          handleTransition("input");
+        }
+        return;
+      }
+
       if (rideData.status === "on_trip" && currentTab !== "on_trip") {
         handleTransition("on_trip");
       } else if (
         (rideData.status === "matched" || rideData.status === "arrived") &&
-        currentTab !== "matched" &&
-        currentTab !== "on_trip"
+        currentTab !== "matched"
       ) {
         handleTransition("matched");
-      }
-      // ✅ Updated: Include 'completed' to trigger reset to input tab
-      else if (
-        (rideData.status === "idle" || rideData.status === "completed") &&
-        currentTab !== "input"
+      } else if (
+        rideData.status === "searching" &&
+        currentTab !== "searching"
       ) {
-        handleTransition("input");
+        handleTransition("searching");
       }
-    }, [rideData.status]);
+    }, [rideData.status, rideData.destination]);
 
     // --- MOUNT LOGIC (Session Restoration) ---
     useEffect(() => {

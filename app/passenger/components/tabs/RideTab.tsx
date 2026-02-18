@@ -129,8 +129,8 @@ const RideTab: React.FC<TabProps> = ({
       onSwitchToSearching();
     } catch (error) {
       Alert.alert(
-        "Connection Issue",
-        "Please check your internet and try again.",
+        "Connection Problem",
+        "We are having trouble connecting right now. Please check your internet and try again.",
       );
     } finally {
       setIsBooking(false);

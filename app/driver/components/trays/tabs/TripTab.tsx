@@ -155,12 +155,24 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
               <Text style={styles.label}>PASSENGER</Text>
               <Text style={styles.passengerName}>{passenger.name}</Text>
               <View style={styles.ratingRow}>
-                <Ionicons name="star" size={14} color="#FFC107" />
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Ionicons
+                    key={i}
+                    name={
+                      i <= Math.round(parseFloat(passenger.rating || "5"))
+                        ? "star"
+                        : "star-outline"
+                    }
+                    size={14}
+                    color="#FFC107"
+                    style={{ marginRight: 1 }}
+                  />
+                ))}
                 <Text style={styles.ratingText}>
                   {passenger.rating || "5.0"}
                 </Text>
                 <Text style={styles.tripCount}>
-                  • {passenger.totalRides || 0} trips
+                  {"  "}• {passenger.totalRides || 0} trips
                 </Text>
               </View>
             </View>
@@ -224,9 +236,25 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
               ${parseFloat(offer).toFixed(2)}
             </Text>
           </View>
+
           <View style={styles.paymentBadge}>
-            <Ionicons name="cash-outline" size={16} color="#475569" />
-            <Text style={styles.paymentText}>CASH</Text>
+            {/* ✅ Dynamic Icon: 'wallet-outline' for EcoCash, 'cash-outline' for Cash */}
+            <Ionicons
+              name={
+                rideInfo?.paymentMethod?.toLowerCase() === "ecocash"
+                  ? "wallet-outline"
+                  : "cash-outline"
+              }
+              size={16}
+              color="#475569"
+            />
+
+            {/* ✅ Dynamic Text: Forced to Uppercase for consistency */}
+            <Text style={styles.paymentText}>
+              {rideInfo?.paymentMethod?.toLowerCase() === "ecocash"
+                ? "ECOCASH"
+                : "CASH"}
+            </Text>
           </View>
         </View>
       </View>
