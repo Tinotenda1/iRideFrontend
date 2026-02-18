@@ -1,31 +1,36 @@
 // app/_layout.tsx
 import { Stack } from "expo-router";
-import { useCallback, useEffect, useRef } from "react";
-import { AppState, AppStateStatus, StyleSheet } from "react-native";
-
-import { initializeAuthToken } from "../utils/api";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  checkUserSession,
-  getUserInfo,
-  validateDeviceId,
-} from "../utils/storage";
+  ActivityIndicator,
+  AppState,
+  AppStateStatus,
+  StyleSheet,
+  View,
+} from "react-native";
 
-import {
-  RideBookingProvider
-} from "./context/RideBookingContext";
+import { RideBookingProvider } from "./context/RideBookingContext";
 
 import {
   connectDriver,
   getDriverSocketStatus,
 } from "./driver/socketConnectionUtility/driverSocketService";
-
 import {
   connectPassenger,
   getPassengerSocketStatus,
 } from "./passenger/socketConnectionUtility/passengerSocketService";
 
+export default function RootLayout() {
+  return (
+    <RideBookingProvider>
+      <RootContent />
+    </RideBookingProvider>
+  );
+}
+
 function RootContent() {
   const appState = useRef<AppStateStatus>(AppState.currentState);
+  const [reconnecting, setReconnecting] = useState(false);
 
   // 🔄 Handle app going to background/foreground
   const handleAppStateChange = useCallback(
@@ -34,28 +39,30 @@ function RootContent() {
         appState.current.match(/inactive|background/) &&
         nextAppState === "active"
       ) {
-        const user = await getUserInfo();
-        if (!user) return;
+        try {
+          setReconnecting(true);
 
-        // 1️⃣ Device validation
-        const { isValid: deviceValid } = await validateDeviceId();
-        if (!deviceValid) return;
+          const userData = await import("../utils/storage").then((mod) =>
+            mod.getUserInfo(),
+          );
+          if (!userData) return;
 
-        // 2️⃣ Session check
-        const session = await checkUserSession();
-        if (!session.isAuthenticated || !session.onboardingCompleted) return;
-
-        // 4️⃣ Socket reconnect
-        if (
-          user.userType === "driver" &&
-          getDriverSocketStatus() !== "offline"
-        ) {
-          await connectDriver();
-        } else if (
-          user.userType === "passenger" &&
-          getPassengerSocketStatus() !== "offline"
-        ) {
-          await connectPassenger();
+          // Only reconnect sockets; session/device is already handled by SessionChecker
+          if (
+            userData.userType === "driver" &&
+            getDriverSocketStatus() !== "offline"
+          ) {
+            await connectDriver();
+          } else if (
+            userData.userType === "passenger" &&
+            getPassengerSocketStatus() !== "offline"
+          ) {
+            await connectPassenger();
+          }
+        } catch (error) {
+          console.error("❌ Error reconnecting sockets:", error);
+        } finally {
+          setReconnecting(false);
         }
       }
       appState.current = nextAppState;
@@ -63,66 +70,48 @@ function RootContent() {
     [],
   );
 
-  // 🔄 Initial boot sequence
-  const initialSync = useCallback(async () => {
-    const user = await getUserInfo();
-    if (!user) return;
+  // 🔄 Initial socket connection (after session/device already validated)
+  const initialSocketConnection = useCallback(async () => {
+    try {
+      setReconnecting(true);
+      const userData = await import("../utils/storage").then((mod) =>
+        mod.getUserInfo(),
+      );
+      if (!userData) return;
 
-    // 1️⃣ Device validation
-    const { isValid: deviceValid } = await validateDeviceId();
-    if (!deviceValid) {
-      console.warn("Device not valid, stopping reconnection.");
-      return;
-    }
-
-    // 2️⃣ Session check
-    const session = await checkUserSession();
-    if (!session.isAuthenticated || !session.onboardingCompleted) {
-      console.warn("Session invalid, redirect to login.");
-      return;
-    }
-
-    // 3️⃣ Restore previous session (ride state)
-
-    // 4️⃣ Connect socket AFTER session restored
-    if (user.userType === "driver") {
-      await connectDriver();
-    } else {
-      await connectPassenger();
+      if (userData.userType === "driver") {
+        await connectDriver();
+      } else {
+        await connectPassenger();
+      }
+    } catch (error) {
+      console.error("❌ Error connecting sockets:", error);
+    } finally {
+      setReconnecting(false);
     }
   }, []);
 
   useEffect(() => {
-    initializeAuthToken();
-
     const subscription = AppState.addEventListener(
       "change",
       handleAppStateChange,
     );
 
-    initialSync();
+    initialSocketConnection();
 
     return () => subscription.remove();
-  }, [handleAppStateChange, initialSync]);
+  }, [handleAppStateChange, initialSocketConnection]);
 
-  /*/ ⚡ Show loader while reconnecting
+  // ⚡ Show loader only while reconnecting sockets
   if (reconnecting) {
     return (
       <View style={styles.loaderContainer}>
         <ActivityIndicator size="large" color="#ffffff" />
       </View>
     );
-  }*/
+  }
 
   return <Stack screenOptions={{ headerShown: false }} />;
-}
-
-export default function RootLayout() {
-  return (
-    <RideBookingProvider>
-      <RootContent />
-    </RideBookingProvider>
-  );
 }
 
 const styles = StyleSheet.create({

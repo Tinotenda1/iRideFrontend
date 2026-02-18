@@ -6,8 +6,7 @@ import { ROUTES } from "../utils/routes";
 import {
   getAuthToken,
   getOrCreateDeviceId,
-  handleDeviceMismatch,
-  validateDeviceId,
+  handleDeviceMismatch
 } from "./storage";
 
 // ✅ Cache token in memory
@@ -37,14 +36,8 @@ const handleDeviceMismatchLogout = async () => {
 api.interceptors.request.use(async (config) => {
   config.baseURL = config.baseURL || `${getApiBaseUrl()}/api`;
 
-  const isAuth = config.url?.includes("/auth/");
-  if (!isAuth) {
-    const device = await validateDeviceId();
-    if (!device.isValid) throw new Error("DEVICE_MISMATCH");
-  }
-
   if (authToken) config.headers.Authorization = `Bearer ${authToken}`;
-  config.headers["X-Device-ID"] = await getOrCreateDeviceId();
+  config.headers["X-Device-ID"] = await getOrCreateDeviceId(); // keep header for backend
 
   return config;
 });

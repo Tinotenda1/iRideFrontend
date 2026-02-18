@@ -3,14 +3,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   AppState,
   AppStateStatus,
   FlatList,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -540,15 +538,6 @@ const PassengerScreen: React.FC = () => {
     <View style={styles.container}>
       <View style={styles.contentArea}>
         <MapContainer trayHeight={trayHeight} />
-        {/* LOADING STATE (Requirement 2026-01-31) */}
-        {isRestoring && (
-          <View style={styles.loaderOverlay}>
-            <View style={styles.loaderCard}>
-              <ActivityIndicator size="large" color="#000" />
-              <Text style={styles.loaderText}>Resuming your trip...</Text>
-            </View>
-          </View>
-        )}
         <Animated.View
           style={[styles.menuButton, { opacity: menuOpacity }]}
           pointerEvents={rideData.destination ? "none" : "auto"}

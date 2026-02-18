@@ -7,6 +7,7 @@ import * as TaskManager from "expo-task-manager";
 import { Socket } from "socket.io-client";
 
 const LOCATION_TRACKING_TASK = "background-location-tracking";
+let isConnecting = false;
 
 TaskManager.defineTask(LOCATION_TRACKING_TASK, async ({ data, error }: any) => {
   if (error) {
@@ -117,9 +118,11 @@ export const connectDriver = async () => {
   const phone = user?.phone;
 
   if (!phone) return setStatus("error");
+  if (isConnecting || status === "connecting") return;
   if (socket?.connected && status === "connected") return;
 
   shouldStayOnline = true;
+  isConnecting = true;
   setStatus("connecting");
 
   socket = initializeSocket(phone); // CLEANUP existing listeners to prevent memory leaks/duplicate events
@@ -151,6 +154,7 @@ export const connectDriver = async () => {
   });
 
   socket.on("user:connected", () => {
+    isConnecting = false;
     setStatus("connected");
     startHeartbeat();
     startLocationUpdates(); // Turn on background tracking
@@ -166,6 +170,7 @@ export const connectDriver = async () => {
   });
 
   socket.on("disconnect", (reason) => {
+    isConnecting = false;
     console.log("🔌 Disconnected:", reason);
     if (reason === "io client disconnect" || !shouldStayOnline) {
       clearTimers();
@@ -175,6 +180,13 @@ export const connectDriver = async () => {
       // "transport close" or "ping timeout" triggers reconnecting state
       setStatus("reconnecting");
     }
+  });
+
+  socket.on("connect_error", (err) => {
+    console.error("❌ Driver socket connect error:", err.message);
+
+    isConnecting = false;
+    setStatus("error");
   });
 
   if (!socket.connected) socket.connect();

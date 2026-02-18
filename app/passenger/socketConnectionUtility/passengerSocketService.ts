@@ -28,6 +28,7 @@ interface CancelPayload {
 ---------------------------------------- */
 
 let socket: Socket | null = null;
+let isConnecting = false;
 
 let status: PassengerSocketStatus = "offline";
 let shouldStayOnline = false;
@@ -114,6 +115,9 @@ export const connectPassenger = async () => {
 
   const phone = rawPhone.replace(/\D/g, "");
 
+  if (isConnecting || status === "connecting") return;
+
+  isConnecting = true;
   shouldStayOnline = true;
   setStatus("connecting");
 
@@ -153,6 +157,8 @@ export const connectPassenger = async () => {
   ------------------------ */
 
   socket.on("user:connected", () => {
+    isConnecting = false;
+
     setStatus("connected");
 
     startHeartbeat();
@@ -181,6 +187,7 @@ export const connectPassenger = async () => {
   ------------------------ */
 
   socket.on("disconnect", async (reason) => {
+    isConnecting = false;
     console.log("❌ Passenger socket disconnected:", reason);
 
     clearTimers();
@@ -208,6 +215,7 @@ export const connectPassenger = async () => {
   ------------------------ */
 
   socket.on("connect_error", (err) => {
+    isConnecting = false;
     console.error("❌ Socket error:", err.message);
 
     setStatus("error");
