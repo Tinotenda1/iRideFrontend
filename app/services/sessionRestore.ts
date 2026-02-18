@@ -1,3 +1,4 @@
+// services/sessionRestore.ts
 let hasRestored = false;
 let isRestoring = false;
 

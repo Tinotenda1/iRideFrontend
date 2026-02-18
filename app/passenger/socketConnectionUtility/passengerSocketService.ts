@@ -1,9 +1,14 @@
 // app/passenger/socketConnectionUtility/passengerSocketService.ts
+
 import { initializeSocket } from "@/utils/sockets";
 import { getUserInfo } from "@/utils/storage";
 import * as Location from "expo-location";
 import * as Network from "expo-network";
 import { Socket } from "socket.io-client";
+
+/* ----------------------------------------
+   TYPES
+---------------------------------------- */
 
 export type PassengerSocketStatus =
   | "offline"
@@ -18,14 +23,26 @@ interface CancelPayload {
   reason: string;
 }
 
+/* ----------------------------------------
+   STATE
+---------------------------------------- */
+
 let socket: Socket | null = null;
+
 let status: PassengerSocketStatus = "offline";
 let shouldStayOnline = false;
-let isConnecting = false;
+
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+/* External listeners */
+let reconnectListener: ((data: any) => void) | null = null;
 let onCancelCallback: ((data: CancelPayload) => void) | null = null;
 
 const HEARTBEAT_INTERVAL = 10000;
+
+/* ----------------------------------------
+   HELPERS
+---------------------------------------- */
 
 const setStatus = (s: PassengerSocketStatus) => {
   status = s;
@@ -33,8 +50,10 @@ const setStatus = (s: PassengerSocketStatus) => {
 };
 
 const clearTimers = () => {
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
-  heartbeatTimer = null;
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
 };
 
 const isNetworkOnline = async () => {
@@ -44,6 +63,7 @@ const isNetworkOnline = async () => {
 
 const startHeartbeat = () => {
   if (heartbeatTimer) clearInterval(heartbeatTimer);
+
   heartbeatTimer = setInterval(() => {
     if (socket?.connected) {
       socket.emit("user:ping");
@@ -51,15 +71,21 @@ const startHeartbeat = () => {
   }, HEARTBEAT_INTERVAL);
 };
 
+/* ----------------------------------------
+   LOCATION
+---------------------------------------- */
+
 const getPassengerLocation = async () => {
   try {
     const { status: permissionStatus } =
       await Location.getForegroundPermissionsAsync();
+
     if (permissionStatus !== "granted") return null;
 
     const loc = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
     });
+
     return {
       latitude: loc.coords.latitude,
       longitude: loc.coords.longitude,
@@ -70,58 +96,49 @@ const getPassengerLocation = async () => {
   }
 };
 
-export const subscribeToRideCancellation = (
-  callback: (data: CancelPayload) => void,
-) => {
-  onCancelCallback = callback;
-};
+/* ----------------------------------------
+   CONNECTION
+---------------------------------------- */
 
 export const connectPassenger = async () => {
-  // Prevent double-init if already connecting or connected
-  if (isConnecting || (socket?.connected && status === "connected")) {
-    shouldStayOnline = true;
-    return;
-  }
+  console.log("🔄 connectPassenger() function initiated"); // NEW LOG
 
   const user = await getUserInfo();
   const rawPhone = user?.phone;
 
   if (!rawPhone) {
-    console.error("❌ Cannot connect: No phone number found in storage");
+    console.error("❌ Cannot connect: No phone number");
     setStatus("error");
     return;
   }
 
   const phone = rawPhone.replace(/\D/g, "");
-  isConnecting = true;
+
   shouldStayOnline = true;
   setStatus("connecting");
 
-  // ✅ 1. Check Network First
-  const online = await isNetworkOnline();
-  if (!online) {
-    console.warn(
-      "📶 No network detected. Reconnection will trigger when network is back.",
-    );
-    isConnecting = false;
-    setStatus("error");
+  /* Init socket */
+  if (!socket) {
+    socket = initializeSocket(phone);
+  } else {
+    socket.auth = { phone };
+  }
+
+  if (!socket) {
+    console.error("❌ Socket initialization failed");
     return;
   }
 
-  // ✅ 2. Initialize or Reuse Socket
-  if (!socket) {
-    socket = initializeSocket(rawPhone);
-  }
+  /* Clear old listeners */
+  socket.removeAllListeners();
 
-  // ✅ 3. Reset Listeners to avoid duplication
-  socket.off("connect");
-  socket.off("user:connected");
-  socket.off("disconnect");
-  socket.off("connect_error");
+  /* ------------------------
+     CONNECT
+  ------------------------ */
 
-  // ✅ 4. Re-handshake on EVERY connect (important for transport recovery)
   socket.on("connect", async () => {
-    console.log("🔌 Socket transport established. Sending user:connect...");
+    console.log("🔌 Passenger socket connected");
+
     const location = await getPassengerLocation();
 
     socket?.emit("user:connect", {
@@ -131,77 +148,150 @@ export const connectPassenger = async () => {
     });
   });
 
+  /* ------------------------
+     CONNECTED ACK
+  ------------------------ */
+
   socket.on("user:connected", () => {
-    isConnecting = false;
     setStatus("connected");
+
     startHeartbeat();
-  });
 
-  socket.on("disconnect", (reason) => {
-    isConnecting = false;
-    console.log(`❌ Socket Disconnected: ${reason}`);
+    console.log("♻️ Passenger connected. Ready for restore.");
 
-    if (!shouldStayOnline || reason === "io client disconnect") {
-      clearTimers();
-      setStatus("offline");
-    } else {
-      setStatus("reconnecting");
-      // If server closed the connection, we must manually call connect() to try again
-      if (reason === "io server disconnect") {
-        socket?.connect();
-      }
+    /* Rebind reconnect listener */
+    if (reconnectListener && socket) {
+      socket.off("user:reconnect_state", reconnectListener);
+      socket.on("user:reconnect_state", reconnectListener);
     }
   });
 
+  /* ------------------------
+     RECONNECT STATE
+  ------------------------ */
+
+  socket.on("user:reconnect_state", (data) => {
+    if (reconnectListener) {
+      reconnectListener(data);
+    }
+  });
+
+  /* ------------------------
+     DISCONNECT
+  ------------------------ */
+
+  socket.on("disconnect", async (reason) => {
+    console.log("❌ Passenger socket disconnected:", reason);
+
+    clearTimers();
+
+    if (!shouldStayOnline || reason === "io client disconnect") {
+      setStatus("offline");
+      return;
+    }
+
+    setStatus("reconnecting");
+
+    const online = await isNetworkOnline();
+
+    if (online) {
+      setTimeout(() => {
+        if (shouldStayOnline && status !== "connected") {
+          connectPassenger();
+        }
+      }, 3000);
+    }
+  });
+
+  /* ------------------------
+     ERRORS
+  ------------------------ */
+
   socket.on("connect_error", (err) => {
-    isConnecting = false;
-    // This will tell you if it's a Timeout, Connection Refused, or 404
-    console.error("❌ Socket Connect Error Details:", {
-      message: err.message,
-      description: (err as any).description,
-      context: (err as any).context,
-    });
+    console.error("❌ Socket error:", err.message);
+
     setStatus("error");
 
-    // ✅ Recursive Retry: Try again in 5 seconds if we are supposed to be online
     if (shouldStayOnline) {
       setTimeout(() => {
         if (shouldStayOnline && status !== "connected") {
-          console.log("🔄 Attempting background retry...");
           connectPassenger();
         }
       }, 5000);
     }
   });
 
-  // ✅ 5. Trigger Connection
+  /* ------------------------
+     ACTIVATE
+  ------------------------ */
+
   if (!socket.connected) {
     socket.connect();
-  } else {
-    // If already connected but we hit this function, force a re-handshake
-    const location = await getPassengerLocation();
-    socket.emit("user:connect", {
-      phone,
-      userType: "passenger",
-      ...(location && { location }),
-    });
   }
 };
 
+/* ----------------------------------------
+   DISCONNECT
+---------------------------------------- */
+
 export const disconnectPassenger = () => {
-  console.log("🔌 Manually disconnecting passenger socket...");
+  console.log("🔌 Disconnecting passenger...");
+
   shouldStayOnline = false;
-  isConnecting = false;
-  onCancelCallback = null;
+
   clearTimers();
+
+  reconnectListener = null;
+  onCancelCallback = null;
+
   if (socket) {
+    socket.removeAllListeners();
     socket.disconnect();
-    // Clear listeners so they don't fire on a dead object
-    socket.off();
   }
+
+  socket = null;
+
   setStatus("offline");
 };
 
+/* ----------------------------------------
+   SUBSCRIPTIONS
+---------------------------------------- */
+
+export const subscribeToRideCancellation = (
+  callback: (data: CancelPayload) => void,
+) => {
+  onCancelCallback = callback;
+};
+
+/* ----------------------------------------
+   RECONNECT STATE LISTENER
+---------------------------------------- */
+
+export const onReconnectState = (callback: (data: any) => void) => {
+  reconnectListener = callback;
+
+  if (socket) {
+    socket.off("user:reconnect_state");
+    socket.on("user:reconnect_state", callback);
+  }
+
+  /* Unsubscribe */
+  return () => {
+    if (socket && reconnectListener) {
+      socket.off("user:reconnect_state", reconnectListener);
+    }
+
+    reconnectListener = null;
+  };
+};
+
+/* ----------------------------------------
+   GETTERS
+---------------------------------------- */
+
 export const getPassengerSocketStatus = () => status;
+
 export const isPassengerOnline = () => status === "connected";
+
 export const getPassengerSocket = () => socket;

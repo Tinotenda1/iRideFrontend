@@ -1,13 +1,16 @@
 // app/passenger/index.tsx
+
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   AppState,
   AppStateStatus,
   FlatList,
   StyleSheet,
+  Text,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -16,8 +19,10 @@ import RatingModal from "../../components/RatingModal";
 import TripStatusModal, { ModalType } from "../../components/TripStatusModal";
 import { submitUserRating } from "../../utils/ratingSubmittion";
 import { getUserInfo } from "../../utils/storage";
+
 import { RideResponse, useRideBooking } from "../context/RideBookingContext";
 import { useSessionRestoration } from "../services/useSessionRestoration";
+
 import { DriverOfferCard } from "./components/DriverOfferCard";
 import MapContainer from "./components/map/MapContainer";
 import Sidebar from "./components/passengerSidebar";
@@ -25,30 +30,40 @@ import Tray from "./components/tabs/Tray";
 import AdditionalInfoTray from "./components/trays/AdditionalInfoTray";
 import InputTray from "./components/trays/InputTray";
 import TripLocationCard from "./components/TripLocationCard";
+
+import { resetSessionRestore } from "../services/sessionRestore";
 import {
   connectPassenger,
   disconnectPassenger,
   getPassengerSocket,
+  onReconnectState,
 } from "./socketConnectionUtility/passengerSocketService";
 
 const PassengerScreen: React.FC = () => {
-  // --- Refs ---
+  /* ===========================
+     REFS
+  =========================== */
+
   const trayRef = useRef<any>(null);
   const inputTrayRef = useRef<any>(null);
   const infoTrayRef = useRef<any>(null);
   const sidebarRef = useRef<any>(null);
   const appState = useRef<AppStateStatus>(AppState.currentState);
 
-  // --- Constants ---
+  /* ===========================
+     CONSTANTS
+  =========================== */
+
   const RIDE_DELAY = Number(
     process.env.ride_Tab_And_Trip_Location_Card_Delay || 600,
   );
 
-  // --- Session Restoration ---
-  const { restoreSession, isRestoring } = useSessionRestoration();
+  /* ===========================
+     CONTEXT & SESSION
+  =========================== */
 
-  // --- Socket & Context ---
   const socket = getPassengerSocket();
+
   const {
     rideData,
     updateRideData,
@@ -57,21 +72,34 @@ const PassengerScreen: React.FC = () => {
     fetchRecentDestinations,
   } = useRideBooking();
 
-  // --- State ---
+  const { restoreSession, isRestoring } = useSessionRestoration();
+
+  /* ===========================
+     STATE
+  =========================== */
+
   const [trayHeight, setTrayHeight] = useState(0);
   const [isTrayOpen, setIsTrayOpen] = useState(false);
+
   const [offers, setOffers] = useState<any[]>([]);
+
   const [ratingVisible, setRatingVisible] = useState(false);
   const [ratingSnapshot, setRatingSnapshot] = useState<any>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false); // ✅ Added loading state
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [currentAppState, setCurrentAppState] = useState<AppStateStatus>(
+    AppState.currentState,
+  );
+
   const [activeInputField, setActiveInputField] = useState<
     "pickup" | "destination"
   >("pickup");
+
   const [submissionStates, setSubmissionStates] = useState<
     Record<string, "idle" | "submitting" | "accepted">
   >({});
 
-  // ✅ Reusable Modal State
   const [modalConfig, setModalConfig] = useState({
     visible: false,
     type: "arrival" as ModalType,
@@ -79,13 +107,16 @@ const PassengerScreen: React.FC = () => {
     message: "",
   });
 
-  // --- Animations ---
+  /* ===========================
+     ANIMATIONS
+  =========================== */
+
   const searchCardBottomAnim = useRef(new Animated.Value(0)).current;
   const menuOpacity = useRef(new Animated.Value(1)).current;
 
-  // -------------------------------------------------
-  // 1. HANDLERS (Defined at top level to obey Hook rules)
-  // -------------------------------------------------
+  /* ===========================
+     RATING
+  =========================== */
 
   const handleRatingSubmit = useCallback(
     async (stars: number, comment: string) => {
@@ -93,18 +124,11 @@ const PassengerScreen: React.FC = () => {
       const driverPhone = ratingSnapshot?.driverPhone;
 
       if (!rideId || !driverPhone) {
-        Alert.alert("Error", "Could not find ride details. Please try again.");
+        Alert.alert("Error", "Could not find ride details.");
         return;
       }
 
       setIsSubmitting(true);
-
-      console.log("🚀 Submitting rating:", {
-        stars,
-        comment,
-        driverPhone,
-        rideId,
-      });
 
       try {
         const success = await submitUserRating(
@@ -116,22 +140,13 @@ const PassengerScreen: React.FC = () => {
         );
 
         if (!success) {
-          // ✅ SAFEGUARD: Alert user and DO NOT close modal
-          Alert.alert(
-            "Rating Failed",
-            "We couldn't submit your rating. Please check your connection and try again.",
-            [{ text: "OK" }],
-          );
+          Alert.alert("Error", "Failed to submit rating.");
           return;
         }
 
-        // ✅ Cleanup ONLY happens on success
         setRatingVisible(false);
         setRatingSnapshot(null);
         setCurrentRide(null);
-      } catch (error) {
-        console.error("Critical rating error:", error);
-        Alert.alert("Error", "An unexpected error occurred.");
       } finally {
         setIsSubmitting(false);
       }
@@ -139,20 +154,20 @@ const PassengerScreen: React.FC = () => {
     [ratingSnapshot, setCurrentRide],
   );
 
+  /* ===========================
+     OFFERS
+  =========================== */
+
   const removeOffer = useCallback((driverPhone: string, rideId: string) => {
-    console.log(`Removing offer for driver ${driverPhone} for ride ${rideId}`);
+    const activeSocket = getPassengerSocket();
 
-    // 1. Alert the backend
-    const activeSocket = getPassengerSocket(); // Using your existing utility getter
-    if (activeSocket?.connected) {
-      activeSocket.emit("driver:offer_expired", {
-        rideId: rideId,
-        driverPhone: driverPhone,
-      });
-    }
+    activeSocket?.emit("driver:offer_expired", {
+      rideId,
+      driverPhone,
+    });
 
-    // 2. Local State Cleanup (Logic unchanged)
     setOffers((prev) => prev.filter((o) => o.driver.phone !== driverPhone));
+
     setSubmissionStates((prev) => {
       const newState = { ...prev };
       delete newState[driverPhone];
@@ -161,31 +176,23 @@ const PassengerScreen: React.FC = () => {
   }, []);
 
   const removeOfferForUnmatchedDrivers = useCallback(async (rideId: string) => {
-    console.log(`Removing offer for unmatched drivers for ride ${rideId}`);
+    const user = await getUserInfo();
 
-    const userData = await getUserInfo(); // ✅ Await
+    if (!user?.phone) return;
 
-    if (!userData?.phone) {
-      console.warn("⚠️ No user phone found");
-      return;
-    }
-
-    const activeSocket = getPassengerSocket();
-
-    if (activeSocket?.connected) {
-      activeSocket.emit("driver:offer_cancelled", {
-        rideId,
-        passengerPhone: userData.phone, // ✅ Now valid
-      });
-    }
+    getPassengerSocket()?.emit("driver:offer_cancelled", {
+      rideId,
+      passengerPhone: user.phone,
+    });
   }, []);
 
   const handleAcceptOffer = useCallback(
-    async (offer: any) => {
+    (offer: any) => {
       updateRideData({ status: "matched" });
+
       setCurrentRide(offer);
-      const activeSocket = getPassengerSocket();
-      activeSocket?.emit("passenger:select_driver", {
+
+      getPassengerSocket()?.emit("passenger:select_driver", {
         rideId: offer.rideId,
         driverPhone: offer.driver.phone,
       });
@@ -195,159 +202,106 @@ const PassengerScreen: React.FC = () => {
 
   const handleDeclineOffer = useCallback(
     (offer: any) => {
-      const activeSocket = getPassengerSocket();
-      activeSocket?.emit("passenger:decline_driver", {
+      getPassengerSocket()?.emit("passenger:decline_driver", {
         rideId: offer.rideId,
         driverPhone: offer.driver.phone,
       });
+
       removeOffer(offer.driver.phone, offer.rideId);
     },
     [removeOffer],
   );
 
-  const handleDriverArrived = useCallback(
-    (data: any) => {
-      setModalConfig({
-        visible: true,
-        type: "arrival",
-        title: "Driver Arrived!",
-        message: data.message || "Your driver is at the pickup point.",
-      });
-      updateRideData({ status: "arrived" });
-    },
-    [updateRideData],
-  );
-
-  const handleRequestCancelled = useCallback((data: any) => {
-    setModalConfig({
-      visible: true,
-      type: "cancellation",
-      title: "Trip Cancelled",
-      message: data.reason || "The driver was unable to complete this trip.",
-    });
-    setOffers([]);
-    setSubmissionStates({});
-  }, []);
-
-  const handleDriverNoLongerAvailable = (data: { driverPhone: string }) => {
-    console.log(
-      `Driver ${data.driverPhone} is no longer available (matched elsewhere).`,
-    );
-    setOffers((prev) =>
-      prev.filter((o) => o.driver.phone !== data.driverPhone),
-    );
-    setSubmissionStates((prev) => {
-      const newState = { ...prev };
-      delete newState[data.driverPhone];
-      return newState;
-    });
-  };
-
-  const handleDriverBusy = useCallback(
-    (data: any) => {
-      setModalConfig({
-        visible: true,
-        type: "cancellation", // Using cancellation type for consistent UI feedback
-        title: "Driver Unavailable",
-        message:
-          data.reason === "already_matched"
-            ? "This driver just accepted another trip."
-            : "The driver is currently busy. Please try another offer.",
-      });
-
-      // Clean up that specific offer from the list
-      if (data.driverPhone) {
-        setOffers((prev) =>
-          prev.filter((o) => o.driver.phone !== data.driverPhone),
-        );
-      }
-      updateRideData({ status: "idle" });
-    },
-    [updateRideData],
-  );
+  /* ===========================
+     MODALS
+  =========================== */
 
   const handleCloseModal = () => {
-    const wasCancellation = modalConfig.type === "cancellation";
-    setModalConfig((prev) => ({ ...prev, visible: false }));
+    const cancelled = modalConfig.type === "cancellation";
 
-    if (wasCancellation) {
+    setModalConfig((p) => ({ ...p, visible: false }));
+
+    if (cancelled) {
       updateRideData({ status: "idle", destination: null });
       trayRef.current?.switchToInput();
     }
   };
 
-  // -------------------------------------------------
-  // 2. LIFECYCLE: APP STATE
-  // -------------------------------------------------
+  /* ===========================
+      APP STATE + CONNECT
+  =========================== */
   useEffect(() => {
-    // 1. Initial Data Fetching
     fetchRecentDestinations();
     connectPassenger();
 
-    // 2. Trigger Session Restoration Logic
-    restoreSession();
-    const subscription = AppState.addEventListener("change", (nextState) => {
-      if (
-        appState.current === "active" &&
-        (nextState === "inactive" || nextState === "background")
-      ) {
-        disconnectPassenger();
-      }
-      if (
-        (appState.current === "inactive" ||
-          appState.current === "background") &&
-        nextState === "active"
-      ) {
-        connectPassenger();
-      }
-      appState.current = nextState;
+    const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
+      // Typing 'prev' as AppStateStatus fixes the TS7006 error
+      setCurrentAppState((prev: AppStateStatus) => {
+        if (
+          prev === "active" &&
+          (next === "inactive" || next === "background")
+        ) {
+          resetSessionRestore(); // ✅ VERY IMPORTANT
+          disconnectPassenger();
+        }
+
+        if (
+          (prev === "inactive" || prev === "background") &&
+          next === "active"
+        ) {
+          connectPassenger();
+        }
+        return next;
+      });
     });
 
     return () => {
-      subscription.remove();
+      sub.remove();
       disconnectPassenger();
     };
-  }, []);
+  }, []); // Logic is now self-contained; empty dependency array is fine.
 
-  // This Effect handles the transition to the Rating Modal when a ride completes
+  /* ===========================
+     BACKEND RESTORE PUSH
+  =========================== */
+
   useEffect(() => {
-    if (rideData.status === "completed" && currentRide) {
-      console.log("🏁 Ride completed detected. Opening rating modal...");
+    // We bind the listener to the CURRENT socket instance
+    const unsub = onReconnectState((data) => {
+      console.log("♻️ Restore push received:", data);
+      restoreSession(data);
+    });
 
-      // 1. Capture the driver details for the Rating Modal
+    return () => {
+      unsub?.();
+    };
+  }, [restoreSession, socket]);
+
+  /* ===========================
+     SHOW RATING AFTER RESTORE
+  =========================== */
+
+  useEffect(() => {
+    if (rideData.status === "on_rating" && currentRide?.driver) {
       setRatingSnapshot({
         rideId: currentRide.rideId,
-        driverPhone: currentRide.driver?.phone,
-        driverName: currentRide.driver?.name,
-        driverPic: currentRide.driver?.profilePic,
+        driverPhone: currentRide.driver.phone,
+        driverName: currentRide.driver.name,
+        driverPic: currentRide.driver.profilePic,
       });
 
-      // 2. Show the modal
       setRatingVisible(true);
-
-      // 3. Reset the UI state to idle so they can book again
-      // We keep currentRide until handleRatingSubmit cleans it up
-      updateRideData({
-        status: "idle",
-        destination: null,
-      });
-
-      // 4. Reset the UI tray to the search input
-      trayRef.current?.switchToInput();
-
-      // 5. Refresh history
-      fetchRecentDestinations();
     }
-  }, [rideData.status, currentRide, updateRideData, fetchRecentDestinations]);
+  }, [rideData.status, currentRide]);
 
-  // -------------------------------------------------
-  // 3. LISTENERS (Socket Events)
-  // -------------------------------------------------
+  /* ===========================
+     SOCKET LISTENERS (FULL)
+  =========================== */
+
   useEffect(() => {
     if (!socket) return;
 
-    // 1. Define internal handlers
-    const handleTripCompleted = (data: any) => {
+    const handleTripCompleted = () => {
       if (currentRide) {
         setRatingSnapshot({
           rideId: currentRide.rideId,
@@ -357,55 +311,76 @@ const PassengerScreen: React.FC = () => {
         });
       }
 
-      // Show rating modal
       setRatingVisible(true);
-      updateRideData({ status: "completed", destination: null });
+
+      updateRideData({
+        status: "completed",
+        destination: null,
+      });
+
       trayRef.current?.switchToInput();
+
       fetchRecentDestinations();
     };
 
     const handleDriverResponse = (newOffer: any) => {
-      const driverPhone = newOffer.driver?.phone;
-      if (!driverPhone || !newOffer.rideId) return;
+      const phone = newOffer.driver?.phone;
+
+      if (!phone || !newOffer.rideId) return;
+
       const expiresIn = newOffer.expiresIn || 30000;
-      const expiresAt = Date.now() + expiresIn;
+
       setOffers((prev) => {
-        const filtered = prev.filter((o) => o.driver.phone !== driverPhone);
-        return [{ ...newOffer, expiresAt, expiresIn }, ...filtered];
+        const filtered = prev.filter((o) => o.driver.phone !== phone);
+
+        return [
+          {
+            ...newOffer,
+            expiresIn,
+            expiresAt: Date.now() + expiresIn,
+          },
+          ...filtered,
+        ];
       });
-      setSubmissionStates((prev) => ({ ...prev, [driverPhone]: "idle" }));
+
+      setSubmissionStates((p) => ({ ...p, [phone]: "idle" }));
     };
 
     const handleMatched = (data: any) => {
-      console.log("🚖 Ride Matched:", data);
       setOffers([]);
       setSubmissionStates({});
+
       const { tripDetails, rideId } = data;
 
       const matchedRide: RideResponse = {
-        rideId: rideId,
+        rideId,
         status: "matched",
+
         pickup: {
           address: tripDetails.ride.pickupAddress,
           latitude: tripDetails.ride.pickup.lat,
           longitude: tripDetails.ride.pickup.lng,
         },
+
         destination: {
           address: tripDetails.ride.destinationAddress,
           latitude: tripDetails.ride.destination.lat,
           longitude: tripDetails.ride.destination.lng,
         },
+
         vehicleType: tripDetails.ride.vehicleType,
         offer: tripDetails.offer,
         offerType: tripDetails.offerType || "fair",
         paymentMethod: tripDetails.ride.paymentMethod || "Cash",
         timestamp: new Date().toISOString(),
+
         driver: {
           name: tripDetails.driver.name,
           phone: tripDetails.driver.phone,
-          rating: parseFloat(tripDetails.driver.rating || "5.0"),
+          rating: parseFloat(tripDetails.driver.rating || "5"),
           profilePic: tripDetails.driver.profilePic,
           totalTrips: tripDetails.driver.totalTrips || 0,
+
           vehicle: {
             model: tripDetails.vehicle.model,
             color: tripDetails.vehicle.color,
@@ -416,6 +391,7 @@ const PassengerScreen: React.FC = () => {
       };
 
       setCurrentRide(matchedRide);
+
       updateRideData({
         status: "matched",
         activeTrip: tripDetails,
@@ -423,65 +399,93 @@ const PassengerScreen: React.FC = () => {
       });
     };
 
-    const handleTripStarted = (data: any) => {
+    const handleTripStarted = () => {
       updateRideData({ status: "on_trip" });
+
       setModalConfig({
         visible: true,
         type: "started",
         title: "Trip Started",
-        message: "You are now on your way!",
+        message: "You are on your way.",
       });
+
       setTimeout(() => {
-        setModalConfig((prev) => ({ ...prev, visible: false }));
+        setModalConfig((p) => ({ ...p, visible: false }));
       }, 12000);
     };
 
-    // 2. Attach listeners
+    const handleDriverArrived = (data: any) => {
+      setModalConfig({
+        visible: true,
+        type: "arrival",
+        title: "Driver Arrived",
+        message: data.message || "Driver is here.",
+      });
+
+      updateRideData({ status: "arrived" });
+    };
+
+    const handleCancelled = (data: any) => {
+      setModalConfig({
+        visible: true,
+        type: "cancellation",
+        title: "Trip Cancelled",
+        message: data.reason || "Trip cancelled.",
+      });
+
+      setOffers([]);
+      setSubmissionStates({});
+
+      updateRideData({ status: "idle" });
+    };
+
+    const handleNoDriver = (data: any) => {
+      setOffers((p) => p.filter((o) => o.driver.phone !== data.driverPhone));
+    };
+
+    const handleBusy = () => {
+      updateRideData({ status: "idle" });
+    };
+
+    /* ATTACH */
+
+    socket.on("ride:completed", handleTripCompleted);
     socket.on("ride:driver_response", handleDriverResponse);
     socket.on("ride:matched", handleMatched);
-    socket.on("ride:driver_arrived", handleDriverArrived);
-    socket.on("ride_cancelled", handleRequestCancelled);
-    socket.on("ride:completed", handleTripCompleted);
     socket.on("ride:trip_started", handleTripStarted);
-    socket.on("driver:no_longer_available", handleDriverNoLongerAvailable);
-    socket.on("ride:match_failed", handleDriverBusy);
+    socket.on("ride:driver_arrived", handleDriverArrived);
+    socket.on("ride_cancelled", handleCancelled);
+    socket.on("driver:no_longer_available", handleNoDriver);
+    socket.on("ride:match_failed", handleBusy);
 
-    // 3. Cleanup listeners
+    /* CLEANUP */
+
     return () => {
+      socket.off("ride:completed", handleTripCompleted);
       socket.off("ride:driver_response", handleDriverResponse);
       socket.off("ride:matched", handleMatched);
-      socket.off("ride:driver_arrived", handleDriverArrived);
-      socket.off("ride_cancelled", handleRequestCancelled);
-      socket.off("ride:completed", handleTripCompleted);
       socket.off("ride:trip_started", handleTripStarted);
-      socket.off("driver:no_longer_available", handleDriverNoLongerAvailable);
-      socket.off("ride:match_failed", handleDriverBusy);
+      socket.off("ride:driver_arrived", handleDriverArrived);
+      socket.off("ride_cancelled", handleCancelled);
+      socket.off("driver:no_longer_available", handleNoDriver);
+      socket.off("ride:match_failed", handleBusy);
     };
   }, [
     socket,
     currentRide,
     updateRideData,
     setCurrentRide,
-    handleRequestCancelled,
-    handleDriverArrived,
-    handleDriverBusy,
     fetchRecentDestinations,
   ]);
-  // -------------------------------------------------
-  // 4. UI ANIMATIONS & TRAY LOGIC
-  // -------------------------------------------------
-  // app/passenger/index.tsx
+
+  /* ===========================
+     UI ANIMATIONS
+  =========================== */
 
   useEffect(() => {
-    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let timeout: any;
 
-    // ✅ Identify all "Active" ride states
-    const isActiveOrSearching = [
-      "searching",
-      "matched",
-      "arrived",
-      "on_trip",
-    ].includes(rideData.status || "");
+    const activeStates = ["searching", "matched", "arrived", "on_trip"];
 
     if (rideData.destination) {
       timeout = setTimeout(() => {
@@ -491,44 +495,53 @@ const PassengerScreen: React.FC = () => {
           useNativeDriver: true,
         }).start();
 
-        // ✅ ONLY auto-switch to Ride Selection if we are NOT searching or in a ride
-        if (!isActiveOrSearching) {
+        if (!activeStates.includes(rideData.status || "")) {
           trayRef.current?.switchToRides();
         }
       }, RIDE_DELAY);
-    } else {
-      // ... logic for switchToInput ...
     }
-    return () => {
-      if (timeout) clearTimeout(timeout);
-    };
-  }, [rideData.destination, rideData.status, RIDE_DELAY, menuOpacity]);
-  // Added rideData.status to dependency array ^
+
+    return () => clearTimeout(timeout);
+  }, [rideData.destination, rideData.status]);
+
+  /* ===========================
+     TRAY
+  =========================== */
 
   const handleTrayHeightChange = useCallback(
     (height: number) => {
       setTrayHeight(height);
-      const bottomPosition = isTrayOpen ? height + 10 : 90;
+
       Animated.spring(searchCardBottomAnim, {
-        toValue: bottomPosition,
+        toValue: isTrayOpen ? height + 10 : 90,
         useNativeDriver: false,
       }).start();
     },
-    [isTrayOpen, searchCardBottomAnim],
+    [isTrayOpen],
   );
+
+  /* ===========================
+     RENDER
+  =========================== */
 
   return (
     <View style={styles.container}>
       <View style={styles.contentArea}>
         <MapContainer trayHeight={trayHeight} />
+        {/* LOADING STATE (Requirement 2026-01-31) */}
+        {isRestoring && (
+          <View style={styles.loaderOverlay}>
+            <View style={styles.loaderCard}>
+              <ActivityIndicator size="large" color="#000" />
+              <Text style={styles.loaderText}>Resuming your trip...</Text>
+            </View>
+          </View>
+        )}
         <Animated.View
           style={[styles.menuButton, { opacity: menuOpacity }]}
           pointerEvents={rideData.destination ? "none" : "auto"}
         >
-          <TouchableOpacity
-            onPress={() => sidebarRef.current?.open()}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity onPress={() => sidebarRef.current?.open()}>
             <Ionicons name="menu" size={28} color="#00000096" />
           </TouchableOpacity>
         </Animated.View>
@@ -538,26 +551,16 @@ const PassengerScreen: React.FC = () => {
         ref={trayRef}
         onTrayHeightChange={handleTrayHeightChange}
         onTrayStateChange={setIsTrayOpen}
-        onLocationInputFocus={(field) => {
-          setActiveInputField(field);
+        onLocationInputFocus={(f) => {
+          setActiveInputField(f);
           inputTrayRef.current?.open();
         }}
         onOpenAdditionalInfo={() => infoTrayRef.current?.open()}
         hasOffers={offers.length > 0}
-        // ✅ LOGGING ADDED HERE
         onClearOffers={() => {
-          console.log("📢 [PassengerScreen] onClearOffers triggered.");
+          const id = currentRide?.rideId || rideData?.activeTrip?.rideId;
 
-          const rideId = currentRide?.rideId || rideData?.activeTrip?.rideId;
-
-          console.log("🆔 [PassengerScreen] Cancelling ride:", rideId);
-
-          if (!rideId) {
-            console.warn("⚠️ No rideId found for cancellation");
-            return;
-          }
-
-          removeOfferForUnmatchedDrivers(rideId);
+          if (id) removeOfferForUnmatchedDrivers(id);
         }}
       />
 
@@ -565,7 +568,7 @@ const PassengerScreen: React.FC = () => {
         <View style={styles.offersOverlay}>
           <FlatList
             data={offers}
-            keyExtractor={(item) => item.driver.phone}
+            keyExtractor={(i) => i.driver.phone}
             renderItem={({ item }) => (
               <DriverOfferCard
                 offer={item}
@@ -575,36 +578,28 @@ const PassengerScreen: React.FC = () => {
                 onExpire={() => removeOffer(item.driver.phone, item.rideId)}
               />
             )}
-            contentContainerStyle={styles.offersListContent}
-            showsVerticalScrollIndicator={false}
           />
         </View>
       )}
 
-      <TripStatusModal
-        visible={modalConfig.visible}
-        type={modalConfig.type}
-        title={modalConfig.title}
-        message={modalConfig.message}
-        onClose={handleCloseModal}
-      />
+      <TripStatusModal {...modalConfig} onClose={handleCloseModal} />
 
       <RatingModal
         visible={ratingVisible}
         title="Trip Complete!"
         userName={ratingSnapshot?.driverName}
         userImage={ratingSnapshot?.driverPic}
-        subtitle="How was your experience with your driver?"
+        subtitle="How was your experience?"
         onSelectRating={handleRatingSubmit}
+        isLoading={isSubmitting} // Use the variable here to fix the ESLint error
       />
 
       <TripLocationCard onPress={() => trayRef.current?.switchToInput()} />
-      <InputTray
-        ref={inputTrayRef}
-        activeField={activeInputField}
-        onClose={() => {}}
-      />
-      <AdditionalInfoTray ref={infoTrayRef} onClose={() => {}} />
+
+      <InputTray ref={inputTrayRef} activeField={activeInputField} />
+
+      <AdditionalInfoTray ref={infoTrayRef} />
+
       <Sidebar ref={sidebarRef} userType="passenger" />
     </View>
   );
@@ -612,9 +607,22 @@ const PassengerScreen: React.FC = () => {
 
 export default PassengerScreen;
 
+/* ===========================
+   STYLES
+=========================== */
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  contentArea: { flex: 1, backgroundColor: "#f5f5f5", overflow: "hidden" },
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+
+  contentArea: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+    overflow: "hidden",
+  },
+
   menuButton: {
     position: "absolute",
     top: 40,
@@ -624,6 +632,7 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     zIndex: 100,
   },
+
   offersOverlay: {
     position: "absolute",
     top: 125,
@@ -632,5 +641,28 @@ const styles = StyleSheet.create({
     zIndex: 5,
     paddingHorizontal: 16,
   },
-  offersListContent: { paddingTop: 10, paddingBottom: 250 },
+  loaderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 999,
+  },
+  loaderCard: {
+    backgroundColor: "white",
+    padding: 25,
+    borderRadius: 15,
+    alignItems: "center",
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  loaderText: {
+    marginTop: 15,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
 });

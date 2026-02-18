@@ -67,6 +67,7 @@ const Tray = forwardRef<any, TrayProps>(
 
     // --- MONITOR CONTEXT STATUS ---
     // If context changes (e.g. server updates status), update the tab
+    // --- MONITOR CONTEXT STATUS ---
     useEffect(() => {
       if (rideData.status === "on_trip" && currentTab !== "on_trip") {
         handleTransition("on_trip");
@@ -76,11 +77,11 @@ const Tray = forwardRef<any, TrayProps>(
         currentTab !== "on_trip"
       ) {
         handleTransition("matched");
-      } else if (
-        rideData.status === "idle" &&
-        (currentTab === "matched" ||
-          currentTab === "on_trip" ||
-          currentTab === "searching")
+      }
+      // ✅ Updated: Include 'completed' to trigger reset to input tab
+      else if (
+        (rideData.status === "idle" || rideData.status === "completed") &&
+        currentTab !== "input"
       ) {
         handleTransition("input");
       }
@@ -88,7 +89,6 @@ const Tray = forwardRef<any, TrayProps>(
 
     // --- MOUNT LOGIC (Session Restoration) ---
     useEffect(() => {
-      // ✅ "Ride-Aware" Mount: Check context to determine initial state
       const restoredStatus = rideData.status;
 
       if (restoredStatus === "matched" || restoredStatus === "arrived") {
@@ -97,14 +97,16 @@ const Tray = forwardRef<any, TrayProps>(
         handleTransition("on_trip");
       } else if (restoredStatus === "searching") {
         handleTransition("searching");
-      } else if (rideData.destination) {
-        handleTransition("ride");
+      }
+      // ✅ Explicitly handle idle/completed or any other state as 'input'
+      else if (restoredStatus === "idle" || restoredStatus === "completed") {
+        handleTransition("input");
       } else {
         handleTransition("input");
       }
 
       openTray();
-    }, []); // Runs once on mount
+    }, []);
 
     // Hardware Back Button Handler
     useEffect(() => {
@@ -151,11 +153,16 @@ const Tray = forwardRef<any, TrayProps>(
     ) => {
       setCurrentTab(target);
 
-      // ✅ GUARD: Only update context if state is actually changing
-      if (target === "input" && rideData.status !== "idle") {
+      // ✅ GUARD: Use '&&' logic. Only update context if we are moving to input
+      // and aren't already in a clean state.
+      if (
+        target === "input" &&
+        rideData.status !== "idle" &&
+        rideData.status !== "completed"
+      ) {
         updateRideData({
           status: "idle",
-          destination: null,
+          destination: null, // Critical: resets the booking flow
           vehiclePrices: {},
         });
       } else if (target === "searching" && rideData.status !== "searching") {

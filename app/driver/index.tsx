@@ -1,10 +1,10 @@
 import { getUserInfo } from "@/utils/storage";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native"; // Added ActivityIndicator
+import { StyleSheet, View } from "react-native"; // Added ActivityIndicator
 
 import TripStatusModal, { ModalType } from "../../components/TripStatusModal";
-import { useSessionRestoration } from "../services/useSessionRestoration"; // ✅ Import the new hook
+import { useSessionRestoration } from "../services/useSessionRestoration";
 import DriverFooterNav from "./components/DriverFooterNav";
 import DriverHeader from "./components/DriverHeader";
 import Sidebar from "./components/DriverSideBar";
@@ -19,6 +19,7 @@ import {
   handleDriverResponse,
   isDriverOnline,
   onNewRideRequest,
+  onReconnectState,
   onRemoveRideRequest,
 } from "./socketConnectionUtility/driverSocketService";
 
@@ -41,7 +42,6 @@ const DriverDashboard: React.FC = () => {
   const [trayHeight, setTrayHeight] = useState(0);
 
   // ✅ Use the restoration hook
-  const { restoreSession, isRestoring } = useSessionRestoration();
   const hasInitialized = useRef(false);
 
   const [modalConfig, setModalConfig] = useState({
@@ -74,7 +74,6 @@ const DriverDashboard: React.FC = () => {
         setDriverInfo(user);
 
         // ✅ Extracting logic to the service module
-        await restoreSession();
       } catch (err) {
         console.error("❌ Driver Init Error:", err);
       } finally {
@@ -83,7 +82,19 @@ const DriverDashboard: React.FC = () => {
     };
 
     initDriver();
-  }, [restoreSession, router]);
+  }, [, router]);
+
+  const { restoreSession } = useSessionRestoration();
+
+  useEffect(() => {
+    const unsubscribe = onReconnectState((data) => {
+      restoreSession(data);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   // 2. Existing Handlers
   const handleCloseModal = () => {
@@ -184,16 +195,6 @@ const DriverDashboard: React.FC = () => {
       rideData,
     );
   };
-
-  // ✅ Added Loading State UI
-  if (loading || isRestoring) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#000" />
-      </View>
-    );
-  }
-
   const renderScreen = () => {
     switch (activeScreen) {
       default:

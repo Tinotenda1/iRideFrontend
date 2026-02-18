@@ -11,7 +11,6 @@ import React, {
 } from "react";
 import { api } from "../../utils/api";
 import { getUserInfo } from "../../utils/storage";
-import { getDriverSocket } from "../driver/socketConnectionUtility/driverSocketService";
 import { Place } from "../passenger/components/map/LocationSearch";
 import { getPassengerSocket } from "../passenger/socketConnectionUtility/passengerSocketService";
 
@@ -174,9 +173,20 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasResumedRef = useRef(false);
+  const prevStatusRef = useRef<string | undefined>(undefined);
 
+  // Log status changes for debugging
   useEffect(() => {
-    console.log(`[RideBookingContext] Status: ${rideData.status}`);
+    const prev = prevStatusRef.current;
+    const current = rideData.status;
+
+    if (prev !== current) {
+      console.log(
+        `[RideBookingContext] Status changed: ${prev ?? "none"} → ${current}`,
+      );
+    }
+
+    prevStatusRef.current = current;
   }, [rideData.status]);
 
   const updateRideData = useCallback((updates: Partial<RideBookingData>) => {
@@ -190,21 +200,6 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
     setError(null);
     setLoading(false);
   }, []);
-
-  const waitForSocket = (role: "driver" | "passenger"): Promise<any> => {
-    return new Promise((resolve) => {
-      const socket =
-        role === "driver" ? getDriverSocket() : getPassengerSocket();
-      if (socket?.connected) resolve(socket);
-      else {
-        const timeout = setTimeout(() => resolve(null), 5000);
-        socket?.once("connect", () => {
-          clearTimeout(timeout);
-          resolve(socket);
-        });
-      }
-    });
-  };
 
   const fetchPrices = useCallback(
     async (pickup: Place, destination: Place) => {

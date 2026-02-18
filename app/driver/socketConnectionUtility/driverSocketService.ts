@@ -46,6 +46,7 @@ let socket: Socket | null = null;
 let status: DriverSocketStatus = "offline";
 let shouldStayOnline = false;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let reconnectListener: ((data: any) => void) | null = null;
 
 const HEARTBEAT_INTERVAL = 10000;
 
@@ -155,6 +156,15 @@ export const connectDriver = async () => {
     startLocationUpdates(); // Turn on background tracking
   });
 
+  // Listen for backend session restore push
+  socket.on("user:reconnect_state", (data) => {
+    console.log("🔁 Reconnect state received:", data);
+
+    if (reconnectListener) {
+      reconnectListener(data);
+    }
+  });
+
   socket.on("disconnect", (reason) => {
     console.log("🔌 Disconnected:", reason);
     if (reason === "io client disconnect" || !shouldStayOnline) {
@@ -255,6 +265,19 @@ export const onRideCompletedByPassenger = (callback: (data: any) => void) => {
   socket.on(eventName, callback);
   return () => {
     socket?.off(eventName, callback);
+  };
+};
+
+// Listen for backend reconnect sync
+export const onReconnectState = (callback: (data: any) => void) => {
+  if (!socket) return () => {};
+  reconnectListener = callback;
+  socket.on("user:reconnect_state", reconnectListener);
+  return () => {
+    if (reconnectListener) {
+      socket?.off("user:reconnect_state", reconnectListener);
+      reconnectListener = null;
+    }
   };
 };
 
