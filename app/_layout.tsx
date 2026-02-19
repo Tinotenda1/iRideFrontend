@@ -68,10 +68,14 @@ function RootContent() {
   // 🔄 Handle app going to background/foreground
   const handleAppStateChange = useCallback(
     async (nextAppState: AppStateStatus) => {
+      console.log(
+        `📱 App state changed: ${appState.current} → ${nextAppState}`,
+      );
       if (
         appState.current.match(/inactive|background/) &&
         nextAppState === "active"
       ) {
+        console.log("🔄 App came to foreground, checking socket status...");
         try {
           setReconnecting(true);
           setReconnectError(null);
@@ -83,13 +87,17 @@ function RootContent() {
 
           if (userData.userType === "driver") {
             const status = getDriverSocketStatus();
+            console.log(`🔌 Driver socket status on resume: ${status}`);
             if (status === "offline" || status === "error") {
               await reconnectWithTimeout(connectDriver);
+              console.log("✅ Driver socket reconnected!");
             }
           } else if (userData.userType === "passenger") {
             const status = getPassengerSocketStatus();
+            console.log(`🔌 Passenger socket status on resume: ${status}`);
             if (status === "offline" || status === "error") {
               await reconnectWithTimeout(connectPassenger);
+              console.log("✅ Passenger socket reconnected!");
             }
           }
         } catch (error: any) {
@@ -107,23 +115,36 @@ function RootContent() {
   // 🔄 Initial socket connection
   const initialSocketConnection = useCallback(async () => {
     try {
+      console.log("🚀 Initial socket connection starting...");
       setReconnecting(true);
       setReconnectError(null);
 
       const userData = await import("../utils/storage").then((mod) =>
         mod.getUserInfo(),
       );
-      if (!userData) return;
+
+      if (!userData) {
+        console.log("⚠️ No user data found, skipping socket connection.");
+        return;
+      }
+
+      console.log(`👤 User type detected: ${userData.userType}`);
 
       if (userData.userType === "driver") {
         const status = getDriverSocketStatus();
+        console.log(`🔌 Current driver socket status: ${status}`);
         if (status === "offline" || status === "error") {
+          console.log("⏳ Connecting driver socket...");
           await reconnectWithTimeout(connectDriver);
+          console.log("✅ Driver socket connected!");
         }
       } else if (userData.userType === "passenger") {
         const status = getPassengerSocketStatus();
+        console.log(`🔌 Current passenger socket status: ${status}`);
         if (status === "offline" || status === "error") {
+          console.log("⏳ Connecting passenger socket...");
           await reconnectWithTimeout(connectPassenger);
+          console.log("✅ Passenger socket connected!");
         }
       }
     } catch (error: any) {
@@ -131,6 +152,7 @@ function RootContent() {
       setReconnectError(error?.toString() || "Unknown error");
     } finally {
       setReconnecting(false);
+      console.log("⚡ Initial socket connection process finished.");
     }
   }, []);
 
@@ -144,15 +166,6 @@ function RootContent() {
 
     return () => subscription.remove();
   }, [handleAppStateChange, initialSocketConnection]);
-
-  // ⚡ Loader / Error screen
-  if (reconnecting) {
-    return (
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color="#ffffff" />
-      </View>
-    );
-  }
 
   if (reconnectError) {
     return (

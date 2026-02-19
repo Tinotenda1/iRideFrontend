@@ -4,7 +4,6 @@ import * as Location from "expo-location"; // Ensure this is installed
 import { Clock, Navigation, Search, Star, Trash2 } from "lucide-react-native";
 import React, { useEffect } from "react";
 import {
-  ActivityIndicator,
   Alert,
   BackHandler,
   ScrollView,
@@ -256,12 +255,13 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
           contentContainerStyle={styles.suggestionsContainer}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.sectionTitle}>Recent Destinations</Text>
+          {/* ✅ PREMIUM HIDE HEADING IF NO DATA/NETWORK */}
+          {recentDestinations.length > 0 && (
+            <Text style={styles.sectionTitle}>Recent Destinations</Text>
+          )}
 
           {loading && recentDestinations.length === 0 ? (
-            <View style={styles.loaderContainer}>
-              <ActivityIndicator color={theme.colors.primary} size="small" />
-            </View>
+            <View style={styles.loaderContainer}></View>
           ) : recentDestinations.length > 0 ? (
             recentDestinations.map((item: Place, index: number) => (
               <SwipeableDestinationItem
@@ -274,7 +274,22 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
               />
             ))
           ) : (
-            <Text style={styles.emptyText}>No recent destinations yet</Text>
+            /* ✅ PREMIUM OFFLINE / EMPTY STATE - Now takes full prominence */
+            <View style={styles.errorContainer}>
+              <View style={styles.errorIconCircle}>
+                <View style={styles.statusDot} />
+                <Navigation
+                  size={20}
+                  color={theme.colors.textSecondary + "80"}
+                />
+              </View>
+              <Text style={styles.errorText}>
+                Network connection unavailable
+              </Text>
+              <Text style={styles.errorSubtext}>
+                Check your settings to see recent places
+              </Text>
+            </View>
           )}
         </ScrollView>
       </View>
@@ -377,6 +392,53 @@ const styles = createStyles({
     alignItems: "center",
     zIndex: 30,
     elevation: 6,
+  },
+  // ✅ Premium Offline/Empty State Styles
+  errorContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+    marginTop: 10,
+  },
+  errorIconCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: theme.colors.background,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+    position: "relative",
+    // Slight shadow for depth
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  statusDot: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FF3B30", // Premium red for error
+    borderWidth: 2,
+    borderColor: theme.colors.surface,
+    zIndex: 1,
+  },
+  errorText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: theme.colors.text,
+    letterSpacing: -0.3, // Tighter spacing for modern look
+  },
+  errorSubtext: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    marginTop: 4,
+    fontWeight: "400",
   },
 });
 

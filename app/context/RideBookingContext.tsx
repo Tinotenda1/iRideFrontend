@@ -261,8 +261,8 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
 
         // Optional: navigate user back to input tab & show alert
         Alert.alert(
-          "Price Fetch Failed",
-          "Unable to fetch prices. Please make sure you have an active internet connection and try again.",
+          "Network Connection Unavailable.",
+          "Unable to proceed with your ride request. Please make sure you have an active internet connection and try again.",
           [{ text: "OK" }],
         );
       }
@@ -437,6 +437,11 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
             `📍 Fetching recent destinations (Attempt ${attempt})...`,
           );
 
+          /*
+          // Force failure for testing
+          throw new Error("Simulated API failure");
+          */
+
           const response = await api.get(
             `/rides/recent-destinations?phone=${cleanPhone}`,
           );
@@ -484,6 +489,7 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
     async (rideId: string) => {
       try {
         const response = await api.patch("/rides/hide-destination", { rideId });
+
         if (response.data.success) {
           const updated = (rideData.recentDestinations || []).filter(
             (dest) => dest.id !== rideId,

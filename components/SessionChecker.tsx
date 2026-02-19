@@ -8,8 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ActivityIndicator, Alert, View } from "react-native";
-import { theme } from "../constants/theme";
+import { Alert } from "react-native";
 import { ROUTES } from "../utils/routes";
 import {
   checkUserSession,
@@ -131,21 +130,6 @@ export default function SessionChecker({ children }: Props) {
       isMounted = false;
     };
   }, []); // 👈 remove router dependency
-
-  if (isChecking) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center",
-          backgroundColor: theme.colors.background,
-        }}
-      >
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    );
-  }
 
   return (
     <SessionContext.Provider
