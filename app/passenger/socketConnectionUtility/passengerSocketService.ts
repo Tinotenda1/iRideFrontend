@@ -102,8 +102,6 @@ const getPassengerLocation = async () => {
 ---------------------------------------- */
 
 export const connectPassenger = async () => {
-  console.log("🔄 connectPassenger() function initiated"); // NEW LOG
-
   const user = await getUserInfo();
   const rawPhone = user?.phone;
 
@@ -115,7 +113,12 @@ export const connectPassenger = async () => {
 
   const phone = rawPhone.replace(/\D/g, "");
 
-  if (isConnecting || status === "connecting") return;
+  if (isConnecting || status === "connecting" || status === "connected") {
+    console.log("⚠️ Passenger socket already active. Skipping...");
+    return;
+  }
+
+  console.log("🔄 connectPassenger() function initiated");
 
   isConnecting = true;
   shouldStayOnline = true;

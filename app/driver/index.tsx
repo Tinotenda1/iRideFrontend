@@ -1,3 +1,4 @@
+// app/driver/index.tsx
 import { getUserInfo } from "@/utils/storage";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -15,12 +16,11 @@ import DriverHome from "./screens/DriverHome";
 
 import {
   disconnectDriver,
-  getDriverSocketStatus,
   handleDriverResponse,
-  isDriverOnline,
   onNewRideRequest,
   onReconnectState,
   onRemoveRideRequest,
+  onStatusChange,
 } from "./socketConnectionUtility/driverSocketService";
 
 type Screen = "home" | "wallet" | "revenue" | "notifications";
@@ -82,7 +82,7 @@ const DriverDashboard: React.FC = () => {
     };
 
     initDriver();
-  }, [, router]);
+  }, []);
 
   const { restoreSession } = useSessionRestoration();
 
@@ -141,23 +141,16 @@ const DriverDashboard: React.FC = () => {
     return () => disconnectDriver();
   }, []);
 
-  // 4. Status Polling
+  // 4. Status Sync
   useEffect(() => {
-    const interval = setInterval(() => {
-      const currentOnline = isDriverOnline();
-      const status = getDriverSocketStatus();
-
-      if (online === true && currentOnline === false) {
-        driverTrayRef.current?.goOffline();
-      } else if (online === false && currentOnline === true) {
-        driverTrayRef.current?.goOnline();
-      }
-
-      setOnline(currentOnline);
-      setIsConnecting(status === "connecting" || status === "reconnecting");
-    }, 500);
-    return () => clearInterval(interval);
-  }, [online]);
+    const unsubscribe = onStatusChange((s) => {
+      setOnline(s === "connected");
+      setIsConnecting(s === "connecting" || s === "reconnecting");
+      if (s === "connected") driverTrayRef.current?.goOnline();
+      if (s === "offline") driverTrayRef.current?.goOffline();
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleDecline = (ride: any) => {
     setIncomingRides((prev) =>

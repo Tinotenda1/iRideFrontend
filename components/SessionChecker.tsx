@@ -5,6 +5,7 @@ import {
   ReactNode,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { ActivityIndicator, Alert, View } from "react-native";
@@ -15,9 +16,6 @@ import {
   handleDeviceMismatch,
   validateDeviceId,
 } from "../utils/storage";
-
-import { connectDriver } from "../app/driver/socketConnectionUtility/driverSocketService";
-import { connectPassenger } from "../app/passenger/socketConnectionUtility/passengerSocketService";
 
 // --- Context to share session info across app ---
 interface SessionContextType {
@@ -46,13 +44,18 @@ export default function SessionChecker({ children }: Props) {
   const [userInfo, setUserInfo] = useState<any | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [deviceValid, setDeviceValid] = useState(false);
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+
     let isMounted = true;
 
     const initSession = async () => {
       try {
         console.log("🔐 Checking user session and device...");
+
         const [session, deviceValidation] = await Promise.all([
           checkUserSession(),
           validateDeviceId(),
@@ -67,7 +70,6 @@ export default function SessionChecker({ children }: Props) {
           isNewDevice: deviceValidation.isNewDevice,
         });
 
-        // Device mismatch → logout
         if (session.isAuthenticated && !deviceValidation.isValid) {
           console.log("🚫 Device mismatch detected at app launch");
           await handleDeviceMismatch();
@@ -88,31 +90,27 @@ export default function SessionChecker({ children }: Props) {
           return;
         }
 
-        // Ensure userInfo exists
         if (!session.userInfo) {
           console.warn("⚠️ No user info available, redirecting to onboarding.");
           router.replace(ROUTES.ONBOARDING.GET_STARTED as never);
           return;
         }
 
-        // ✅ Set session state
         setUserInfo(session.userInfo);
         setDeviceId(
           session.userInfo.currentDeviceId || session.userInfo.deviceId || null,
         );
         setDeviceValid(deviceValidation.isValid);
 
-        // Connect sockets based on userType
         if (
           session.isAuthenticated &&
           session.onboardingCompleted &&
           deviceValidation.isValid
         ) {
+          console.log("✅ Session check successful");
           if (session.userInfo.userType === "driver") {
-            await connectDriver();
             router.replace(ROUTES.DRIVER.HOME as never);
           } else {
-            await connectPassenger();
             router.replace(ROUTES.PASSENGER.HOME as never);
           }
         } else if (!session.isAuthenticated) {
@@ -132,7 +130,7 @@ export default function SessionChecker({ children }: Props) {
     return () => {
       isMounted = false;
     };
-  }, [router]);
+  }, []); // 👈 remove router dependency
 
   if (isChecking) {
     return (

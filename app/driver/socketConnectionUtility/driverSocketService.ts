@@ -51,8 +51,22 @@ let reconnectListener: ((data: any) => void) | null = null;
 
 const HEARTBEAT_INTERVAL = 10000;
 
+let statusListener: ((s: DriverSocketStatus) => void) | null = null;
+
+export const onStatusChange = (
+  callback: (status: DriverSocketStatus) => void,
+) => {
+  statusListener = callback;
+  // immediately send current status
+  callback(status);
+  return () => {
+    statusListener = null;
+  };
+};
+
 const setStatus = (s: DriverSocketStatus) => {
   status = s;
+  statusListener?.(s); // ✅ notify dashboard
   console.log("📡 Driver socket status:", s);
 };
 
@@ -125,6 +139,10 @@ export const connectDriver = async () => {
   isConnecting = true;
   setStatus("connecting");
 
+  if (socket) {
+    socket.removeAllListeners();
+    socket.disconnect();
+  }
   socket = initializeSocket(phone); // CLEANUP existing listeners to prevent memory leaks/duplicate events
 
   socket.off("connect");
@@ -158,15 +176,7 @@ export const connectDriver = async () => {
     setStatus("connected");
     startHeartbeat();
     startLocationUpdates(); // Turn on background tracking
-  });
-
-  // Listen for backend session restore push
-  socket.on("user:reconnect_state", (data) => {
-    console.log("🔁 Reconnect state received:", data);
-
-    if (reconnectListener) {
-      reconnectListener(data);
-    }
+    flushPending(); // ✅ send queued offers
   });
 
   socket.on("disconnect", (reason) => {
@@ -200,19 +210,31 @@ export const disconnectDriver = () => {
   setStatus("offline");
 };
 
+let pendingResponses: any[] = [];
+
 export const handleDriverResponse = (
   rideId: string,
   driverPhone: string,
   currentOffer: number,
   responseType: "accept" | "counter",
 ) => {
-  if (!socket?.connected) return;
-  socket.emit("driver:respond_to_ride", {
-    rideId,
-    driverPhone,
-    currentOffer,
-    responseType,
+  const payload = { rideId, driverPhone, currentOffer, responseType };
+  if (!socket?.connected) {
+    pendingResponses.push(payload);
+    return;
+  }
+  socket.emit("driver:respond_to_ride", payload);
+};
+
+// Flush queued actions after reconnect
+const flushPending = () => {
+  if (!socket || !socket.connected) return;
+
+  const sock = socket; // ✅ create local non-null reference
+  pendingResponses.forEach((p) => {
+    sock.emit("driver:respond_to_ride", p);
   });
+  pendingResponses = [];
 };
 
 export const onNewRideRequest = (callback: (ride: any) => void) => {

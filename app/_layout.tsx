@@ -6,6 +6,7 @@ import {
   AppState,
   AppStateStatus,
   StyleSheet,
+  Text,
   View,
 } from "react-native";
 
@@ -31,6 +32,38 @@ export default function RootLayout() {
 function RootContent() {
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const [reconnecting, setReconnecting] = useState(false);
+  const [reconnectError, setReconnectError] = useState<string | null>(null);
+
+  // Helper: reconnect with timeout
+  const reconnectWithTimeout = async (
+    connectFn: () => Promise<void>,
+    timeout = 10000,
+  ) => {
+    return new Promise<void>((resolve, reject) => {
+      let done = false;
+
+      connectFn()
+        .then(() => {
+          if (!done) {
+            done = true;
+            resolve();
+          }
+        })
+        .catch((err) => {
+          if (!done) {
+            done = true;
+            reject(err);
+          }
+        });
+
+      setTimeout(() => {
+        if (!done) {
+          done = true;
+          reject("Timeout connecting socket");
+        }
+      }, timeout);
+    });
+  };
 
   // 🔄 Handle app going to background/foreground
   const handleAppStateChange = useCallback(
@@ -41,26 +74,27 @@ function RootContent() {
       ) {
         try {
           setReconnecting(true);
+          setReconnectError(null);
 
           const userData = await import("../utils/storage").then((mod) =>
             mod.getUserInfo(),
           );
           if (!userData) return;
 
-          // Only reconnect sockets; session/device is already handled by SessionChecker
-          if (
-            userData.userType === "driver" &&
-            getDriverSocketStatus() !== "offline"
-          ) {
-            await connectDriver();
-          } else if (
-            userData.userType === "passenger" &&
-            getPassengerSocketStatus() !== "offline"
-          ) {
-            await connectPassenger();
+          if (userData.userType === "driver") {
+            const status = getDriverSocketStatus();
+            if (status === "offline" || status === "error") {
+              await reconnectWithTimeout(connectDriver);
+            }
+          } else if (userData.userType === "passenger") {
+            const status = getPassengerSocketStatus();
+            if (status === "offline" || status === "error") {
+              await reconnectWithTimeout(connectPassenger);
+            }
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error("❌ Error reconnecting sockets:", error);
+          setReconnectError(error?.toString() || "Unknown error");
         } finally {
           setReconnecting(false);
         }
@@ -70,22 +104,31 @@ function RootContent() {
     [],
   );
 
-  // 🔄 Initial socket connection (after session/device already validated)
+  // 🔄 Initial socket connection
   const initialSocketConnection = useCallback(async () => {
     try {
       setReconnecting(true);
+      setReconnectError(null);
+
       const userData = await import("../utils/storage").then((mod) =>
         mod.getUserInfo(),
       );
       if (!userData) return;
 
       if (userData.userType === "driver") {
-        await connectDriver();
-      } else {
-        await connectPassenger();
+        const status = getDriverSocketStatus();
+        if (status === "offline" || status === "error") {
+          await reconnectWithTimeout(connectDriver);
+        }
+      } else if (userData.userType === "passenger") {
+        const status = getPassengerSocketStatus();
+        if (status === "offline" || status === "error") {
+          await reconnectWithTimeout(connectPassenger);
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ Error connecting sockets:", error);
+      setReconnectError(error?.toString() || "Unknown error");
     } finally {
       setReconnecting(false);
     }
@@ -102,11 +145,24 @@ function RootContent() {
     return () => subscription.remove();
   }, [handleAppStateChange, initialSocketConnection]);
 
-  // ⚡ Show loader only while reconnecting sockets
+  // ⚡ Loader / Error screen
   if (reconnecting) {
     return (
       <View style={styles.loaderContainer}>
         <ActivityIndicator size="large" color="#ffffff" />
+      </View>
+    );
+  }
+
+  if (reconnectError) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#ffffff" />
+        <View style={{ marginTop: 16 }}>
+          <Text style={{ color: "#fff", textAlign: "center" }}>
+            Failed to connect: {reconnectError}
+          </Text>
+        </View>
       </View>
     );
   }

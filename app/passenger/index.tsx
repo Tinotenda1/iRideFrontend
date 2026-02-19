@@ -31,8 +31,6 @@ import TripLocationCard from "./components/TripLocationCard";
 
 import { resetSessionRestore } from "../services/sessionRestore";
 import {
-  connectPassenger,
-  disconnectPassenger,
   getPassengerSocket,
   onReconnectState,
 } from "./socketConnectionUtility/passengerSocketService";
@@ -241,8 +239,6 @@ const PassengerScreen: React.FC = () => {
   =========================== */
   useEffect(() => {
     fetchRecentDestinations();
-    connectPassenger();
-
     const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
       // Typing 'prev' as AppStateStatus fixes the TS7006 error
       setCurrentAppState((prev: AppStateStatus) => {
@@ -251,14 +247,12 @@ const PassengerScreen: React.FC = () => {
           (next === "inactive" || next === "background")
         ) {
           resetSessionRestore(); // ✅ VERY IMPORTANT
-          disconnectPassenger();
         }
 
         if (
           (prev === "inactive" || prev === "background") &&
           next === "active"
         ) {
-          connectPassenger();
         }
         return next;
       });
@@ -266,7 +260,6 @@ const PassengerScreen: React.FC = () => {
 
     return () => {
       sub.remove();
-      disconnectPassenger();
     };
   }, []); // Logic is now self-contained; empty dependency array is fine.
 
