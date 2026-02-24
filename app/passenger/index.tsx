@@ -7,9 +7,12 @@ import {
   Animated,
   AppState,
   AppStateStatus,
+  Dimensions,
   FlatList,
+  Platform,
   StyleSheet,
   TouchableOpacity,
+  UIManager,
   View,
 } from "react-native";
 
@@ -22,18 +25,23 @@ import { RideResponse, useRideBooking } from "../context/RideBookingContext";
 import { useSessionRestoration } from "../services/useSessionRestoration";
 
 import { DriverOfferCard } from "./components/DriverOfferCard";
-import MapContainer from "./components/map/MapContainer";
 import Sidebar from "./components/passengerSidebar";
 import Tray from "./components/tabs/Tray";
 import AdditionalInfoTray from "./components/trays/AdditionalInfoTray";
 import InputTray from "./components/trays/InputTray";
 import TripLocationCard from "./components/TripLocationCard";
 
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { resetSessionRestore } from "../services/sessionRestore";
+import MapContainer from "./components/map/MapContainer";
 import {
   getPassengerSocket,
   onReconnectState,
 } from "./socketConnectionUtility/passengerSocketService";
+
+if (Platform.OS === "android") {
+  UIManager.setLayoutAnimationEnabledExperimental?.(true);
+}
 
 const PassengerScreen: React.FC = () => {
   /* ===========================
@@ -45,6 +53,19 @@ const PassengerScreen: React.FC = () => {
   const infoTrayRef = useRef<any>(null);
   const sidebarRef = useRef<any>(null);
   const appState = useRef<AppStateStatus>(AppState.currentState);
+  const insets = useSafeAreaInsets();
+
+  const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+  // Layout percentages
+  const TOP_CARD_PERCENT = 0.18; // 12%
+  const BOTTOM_TRAY_PERCENT = 0.32; // 32%
+
+  const TOP_CARD_HEIGHT = SCREEN_HEIGHT * TOP_CARD_PERCENT;
+  const BASE_TRAY_HEIGHT = SCREEN_HEIGHT * BOTTOM_TRAY_PERCENT;
+
+  // Determine the position here
+  const HIDDEN_POSITION = -300;
 
   /* ===========================
      CONSTANTS
@@ -73,8 +94,8 @@ const PassengerScreen: React.FC = () => {
   /* ===========================
      STATE
   =========================== */
-
   const [trayHeight, setTrayHeight] = useState(0);
+  const [traySettled, setTraySettled] = useState(false);
   const [isTrayOpen, setIsTrayOpen] = useState(false);
 
   const [offers, setOffers] = useState<any[]>([]);
@@ -106,6 +127,10 @@ const PassengerScreen: React.FC = () => {
   /* ===========================
      ANIMATIONS
   =========================== */
+
+  const cardTopPosition = !!rideData.destination
+    ? insets.top + SCREEN_HEIGHT * 0.02
+    : HIDDEN_POSITION;
 
   const searchCardBottomAnim = useRef(new Animated.Value(0)).current;
   const menuOpacity = useRef(new Animated.Value(1)).current;
@@ -491,6 +516,7 @@ const PassengerScreen: React.FC = () => {
     const activeStates = ["searching", "matched", "arrived", "on_trip"];
 
     if (rideData.destination) {
+      // Hide menu when a destination is set
       timeout = setTimeout(() => {
         Animated.timing(menuOpacity, {
           toValue: 0,
@@ -502,6 +528,13 @@ const PassengerScreen: React.FC = () => {
           trayRef.current?.switchToRides();
         }
       }, RIDE_DELAY);
+    } else {
+      // Show menu immediately when destination is cleared (TripLocationCard closes)
+      Animated.timing(menuOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
     }
 
     return () => clearTimeout(timeout);
@@ -515,6 +548,16 @@ const PassengerScreen: React.FC = () => {
     (height: number) => {
       setTrayHeight(height);
 
+      // Mark tray as animating
+      setTraySettled(false);
+
+      // Re-enable map updates after animation
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          setTraySettled(true);
+        }, 300);
+      });
+
       Animated.spring(searchCardBottomAnim, {
         toValue: isTrayOpen ? height + 10 : 90,
         useNativeDriver: false,
@@ -522,7 +565,6 @@ const PassengerScreen: React.FC = () => {
     },
     [isTrayOpen],
   );
-
   /* ===========================
      RENDER
   =========================== */
@@ -530,7 +572,12 @@ const PassengerScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.contentArea}>
-        <MapContainer trayHeight={trayHeight} />
+        *{" "}
+        <MapContainer
+          trayHeight={trayHeight || BASE_TRAY_HEIGHT}
+          topPadding={TOP_CARD_HEIGHT}
+          traySettled={traySettled}
+        />
         <Animated.View
           style={[styles.menuButton, { opacity: menuOpacity }]}
           pointerEvents={rideData.destination ? "none" : "auto"}
@@ -545,7 +592,8 @@ const PassengerScreen: React.FC = () => {
         ref={trayRef}
         onTrayHeightChange={handleTrayHeightChange}
         onTrayStateChange={setIsTrayOpen}
-        onLocationInputFocus={(f) => {
+        onTraySettled={setTraySettled} // ✅ new
+        onLocationInputFocus={(f: "pickup" | "destination") => {
           setActiveInputField(f);
           inputTrayRef.current?.open();
         }}
@@ -553,7 +601,6 @@ const PassengerScreen: React.FC = () => {
         hasOffers={offers.length > 0}
         onClearOffers={() => {
           const id = currentRide?.rideId || rideData?.activeTrip?.rideId;
-
           if (id) removeOfferForUnmatchedDrivers(id);
         }}
       />
@@ -588,7 +635,10 @@ const PassengerScreen: React.FC = () => {
         isLoading={isSubmitting} // Use the variable here to fix the ESLint error
       />
 
-      <TripLocationCard onPress={() => trayRef.current?.switchToInput()} />
+      <TripLocationCard
+        topPosition={cardTopPosition}
+        onPress={() => trayRef.current?.switchToInput()}
+      />
 
       <InputTray ref={inputTrayRef} activeField={activeInputField} />
 

@@ -1,9 +1,22 @@
-// components/map/LocationSearch.tsx
-import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
-import { FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { theme } from '../../../../constants/theme';
-import { createStyles, typedTypography } from '../../../../utils/styles';
+import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
+import * as Crypto from "expo-crypto";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { theme } from "../../../../constants/theme";
+import { createStyles, typedTypography } from "../../../../utils/styles";
+
+/**
+ * API Key pulled from Expo Config
+ */
+const GOOGLE_MAPS_APIKEY = Constants.expoConfig?.extra?.googleMapsApiKey;
 
 export interface Place {
   id: string;
@@ -19,8 +32,6 @@ interface LocationSearchProps {
   onPlaceSelect: (place: Place | null) => void;
   placeholder?: string;
   editable?: boolean;
-
-  /** ✅ NEW: Auto-focus input when component mounts */
   autoFocus?: boolean;
 }
 
@@ -28,91 +39,140 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
   destination,
   onDestinationChange,
   onPlaceSelect,
-  placeholder = 'Search location',
+  placeholder = "Search location",
   editable = true,
-  autoFocus = false,        // ← NEW
+  autoFocus = false,
 }) => {
-  const [suggestions, setSuggestions] = useState<Place[]>([]);
-  const inputRef = useRef<TextInput>(null);
+  // --- UI & Search State ---
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
 
-  // ✅ NEW: Automatically focus input
+  // --- Billing & Optimization State ---
+  const [sessionToken, setSessionToken] = useState<string>("");
+  const inputRef = useRef<TextInput>(null);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  /**
+   * Generates a unique UUID for Google Places session billing.
+   * This groups multiple keystrokes into one "session" to save costs.
+   */
+  const refreshSessionToken = () => {
+    const newToken = Crypto.randomUUID();
+    setSessionToken(newToken);
+  };
+
+  // Initial setup: focus input and start a billing session
   useEffect(() => {
+    refreshSessionToken();
     if (autoFocus && inputRef.current) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
+      setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [autoFocus]);
 
-  const mockPlaces: Place[] = [
-    { id: '1', name: 'Harare International Airport', address: 'Airport Road, Harare', latitude: -17.931, longitude: 31.092 },
-    { id: '2', name: 'Eastgate Shopping Centre', address: 'Robert Mugabe Road, Harare', latitude: -17.827, longitude: 31.052 },
-    { id: '3', name: 'National Sports Stadium', address: 'Nelson Mandela Ave, Harare', latitude: -17.841, longitude: 31.017 },
-  ];
-
-  const parseCoordinates = (text: string): Place | null => {
-    const coordRegex = /(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/;
-    const match = text.match(coordRegex);
-
-    if (match) {
-      const lat = parseFloat(match[1]);
-      const lng = parseFloat(match[2]);
-      if (!isNaN(lat) && !isNaN(lng)) {
-        return {
-          id: `coord-${Date.now()}`,
-          name: `Coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-          address: 'Custom location',
-          latitude: lat,
-          longitude: lng,
-        };
-      }
-    }
-    return null;
-  };
-
-  const handleTextChange = (text: string) => {
-    onDestinationChange(text);
-
-    const coordPlace = parseCoordinates(text);
-    if (coordPlace) {
-      setSuggestions([coordPlace]);
+  /**
+   * Calls Google Places Autocomplete API.
+   * Restricted to Zimbabwe (ZW) for operational accuracy.
+   */
+  const fetchAutocomplete = async (text: string) => {
+    if (text.length < 3) {
+      setSuggestions([]);
       return;
     }
 
-    if (text.length > 1) {
-      const filtered = mockPlaces.filter(
-        (place) =>
-          place.name.toLowerCase().includes(text.toLowerCase()) ||
-          place.address.toLowerCase().includes(text.toLowerCase())
-      );
-      setSuggestions(filtered);
-    } else {
-      setSuggestions([]);
+    setSearching(true);
+    try {
+      const baseUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json`;
+      const queryParams = new URLSearchParams({
+        input: text,
+        key: GOOGLE_MAPS_APIKEY || "",
+        types: "geocode|establishment",
+        sessiontoken: sessionToken,
+        components: "country:zw", // Geographic restriction
+      });
+
+      const response = await fetch(`${baseUrl}?${queryParams.toString()}`);
+      const json = await response.json();
+      setSuggestions(json.predictions || []);
+    } catch (error) {
+      console.error("Autocomplete Error:", error);
+    } finally {
+      setSearching(false);
     }
   };
 
-  const handlePlaceSelect = (place: Place) => {
-    onDestinationChange(place.name);
-    onPlaceSelect(place);
+  /**
+   * Handles text input with debouncing.
+   * Wait 500ms after typing stops before calling the API.
+   */
+  const handleTextChange = (text: string) => {
+    onDestinationChange(text);
+    if (!sessionToken) refreshSessionToken();
+
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      fetchAutocomplete(text);
+    }, 500);
+  };
+
+  /**
+   * Fetches the final Lat/Lng coordinates for a selected result.
+   */
+  const handlePlaceSelect = async (prediction: any) => {
+    onDestinationChange(prediction.structured_formatting.main_text);
     setSuggestions([]);
-    inputRef.current?.blur();
+    setSearching(true);
+
+    try {
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${prediction.place_id}&key=${GOOGLE_MAPS_APIKEY}&fields=geometry,formatted_address,name&sessiontoken=${sessionToken}`,
+      );
+      const json = await response.json();
+      const { lat, lng } = json.result.geometry.location;
+
+      onPlaceSelect({
+        id: prediction.place_id,
+        name: json.result.name,
+        address: json.result.formatted_address,
+        latitude: lat,
+        longitude: lng,
+      });
+
+      // End current billing session and reset for next search
+      setSessionToken("");
+      refreshSessionToken();
+    } catch (error) {
+      console.error("Details Error:", error);
+    } finally {
+      setSearching(false);
+      inputRef.current?.blur();
+    }
   };
 
   const clearSearch = () => {
-    onDestinationChange('');
+    onDestinationChange("");
     setSuggestions([]);
     onPlaceSelect(null);
+    refreshSessionToken();
   };
 
   return (
     <View style={styles.wrapper}>
+      {/* Search Input Bar */}
       <View style={styles.container}>
-        <Ionicons
-          name="search"
-          size={20}
-          color={theme.colors.textSecondary}
-          style={styles.leftIcon}
-        />
+        {searching ? (
+          <ActivityIndicator
+            size="small"
+            color={theme.colors.primary}
+            style={styles.leftIcon}
+          />
+        ) : (
+          <Ionicons
+            name="search"
+            size={20}
+            color={theme.colors.textSecondary}
+            style={styles.leftIcon}
+          />
+        )}
 
         <TextInput
           ref={inputRef}
@@ -122,57 +182,80 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
           onChangeText={handleTextChange}
           placeholderTextColor={theme.colors.textSecondary}
           editable={editable}
-          autoFocus={autoFocus}      // ← NEW
         />
 
         {destination && editable && (
           <TouchableOpacity onPress={clearSearch} style={styles.rightIcon}>
-            <Ionicons name="close-circle" size={20} color={theme.colors.textSecondary} />
+            <Ionicons
+              name="close-circle"
+              size={20}
+              color={theme.colors.textSecondary}
+            />
           </TouchableOpacity>
         )}
       </View>
 
+      {/* Suggestion List Overlay */}
       {editable && suggestions.length > 0 && (
         <View style={styles.suggestionsContainer}>
           <FlatList
             data={suggestions}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.place_id}
+            keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.suggestionItem}
                 onPress={() => handlePlaceSelect(item)}
               >
-                <Ionicons
-                  name={item.id.startsWith('coord-') ? 'pin' : 'location'}
-                  size={20}
-                  color={theme.colors.primary}
-                />
+                <View style={styles.iconCircle}>
+                  <Ionicons
+                    name="location-sharp"
+                    size={16}
+                    color={theme.colors.primary}
+                  />
+                </View>
                 <View style={styles.suggestionText}>
-                  <Text style={styles.suggestionName}>{item.name}</Text>
-                  <Text style={styles.suggestionAddress}>{item.address}</Text>
+                  <Text style={styles.suggestionName} numberOfLines={1}>
+                    {item.structured_formatting.main_text}
+                  </Text>
+                  <Text style={styles.suggestionAddress} numberOfLines={1}>
+                    {item.structured_formatting.secondary_text}
+                  </Text>
                 </View>
               </TouchableOpacity>
             )}
           />
         </View>
       )}
+
+      {/* No Results Feedback */}
+      {editable &&
+        suggestions.length === 0 &&
+        destination.length >= 3 &&
+        !searching && (
+          <View style={styles.noResults}>
+            <Text style={styles.noResultsText}>
+              No locations found in Zimbabwe
+            </Text>
+          </View>
+        )}
     </View>
   );
 };
 
+// --- Styles ---
 const styles = createStyles({
   wrapper: {
-    position: 'relative',
     zIndex: 1000,
   },
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: theme.borderRadius.lg,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    ...theme.shadows.sm,
+    height: 54,
+    ...theme.shadows.md,
   },
   leftIcon: {
     marginRight: theme.spacing.sm,
@@ -184,43 +267,56 @@ const styles = createStyles({
     flex: 1,
     ...typedTypography.body,
     color: theme.colors.text,
-    paddingVertical: 4,
-    paddingHorizontal: 0,
   },
   suggestionsContainer: {
-    position: 'absolute',
-    top: '100%',
+    position: "absolute",
+    top: 60,
     left: 0,
     right: 0,
-    marginTop: theme.spacing.sm,
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.md,
     ...theme.shadows.lg,
-    maxHeight: 200,
-    overflow: 'hidden',
-    zIndex: 1001,
+    maxHeight: 250,
+    overflow: "hidden",
   },
   suggestionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border + '30',
+    flexDirection: "row",
+    alignItems: "center",
+    padding: theme.spacing.md,
+    borderBottomWidth: 0.5,
+    borderBottomColor: theme.colors.border,
+  },
+  iconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.primary + "15",
+    justifyContent: "center",
+    alignItems: "center",
   },
   suggestionText: {
     flex: 1,
-    marginLeft: theme.spacing.md,
+    marginLeft: theme.spacing.sm,
   },
   suggestionName: {
     ...typedTypography.body,
-    color: theme.colors.text,
-    fontWeight: '500',
+    fontWeight: "600",
   },
   suggestionAddress: {
     ...typedTypography.caption,
     color: theme.colors.textSecondary,
-    marginTop: 2,
+  },
+  noResults: {
+    marginTop: 5,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.md,
+    alignItems: "center",
+    ...theme.shadows.sm,
+  },
+  noResultsText: {
+    ...typedTypography.caption,
+    color: theme.colors.textSecondary,
   },
 });
 

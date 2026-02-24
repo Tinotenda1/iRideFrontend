@@ -156,7 +156,7 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
     fetchPrices,
   } = useRideBooking();
 
-  // 1. Auto-set Pickup to Current Location on mount
+  // 1. Auto-set Pickup to Current Location AND Clear Destination on mount
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -205,6 +205,7 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
     place: Place | null,
   ) => {
     updateRideData({ [field]: place });
+    console.log(`[RideTab] ${field} set to:`, place);
     if (field === "destination" && place) {
       onSuggestionSelect?.(place);
     }

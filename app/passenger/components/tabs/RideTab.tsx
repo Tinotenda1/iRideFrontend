@@ -34,7 +34,9 @@ const RideTab: React.FC<TabProps> = ({
   const selectedVehiclePrice =
     rideData.vehiclePrices?.[rideData.vehicleType] || 0;
   const isSelectionComplete =
-    !!rideData.vehicleType && !!rideData.paymentMethod;
+    !!rideData.vehicleType &&
+    !!rideData.paymentMethod &&
+    selectedVehiclePrice > 0;
 
   // ✅ LOGGING: Observe prices arriving in the tab
   useEffect(() => {

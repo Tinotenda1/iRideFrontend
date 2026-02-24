@@ -1,398 +1,297 @@
-// app/passenger/components/tabs/Tray.tsx
 import { LinearGradient } from "expo-linear-gradient";
 import React, {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
-  useRef,
   useState,
 } from "react";
-import {
-  Animated,
-  BackHandler,
-  Dimensions,
-  StyleSheet,
-  View,
-} from "react-native";
+import { BackHandler, Dimensions, StyleSheet, View } from "react-native";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
+
 import { useRideBooking } from "../../../../app/context/RideBookingContext";
 import { theme } from "../../../../constants/theme";
 import { createStyles } from "../../../../utils/styles";
+
 import LocationInputTab from "./LocationInputTab";
 import RideTab from "./RideTab";
 import SearchingTab from "./SearchingTab";
 import TripTab from "./TripTab";
 
-interface TrayProps {
-  onTrayStateChange?: (open: boolean) => void;
-  onTrayHeightChange?: (height: number) => void;
-  onLocationInputFocus?: (field: "pickup" | "destination") => void;
-  onOpenAdditionalInfo?: () => void;
-  hasOffers?: boolean;
-  onClearOffers?: () => void;
-}
+/* -------------------------------- Constants -------------------------------- */
 
-const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
-const OPEN_HEIGHT_INPUT = windowHeight * 0.5;
-const OPEN_HEIGHT_RIDE = windowHeight * 0.4;
-const OPEN_HEIGHT_SEARCHING = windowHeight * 0.3;
-const OPEN_HEIGHT_MATCHED = windowHeight * 0.25;
-const OPEN_HEIGHT_ON_TRIP = windowHeight * 0.32;
-const OPEN_HEIGHT_ON_TRIP_EXPANDED = windowHeight * 0.4;
+const { width, height: screenHeight } = Dimensions.get("window");
+
+const HEIGHTS = {
+  input: screenHeight * 0.5,
+  ride: screenHeight * 0.4,
+  searching: screenHeight * 0.3,
+  matched: screenHeight * 0.25,
+  on_trip: screenHeight * 0.32,
+  expanded: screenHeight * 0.4,
+};
+
 const CLOSED_HEIGHT = 140;
 
-const Tray = forwardRef<any, TrayProps>(
-  (
-    {
-      onTrayStateChange,
-      onTrayHeightChange,
-      onLocationInputFocus,
-      onOpenAdditionalInfo,
-      hasOffers,
-      onClearOffers, // ✅ ADD THIS
-    },
-    ref,
-  ) => {
-    const { rideData, updateRideData } = useRideBooking();
+const TAB_INDEX = {
+  input: 0,
+  ride: 1,
+  searching: 2,
+  matched: 3,
+  on_trip: 4,
+  expanded: 5,
+} as const;
 
-    // ✅ Initial state is now dynamic based on context, but defaulting to input
-    const [currentTab, setCurrentTab] = useState<
-      "input" | "ride" | "searching" | "matched" | "on_trip"
-    >("input");
+type TabType = keyof typeof TAB_INDEX;
 
-    const heightAnim = useRef(new Animated.Value(0)).current;
-    const translateY = useRef(
-      new Animated.Value(OPEN_HEIGHT_INPUT - CLOSED_HEIGHT),
-    ).current;
-    const transitionAnim = useRef(new Animated.Value(0)).current;
+const SPRING_CONFIG = {
+  damping: 18,
+  stiffness: 120,
+  mass: 1,
+};
 
-    // --- MONITOR CONTEXT STATUS ---
-    // If context changes (e.g. server updates status), update the tab
-    // --- MONITOR CONTEXT STATUS ---
-    useEffect(() => {
-      /* HARD RESET CASE */
-      if (!rideData.destination) {
-        if (currentTab !== "input") {
-          handleTransition("input");
-        }
-        return;
-      }
+/* -------------------------------------------------------------------------- */
+/* NEW SUB-COMPONENT TO SOLVE ESLINT HOOK RULE                    */
+/* -------------------------------------------------------------------------- */
 
-      if (rideData.status === "on_trip" && currentTab !== "on_trip") {
-        handleTransition("on_trip");
-      } else if (
-        (rideData.status === "matched" || rideData.status === "arrived") &&
-        currentTab !== "matched"
-      ) {
-        handleTransition("matched");
-      } else if (
-        rideData.status === "searching" &&
-        currentTab !== "searching"
-      ) {
-        handleTransition("searching");
-      }
-    }, [rideData.status, rideData.destination]);
+interface TabSlideProps {
+  index: number;
+  transitionIndex: SharedValue<number>;
+  children: React.ReactNode;
+}
 
-    // --- MOUNT LOGIC (Session Restoration) ---
-    useEffect(() => {
-      const restoredStatus = rideData.status;
-
-      if (restoredStatus === "matched" || restoredStatus === "arrived") {
-        handleTransition("matched");
-      } else if (restoredStatus === "on_trip") {
-        handleTransition("on_trip");
-      } else if (restoredStatus === "searching") {
-        handleTransition("searching");
-      }
-      // ✅ Explicitly handle idle/completed or any other state as 'input'
-      else if (restoredStatus === "idle" || restoredStatus === "completed") {
-        handleTransition("input");
-      } else {
-        handleTransition("input");
-      }
-
-      openTray();
-    }, []);
-
-    // Hardware Back Button Handler
-    useEffect(() => {
-      const backAction = () => {
-        if (currentTab === "ride") {
-          updateRideData({ destination: null });
-          handleTransition("input");
-          return true;
-        }
-        return false;
-      };
-
-      const backHandler = BackHandler.addEventListener(
-        "hardwareBackPress",
-        backAction,
-      );
-      return () => backHandler.remove();
-    }, [currentTab, updateRideData]);
-
-    // --- IMPERATIVE API ---
-    useImperativeHandle(ref, () => ({
-      openTray,
-      closeTray,
-      switchToRides: () => handleTransition("ride"),
-      switchToInput: () => handleTransition("input"),
-      switchToSearching: () => handleTransition("searching"),
-      switchToMatched: () => handleTransition("matched"),
-      switchToOnTrip: () => handleTransition("on_trip"),
-      toggleTripExpansion: (isExpanded: boolean) => {
-        const targetHeight = isExpanded
-          ? OPEN_HEIGHT_ON_TRIP_EXPANDED
-          : OPEN_HEIGHT_ON_TRIP;
-        onTrayHeightChange?.(targetHeight);
-        Animated.spring(heightAnim, {
-          toValue: isExpanded ? 5 : 4,
-          useNativeDriver: false,
-        }).start();
-      },
-    }));
-
-    // --- TRANSITION LOGIC ---
-    const handleTransition = (
-      target: "input" | "ride" | "searching" | "matched" | "on_trip",
-    ) => {
-      setCurrentTab(target);
-
-      // ✅ GUARD: Use '&&' logic. Only update context if we are moving to input
-      // and aren't already in a clean state.
-      if (
-        target === "input" &&
-        rideData.status !== "idle" &&
-        rideData.status !== "completed"
-      ) {
-        updateRideData({
-          status: "idle",
-          destination: null, // Critical: resets the booking flow
-          vehiclePrices: {},
-        });
-      } else if (target === "searching" && rideData.status !== "searching") {
-        updateRideData({ status: "searching" });
-      } else if (target === "matched" && rideData.status !== "matched") {
-        updateRideData({ status: "matched" });
-      } else if (target === "on_trip" && rideData.status !== "on_trip") {
-        updateRideData({ status: "on_trip" });
-      }
-
-      // 1. Update Layout Heights
-      const heights = {
-        input: OPEN_HEIGHT_INPUT,
-        ride: OPEN_HEIGHT_RIDE,
-        searching: OPEN_HEIGHT_SEARCHING,
-        matched: OPEN_HEIGHT_MATCHED,
-        on_trip: OPEN_HEIGHT_ON_TRIP,
-      };
-
-      // If we are moving to or staying in on_trip, check if we were expanded
-      const isExpandedState = (heightAnim as any)._value === 5; // Using the cast to satisfy compiler
-
-      if (target === "on_trip" && isExpandedState) {
-        onTrayHeightChange?.(OPEN_HEIGHT_ON_TRIP_EXPANDED);
-      } else {
-        onTrayHeightChange?.(heights[target as keyof typeof heights]);
-      }
-      // 2. Determine Animation State Index
-      let stateValue = 0;
-      if (target === "input") stateValue = 0;
-      else if (target === "ride") stateValue = 1;
-      else if (target === "searching") stateValue = 2;
-      else if (target === "matched") stateValue = 3;
-      else if (target === "on_trip") stateValue = 4;
-
-      // 3. Animate Transition
-      Animated.parallel([
-        Animated.spring(transitionAnim, {
-          toValue: stateValue,
-          useNativeDriver: true,
-          tension: 40,
-          friction: 8,
-        }),
-        Animated.spring(heightAnim, {
-          toValue: stateValue,
-          useNativeDriver: false,
-        }),
-      ]).start();
-    };
-
-    const openTray = () => {
-      onTrayStateChange?.(true);
-      Animated.spring(translateY, {
-        toValue: 0,
-        useNativeDriver: false,
-        tension: 50,
-        friction: 9,
-      }).start();
-
-      const heights = {
-        input: OPEN_HEIGHT_INPUT,
-        ride: OPEN_HEIGHT_RIDE,
-        searching: OPEN_HEIGHT_SEARCHING,
-        matched: OPEN_HEIGHT_MATCHED,
-        on_trip: OPEN_HEIGHT_ON_TRIP,
-      };
-      onTrayHeightChange?.(heights[currentTab]);
-    };
-
-    const closeTray = () => {
-      onTrayStateChange?.(false);
-      const heights = {
-        input: OPEN_HEIGHT_INPUT,
-        ride: OPEN_HEIGHT_RIDE,
-        searching: OPEN_HEIGHT_SEARCHING,
-        matched: OPEN_HEIGHT_MATCHED,
-        on_trip: OPEN_HEIGHT_ON_TRIP,
-      };
-      Animated.spring(translateY, {
-        toValue: heights[currentTab] - CLOSED_HEIGHT,
-        useNativeDriver: false,
-        tension: 50,
-        friction: 9,
-      }).start();
-      onTrayHeightChange?.(CLOSED_HEIGHT);
-    };
-
-    // --- INTERPOLATIONS ---
-    const inputTranslateX = transitionAnim.interpolate({
-      inputRange: [0, 1, 2, 3, 4],
-      outputRange: [
-        0,
-        -windowWidth,
-        -windowWidth * 2,
-        -windowWidth * 3,
-        -windowWidth * 4,
+const TabSlide = ({ index, transitionIndex, children }: TabSlideProps) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    // Horizontal sliding logic
+    const translateX = interpolate(
+      transitionIndex.value,
+      [0, 1, 2, 3, 4],
+      [
+        width * index,
+        width * (index - 1),
+        width * (index - 2),
+        width * (index - 3),
+        width * (index - 4),
       ],
-    });
-
-    const rideTranslateX = transitionAnim.interpolate({
-      inputRange: [0, 1, 2, 3, 4],
-      outputRange: [
-        windowWidth,
-        0,
-        -windowWidth,
-        -windowWidth * 2,
-        -windowWidth * 3,
-      ],
-    });
-
-    const searchingTranslateX = transitionAnim.interpolate({
-      inputRange: [0, 1, 2, 3, 4],
-      outputRange: [
-        windowWidth * 2,
-        windowWidth,
-        0,
-        -windowWidth,
-        -windowWidth * 2,
-      ],
-    });
-
-    const matchedTranslateX = transitionAnim.interpolate({
-      inputRange: [0, 1, 2, 3, 4, 5],
-      outputRange: [windowWidth * 3, windowWidth * 2, windowWidth, 0, 0, 0],
-    });
-
-    const currentTrayHeight = heightAnim.interpolate({
-      inputRange: [0, 1, 2, 3, 4, 5],
-      outputRange: [
-        OPEN_HEIGHT_INPUT,
-        OPEN_HEIGHT_RIDE,
-        OPEN_HEIGHT_SEARCHING,
-        OPEN_HEIGHT_MATCHED,
-        OPEN_HEIGHT_ON_TRIP,
-        OPEN_HEIGHT_ON_TRIP_EXPANDED,
-      ],
-    });
-
-    return (
-      <Animated.View
-        style={[
-          styles.container,
-          { height: currentTrayHeight, transform: [{ translateY }] },
-        ]}
-      >
-        <LinearGradient
-          colors={["#FFFFFF", theme.colors.surface]}
-          style={styles.background}
-        />
-        <View style={styles.contentContainer}>
-          <View style={styles.tabsWrapper}>
-            <Animated.View
-              style={[
-                StyleSheet.absoluteFill,
-                { transform: [{ translateX: inputTranslateX }] },
-              ]}
-            >
-              <LocationInputTab
-                onFocus={(field) => {
-                  openTray();
-                  onLocationInputFocus?.(field);
-                }}
-              />
-            </Animated.View>
-
-            <Animated.View
-              style={[
-                StyleSheet.absoluteFill,
-                { transform: [{ translateX: rideTranslateX }] },
-              ]}
-            >
-              <RideTab
-                id="ride-options"
-                onOpenAdditionalInfo={onOpenAdditionalInfo || (() => {})}
-                onSwitchToSearching={() => handleTransition("searching")}
-              />
-            </Animated.View>
-
-            <Animated.View
-              style={[
-                StyleSheet.absoluteFill,
-                { transform: [{ translateX: searchingTranslateX }] },
-              ]}
-            >
-              <SearchingTab
-                isActive={currentTab === "searching"}
-                onCancel={() => {
-                  updateRideData({ destination: null });
-                  handleTransition("input");
-                }}
-                onBackToRide={() => handleTransition("ride")}
-                hasOffers={!!hasOffers}
-                // ✅ Pass it through (verify this line exists)
-                onClearOffers={onClearOffers}
-              />
-            </Animated.View>
-
-            <Animated.View
-              style={[
-                StyleSheet.absoluteFill,
-                { transform: [{ translateX: matchedTranslateX }] },
-              ]}
-            >
-              <TripTab
-                onCancel={() => handleTransition("input")}
-                onExpand={(isExpanded) => {
-                  const targetHeight = isExpanded
-                    ? OPEN_HEIGHT_ON_TRIP_EXPANDED
-                    : OPEN_HEIGHT_ON_TRIP;
-                  onTrayHeightChange?.(targetHeight);
-                  Animated.spring(heightAnim, {
-                    toValue: isExpanded ? 5 : 4,
-                    useNativeDriver: false,
-                    tension: 40,
-                    friction: 8,
-                  }).start();
-                }}
-              />
-            </Animated.View>
-          </View>
-        </View>
-      </Animated.View>
     );
-  },
-);
+
+    // Subtle fade for that premium transition
+    const opacity = interpolate(
+      transitionIndex.value,
+      [index - 0.5, index, index + 0.5],
+      [0, 1, 0],
+      Extrapolation.CLAMP,
+    );
+
+    return {
+      transform: [{ translateX }],
+      opacity,
+    };
+  });
+
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>
+      {children}
+    </Animated.View>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/* MAIN TRAY                                   */
+/* -------------------------------------------------------------------------- */
+
+const Tray = forwardRef<any, any>((props, ref) => {
+  const {
+    onTrayStateChange,
+    onTrayHeightChange,
+    onLocationInputFocus,
+    onOpenAdditionalInfo,
+    hasOffers,
+    onClearOffers,
+    onTraySettled,
+  } = props;
+
+  const { rideData, updateRideData } = useRideBooking();
+  const [currentTab, setCurrentTab] = useState<TabType>("input");
+
+  const transitionIndex = useSharedValue(0);
+  const translateY = useSharedValue(0);
+
+  const notifyTrayFinished = (h: number, isOpen: boolean) => {
+    onTrayHeightChange?.(h);
+    onTrayStateChange?.(isOpen);
+    onTraySettled?.(true);
+  };
+
+  const animateTo = useCallback(
+    (tab: TabType, isExpanded = false) => {
+      const index = isExpanded ? TAB_INDEX.expanded : TAB_INDEX[tab];
+      const targetHeight =
+        isExpanded && tab === "on_trip" ? HEIGHTS.expanded : HEIGHTS[tab];
+
+      // ✅ ADDED: Logic to clear destination whenever returning to input
+      if (tab === "input") {
+        updateRideData({ destination: null, vehiclePrices: {} });
+      }
+
+      setCurrentTab(tab);
+
+      transitionIndex.value = withSpring(index, SPRING_CONFIG, (finished) => {
+        if (finished) {
+          runOnJS(notifyTrayFinished)(targetHeight, true);
+        }
+      });
+    },
+    [transitionIndex, updateRideData], // Added updateRideData to dependencies
+  );
+
+  const openTray = useCallback(() => {
+    translateY.value = withSpring(0, SPRING_CONFIG, (finished) => {
+      if (finished) {
+        runOnJS(notifyTrayFinished)(HEIGHTS[currentTab], true);
+      }
+    });
+  }, [currentTab, translateY]);
+
+  const closeTray = useCallback(() => {
+    const target = HEIGHTS[currentTab] - CLOSED_HEIGHT;
+    translateY.value = withSpring(target, SPRING_CONFIG, (finished) => {
+      if (finished) {
+        runOnJS(notifyTrayFinished)(CLOSED_HEIGHT, false);
+      }
+    });
+  }, [currentTab, translateY]);
+
+  const containerStyle = useAnimatedStyle(() => {
+    const currentHeight = interpolate(
+      transitionIndex.value,
+      [0, 1, 2, 3, 4, 5],
+      [
+        HEIGHTS.input,
+        HEIGHTS.ride,
+        HEIGHTS.searching,
+        HEIGHTS.matched,
+        HEIGHTS.on_trip,
+        HEIGHTS.expanded,
+      ],
+      Extrapolation.CLAMP,
+    );
+
+    return {
+      height: currentHeight,
+      transform: [{ translateY: translateY.value }],
+    };
+  });
+
+  /* -------------------------- Lifecycle Sync ----------------------------- */
+
+  useEffect(() => {
+    if (!rideData.destination) {
+      animateTo("input");
+      return;
+    }
+    switch (rideData.status) {
+      case "searching":
+        animateTo("searching");
+        break;
+      case "matched":
+      case "arrived":
+        animateTo("matched");
+        break;
+      case "on_trip":
+        animateTo("on_trip");
+        break;
+      default:
+        break;
+    }
+  }, [rideData.status, rideData.destination, animateTo]);
+
+  useEffect(() => {
+    const handler = () => {
+      if (currentTab === "ride") {
+        updateRideData({ destination: null });
+        animateTo("input");
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener("hardwareBackPress", handler);
+    return () => sub.remove();
+  }, [currentTab, animateTo, updateRideData]);
+
+  useImperativeHandle(ref, () => ({
+    openTray,
+    //closeTray,
+    switchToRides: () => animateTo("ride"),
+    switchToInput: () => animateTo("input"),
+    switchToSearching: () => animateTo("searching"),
+    switchToMatched: () => animateTo("matched"),
+    switchToOnTrip: () => animateTo("on_trip"),
+    toggleTripExpansion: (value: boolean) => {
+      if (currentTab === "on_trip") animateTo("on_trip", value);
+    },
+  }));
+
+  return (
+    <Animated.View style={[styles.container, containerStyle]}>
+      <LinearGradient
+        colors={["#FFFFFF", theme.colors.surface]}
+        style={styles.background}
+      />
+
+      <View style={styles.contentContainer}>
+        <View style={styles.handle} />
+
+        <View style={styles.tabsWrapper}>
+          <TabSlide index={0} transitionIndex={transitionIndex}>
+            <LocationInputTab
+              onFocus={(f) => {
+                openTray();
+                onLocationInputFocus?.(f);
+              }}
+            />
+          </TabSlide>
+
+          <TabSlide index={1} transitionIndex={transitionIndex}>
+            <RideTab
+              id="ride-options"
+              onOpenAdditionalInfo={onOpenAdditionalInfo || (() => {})}
+              onSwitchToSearching={() => animateTo("searching")}
+            />
+          </TabSlide>
+
+          <TabSlide index={2} transitionIndex={transitionIndex}>
+            <SearchingTab
+              isActive={currentTab === "searching"}
+              hasOffers={!!hasOffers}
+              onClearOffers={onClearOffers}
+              onCancel={() => {
+                updateRideData({ destination: null });
+                animateTo("input");
+              }}
+              onBackToRide={() => animateTo("ride")}
+            />
+          </TabSlide>
+
+          <TabSlide index={3} transitionIndex={transitionIndex}>
+            <TripTab
+              onCancel={() => animateTo("input")}
+              onExpand={(v) => animateTo("on_trip", v)}
+            />
+          </TabSlide>
+        </View>
+      </View>
+    </Animated.View>
+  );
+});
 
 Tray.displayName = "Tray";
 
@@ -409,14 +308,28 @@ const styles = createStyles({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 20,
+    overflow: "hidden",
   },
   background: {
     ...StyleSheet.absoluteFillObject,
-    borderTopLeftRadius: theme.borderRadius.xl * 1.5,
-    borderTopRightRadius: theme.borderRadius.xl * 1.5,
   },
-  contentContainer: { flex: 1, paddingTop: theme.spacing.md },
-  tabsWrapper: { flex: 1, overflow: "hidden" },
+  handle: {
+    width: 40,
+    height: 5,
+    backgroundColor: theme.colors.border,
+    //borderRadius: 0,
+    alignSelf: "center",
+    marginTop: 8,
+    marginBottom: 4,
+    opacity: 0.5,
+  },
+  contentContainer: {
+    flex: 1,
+  },
+  tabsWrapper: {
+    flex: 1,
+    overflow: "hidden",
+  },
 });
 
 export default Tray;

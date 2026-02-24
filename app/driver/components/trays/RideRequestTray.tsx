@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants"; // Added for API Key
 import {
   forwardRef,
   useCallback,
@@ -18,14 +19,17 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
-import { IRAvatar } from "../../../../components/IRAvatar"; // Added Import
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps"; // Added Marker
+import MapViewDirections from "react-native-maps-directions"; // Added Directions
+import { IRAvatar } from "../../../../components/IRAvatar";
 import { IRButton } from "../../../../components/IRButton";
+import { theme } from "../../../../constants/theme"; // Assuming theme is available for route color
 import { SubmissionState } from "../../index";
 import { OfferFareControl } from "../DriverOfferFareControl";
 
 const { height: windowHeight } = Dimensions.get("window");
 const OPEN_HEIGHT = windowHeight * 0.88;
+const GOOGLE_MAPS_APIKEY = Constants.expoConfig?.extra?.googleMapsApiKey; // API Key
 
 export interface RideRequestTrayRef {
   open: (
@@ -47,6 +51,7 @@ interface Props {
 
 const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
   ({ driverId, onOfferSubmitted, onClose }, ref) => {
+    const mapRef = useRef<MapView>(null); // Ref for zooming map
     const [isOpen, setIsOpen] = useState(false);
     const [rideId, setRideId] = useState<string | null>(null);
     const [selectedRideData, setSelectedRideData] = useState<any>(null);
@@ -75,6 +80,23 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
       pickup2seater: "2 SEATER PICKUP",
       pickup4seater: "4 SEATER PICKUP",
     };
+
+    // Automatically fit map to the route when tray opens
+    useEffect(() => {
+      if (isOpen && selectedRideData?.pickup && selectedRideData?.destination) {
+        // Short delay to allow the tray to "settle" before zooming
+        const timeout = setTimeout(() => {
+          mapRef.current?.fitToCoordinates(
+            [selectedRideData.pickup, selectedRideData.destination],
+            {
+              edgePadding: { top: 40, right: 40, bottom: 40, left: 40 },
+              animated: true,
+            },
+          );
+        }, 500);
+        return () => clearTimeout(timeout);
+      }
+    }, [isOpen, selectedRideData]);
 
     const handleClose = useCallback(() => {
       clearTimers();
@@ -194,24 +216,48 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
             style={styles.scrollArea}
             contentContainerStyle={{ flexGrow: 1 }}
           >
-            <View style={[styles.mapContainer, { flex: 1, minHeight: 120 }]}>
+            <View style={[styles.mapContainer, { flex: 1, minHeight: 160 }]}>
               <MapView
+                ref={mapRef}
                 provider={PROVIDER_GOOGLE}
                 style={StyleSheet.absoluteFillObject}
                 initialRegion={{
                   latitude: selectedRideData.pickup?.latitude ?? -17.82,
                   longitude: selectedRideData.pickup?.longitude ?? 31.04,
-                  latitudeDelta: 0.02,
-                  longitudeDelta: 0.02,
+                  latitudeDelta: 0.05,
+                  longitudeDelta: 0.05,
                 }}
                 scrollEnabled={false}
-              />
+                pitchEnabled={false}
+                rotateEnabled={false}
+              >
+                {selectedRideData.pickup && selectedRideData.destination && (
+                  <>
+                    <MapViewDirections
+                      origin={selectedRideData.pickup}
+                      destination={selectedRideData.destination}
+                      apikey={GOOGLE_MAPS_APIKEY}
+                      strokeWidth={3}
+                      strokeColor={theme?.colors?.primary || "#10B981"}
+                    />
+                    <Marker coordinate={selectedRideData.pickup}>
+                      <View
+                        style={[styles.mapDot, { backgroundColor: "#00D26A" }]}
+                      />
+                    </Marker>
+                    <Marker coordinate={selectedRideData.destination}>
+                      <View
+                        style={[styles.mapDot, { backgroundColor: "#FF4B55" }]}
+                      />
+                    </Marker>
+                  </>
+                )}
+              </MapView>
             </View>
 
             <View style={styles.middleSection}>
               <View style={styles.profileRow}>
                 <View style={styles.avatarContainer}>
-                  {/* Implemented IRAvatar for Passenger Pic */}
                   <IRAvatar
                     source={
                       selectedRideData.passengerPic
@@ -453,6 +499,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1F5F9",
     marginBottom: 20,
+  },
+  mapDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: "#FFF",
   },
   middleSection: {
     flex: 1,

@@ -2,56 +2,47 @@
 import { Navigation } from "lucide-react-native";
 import React, { useEffect, useRef } from "react";
 import { Animated, Text, TouchableOpacity, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "../../../constants/theme";
 import { createStyles } from "../../../utils/styles";
 import { useRideBooking } from "../../context/RideBookingContext";
 
 interface TripLocationCardProps {
   onPress?: () => void;
+  topPosition: number; // ✅ Added prop to determine position from parent
 }
 
-const HIDDEN_POSITION = -300;
-
-const TripLocationCard: React.FC<TripLocationCardProps> = ({ onPress }) => {
-  const insets = useSafeAreaInsets();
+const TripLocationCard: React.FC<TripLocationCardProps> = ({
+  onPress,
+  topPosition,
+}) => {
   const { rideData, currentRide } = useRideBooking();
   const RIDE_DELAY = Number(
     process.env.ride_Tab_And_Trip_Location_Card_Delay || 600,
   );
 
-  // 🛡️ THE GATE: Only responsive during the initial setup phase
   const isBookingActive = rideData.status === "idle";
-
-  const translateY = useRef(new Animated.Value(HIDDEN_POSITION)).current;
+  const translateY = useRef(new Animated.Value(-300)).current; // Start hidden
 
   useEffect(() => {
     const hasDestination = !!rideData.destination;
-
-    const targetY = hasDestination
-      ? insets.top + theme.spacing.sm
-      : HIDDEN_POSITION;
-
     const delayTime = hasDestination ? RIDE_DELAY : 0;
 
     Animated.spring(translateY, {
-      toValue: targetY,
+      toValue: topPosition, // ✅ Now controlled by parent
       useNativeDriver: true,
       tension: 60,
       friction: 10,
       delay: delayTime,
     }).start();
-  }, [rideData.destination, insets.top, RIDE_DELAY]);
+  }, [topPosition, rideData.destination, RIDE_DELAY]);
 
   return (
     <Animated.View
-      // ✅ PHYSICAL GATE: Touches pass through unless in booking mode
       pointerEvents={isBookingActive ? "auto" : "none"}
       style={[
         styles.animatedWrapper,
         {
           transform: [{ translateY }],
-          // 👁️ VISUAL INDICATOR: Dim the entire card when inactive
           opacity: isBookingActive ? 1 : 0.9,
         },
       ]}
@@ -90,12 +81,11 @@ const TripLocationCard: React.FC<TripLocationCardProps> = ({ onPress }) => {
               ]}
               numberOfLines={1}
             >
-              {currentRide?.destination?.address || rideData.destination?.name}
+              {currentRide?.destination?.name || rideData.destination?.name}
             </Text>
           </View>
         </View>
 
-        {/* 👁️ VISUAL INDICATOR: Hide the action icon when interaction is disabled */}
         {isBookingActive && (
           <View style={styles.sideAction}>
             <Navigation size={18} color={theme.colors.primary} />
@@ -106,6 +96,7 @@ const TripLocationCard: React.FC<TripLocationCardProps> = ({ onPress }) => {
   );
 };
 
+// ... keep existing styles ...
 const styles = createStyles({
   animatedWrapper: {
     position: "absolute",
@@ -145,36 +136,16 @@ const styles = createStyles({
     backgroundColor: theme.colors.border,
     marginVertical: 2,
   },
-  squareDestination: {
-    width: 6,
-    height: 6,
-    backgroundColor: "#d34444ff",
-  },
-  locationsWrapper: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  locationRow: {
-    height: 22,
-    justifyContent: "center",
-  },
+  squareDestination: { width: 6, height: 6, backgroundColor: "#d34444ff" },
+  locationsWrapper: { flex: 1, justifyContent: "center" },
+  locationRow: { height: 22, justifyContent: "center" },
   locationText: {
     fontSize: 14,
     color: theme.colors.textSecondary,
     fontWeight: "500",
   },
-  destinationText: {
-    color: theme.colors.text,
-    fontWeight: "700",
-  },
-  // New visual indicators
-  disabledText: {
-    color: "#506055ff", // Gray-400
-    fontWeight: "500",
-  },
-  disabledBg: {
-    backgroundColor: theme.colors.primary, // Gray-300
-  },
+  destinationText: { color: theme.colors.text, fontWeight: "700" },
+  disabledText: { color: "#506055ff", fontWeight: "500" },
   divider: {
     height: 1,
     backgroundColor: theme.colors.border,

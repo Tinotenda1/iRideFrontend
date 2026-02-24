@@ -57,8 +57,6 @@ const InputTray = forwardRef<any, InputTrayProps>(
       onClose?.();
     };
 
-    // app/components/trays/InputTray.tsx
-
     const handlePlaceSelect = (place: Place | null) => {
       if (!place) return;
 
@@ -66,6 +64,7 @@ const InputTray = forwardRef<any, InputTrayProps>(
         updateRideData({ pickupLocation: place });
       } else {
         // ✅ Add status: "active" here to trigger the UI Controller
+        console.log(`[InputTray] Destination selected:`, place);
         updateRideData({
           destination: place,
           status: "active",
