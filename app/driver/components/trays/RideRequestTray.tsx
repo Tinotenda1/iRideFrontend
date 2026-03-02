@@ -1,5 +1,5 @@
+// app/driver/components/trays/RideRequestTray.tsx
 import { Ionicons } from "@expo/vector-icons";
-import Constants from "expo-constants"; // Added for API Key
 import {
   forwardRef,
   useCallback,
@@ -19,26 +19,30 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps"; // Added Marker
-import MapViewDirections from "react-native-maps-directions"; // Added Directions
+import MapView from "react-native-maps";
 import { IRAvatar } from "../../../../components/IRAvatar";
 import { IRButton } from "../../../../components/IRButton";
-import { theme } from "../../../../constants/theme"; // Assuming theme is available for route color
+import {
+  DriverLocation,
+  watchDriverLocation,
+} from "../../driverLocationUtility/driverLocation";
 import { SubmissionState } from "../../index";
 import { OfferFareControl } from "../DriverOfferFareControl";
+import RideRequestMap from "../maps/RideRequestMap";
 
 const { height: windowHeight } = Dimensions.get("window");
 const OPEN_HEIGHT = windowHeight * 0.88;
-const GOOGLE_MAPS_APIKEY = Constants.expoConfig?.extra?.googleMapsApiKey; // API Key
+const MAP_MIN_HEIGHT = OPEN_HEIGHT * 0.3;
 
 export interface RideRequestTrayRef {
   open: (
     rideId: string,
-    currentProgress: number,
+    priorityDurationMs: number,
     remainingMs: number,
     existingOffer: number | null,
     status: SubmissionState,
     rideData: any,
+    priority?: boolean,
   ) => void;
   close: () => void;
 }
@@ -51,23 +55,33 @@ interface Props {
 
 const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
   ({ driverId, onOfferSubmitted, onClose }, ref) => {
-    const mapRef = useRef<MapView>(null); // Ref for zooming map
+    const mapRef = useRef<MapView>(null);
     const [isOpen, setIsOpen] = useState(false);
     const [rideId, setRideId] = useState<string | null>(null);
     const [selectedRideData, setSelectedRideData] = useState<any>(null);
     const [expiresAt, setExpiresAt] = useState<number | null>(null);
     const [secondsLeft, setSecondsLeft] = useState(0);
+    const isPriority = selectedRideData?.broadcastType === "priority";
 
     const [currentOffer, setCurrentOffer] = useState(0);
     const [currentStatus, setCurrentStatus] = useState<SubmissionState>("idle");
 
     const progressAnim = useRef(new Animated.Value(1)).current;
+    const priorityDurationRef = useRef<number>(0);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const baseOffer = selectedRideData?.offer ?? 0;
     const minOffer = selectedRideData?.priceRange?.min ?? baseOffer;
     const maxOffer = selectedRideData?.priceRange?.max ?? baseOffer;
+
+    const priorityWindow =
+      expiresAt && isPriority ? Math.floor((expiresAt - Date.now()) * 0.1) : 0;
+
+    const [currentDriverLocation, setCurrentDriverLocation] =
+      useState<DriverLocation | null>(null);
+
+    const animationStartedFor = useRef<string | null>(null);
 
     const clearTimers = () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -81,22 +95,13 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
       pickup4seater: "4 SEATER PICKUP",
     };
 
-    // Automatically fit map to the route when tray opens
     useEffect(() => {
-      if (isOpen && selectedRideData?.pickup && selectedRideData?.destination) {
-        // Short delay to allow the tray to "settle" before zooming
-        const timeout = setTimeout(() => {
-          mapRef.current?.fitToCoordinates(
-            [selectedRideData.pickup, selectedRideData.destination],
-            {
-              edgePadding: { top: 40, right: 40, bottom: 40, left: 40 },
-              animated: true,
-            },
-          );
-        }, 500);
-        return () => clearTimeout(timeout);
-      }
-    }, [isOpen, selectedRideData]);
+      const unsubscribe = watchDriverLocation(
+        (location) => setCurrentDriverLocation(location),
+        (error) => console.error("Location Tracking Error:", error),
+      );
+      return () => unsubscribe();
+    }, []);
 
     const handleClose = useCallback(() => {
       clearTimers();
@@ -112,9 +117,10 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     useImperativeHandle(
       ref,
       () => ({
+        // Inside useImperativeHandle
         open: (
           rideId,
-          currentProgress,
+          priorityDurationMs,
           remainingMs,
           existingOffer,
           status,
@@ -122,34 +128,64 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
         ) => {
           setRideId(rideId);
           setSelectedRideData(rideData);
-          setExpiresAt(Date.now() + remainingMs);
+          setExpiresAt(Date.now() + Math.max(0, remainingMs));
           setCurrentStatus(status);
           setCurrentOffer(existingOffer ?? rideData.offer);
+
+          // Set ref so useEffect can read it
+          priorityDurationRef.current = priorityDurationMs;
+
+          // Sync progress animation
+          progressAnim.setValue(remainingMs / priorityDurationMs);
+
+          // Sync timer
+          setSecondsLeft(Math.ceil(Math.max(0, remainingMs) / 1000));
+
           setIsOpen(true);
-
-          if (status === ("idle" as any)) {
-            progressAnim.setValue(currentProgress ?? 1);
-            Animated.timing(progressAnim, {
-              toValue: 0,
-              duration: remainingMs,
-              easing: Easing.linear,
-              useNativeDriver: false,
-            }).start();
-
-            const initialSeconds = Math.ceil(remainingMs / 1000);
-            setSecondsLeft(initialSeconds);
-
-            clearTimers();
-            timerRef.current = setTimeout(handleClose, remainingMs);
-            intervalRef.current = setInterval(() => {
-              setSecondsLeft((prev) => (prev <= 1 ? 0 : prev - 1));
-            }, 1000);
-          }
         },
         close: handleClose,
       }),
-      [handleClose, progressAnim],
+      [handleClose],
     );
+
+    useEffect(() => {
+      if (!isOpen || !rideId || currentStatus !== "idle") return;
+
+      const isPriorityRide = selectedRideData?.broadcastType === "priority";
+      if (!isPriorityRide || !expiresAt) return;
+
+      const updateProgress = () => {
+        const remainingMs = expiresAt - Date.now();
+        const duration = Math.max(0, remainingMs);
+
+        progressAnim.setValue(duration / priorityDurationRef.current);
+
+        Animated.timing(progressAnim, {
+          toValue: 0,
+          duration,
+          easing: Easing.linear,
+          useNativeDriver: false,
+        }).start();
+
+        setSecondsLeft(Math.ceil(duration / 1000));
+
+        intervalRef.current = setInterval(() => {
+          const rem = expiresAt - Date.now();
+          const newSeconds = Math.max(0, Math.ceil(rem / 1000));
+          setSecondsLeft(newSeconds);
+
+          if (newSeconds <= 0) {
+            clearTimers();
+          }
+        }, 1000);
+      };
+      updateProgress();
+
+      return () => {
+        clearTimers();
+        progressAnim.stopAnimation();
+      };
+    }, [isOpen, rideId, expiresAt, selectedRideData, currentStatus]);
 
     const submitOffer = () => {
       if (!rideId || !selectedRideData || (currentStatus as string) !== "idle")
@@ -193,7 +229,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
           onPress={handleClose}
         />
         <View style={styles.container}>
-          {(currentStatus as string) === "idle" && (
+          {currentStatus === "idle" && isPriority && secondsLeft > 0 && (
             <Animated.View
               style={[
                 styles.topProgressBar,
@@ -204,120 +240,58 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
           <View style={styles.headerArea}>
             <View style={styles.handle} />
             <Text style={styles.timerDigits}>
-              {(currentStatus as string) === "idle"
-                ? `NEW REQUEST - ${vehicleTypeLabels[selectedRideData.vehicleType] || "Ride"} • 00:${secondsLeft
-                    .toString()
-                    .padStart(2, "0")}`
-                : "OFFER PENDING"}
+              {isPriority
+                ? secondsLeft > 0
+                  ? `NEW REQUEST (PRIORITY WINDOW • 00:${secondsLeft
+                      .toString()
+                      .padStart(2, "0")})`
+                  : "NEW REQUEST"
+                : "NEW REQUEST"}
             </Text>
           </View>
+
           <ScrollView
             showsVerticalScrollIndicator={false}
             style={styles.scrollArea}
             contentContainerStyle={{ flexGrow: 1 }}
           >
-            <View style={[styles.mapContainer, { flex: 1, minHeight: 160 }]}>
-              <MapView
-                ref={mapRef}
-                provider={PROVIDER_GOOGLE}
-                style={StyleSheet.absoluteFillObject}
-                initialRegion={{
-                  latitude: selectedRideData.pickup?.latitude ?? -17.82,
-                  longitude: selectedRideData.pickup?.longitude ?? 31.04,
-                  latitudeDelta: 0.05,
-                  longitudeDelta: 0.05,
-                }}
-                scrollEnabled={false}
-                pitchEnabled={false}
-                rotateEnabled={false}
-              >
-                {selectedRideData.pickup && selectedRideData.destination && (
-                  <>
-                    <MapViewDirections
-                      origin={selectedRideData.pickup}
-                      destination={selectedRideData.destination}
-                      apikey={GOOGLE_MAPS_APIKEY}
-                      strokeWidth={3}
-                      strokeColor={theme?.colors?.primary || "#10B981"}
-                    />
-                    <Marker coordinate={selectedRideData.pickup}>
-                      <View
-                        style={[styles.mapDot, { backgroundColor: "#00D26A" }]}
-                      />
-                    </Marker>
-                    <Marker coordinate={selectedRideData.destination}>
-                      <View
-                        style={[styles.mapDot, { backgroundColor: "#FF4B55" }]}
-                      />
-                    </Marker>
-                  </>
-                )}
-              </MapView>
-            </View>
+            <RideRequestMap
+              rideData={selectedRideData}
+              driverLocation={currentDriverLocation || undefined}
+              minHeight={MAP_MIN_HEIGHT}
+            />
 
             <View style={styles.middleSection}>
               <View style={styles.profileRow}>
-                <View style={styles.avatarContainer}>
-                  <IRAvatar
-                    source={
-                      selectedRideData.passengerPic
-                        ? { uri: selectedRideData.passengerPic }
-                        : undefined
-                    }
-                    name={selectedRideData.passengerName}
-                    size={54}
-                  />
-                </View>
+                <IRAvatar
+                  source={
+                    selectedRideData.passengerPic
+                      ? { uri: selectedRideData.passengerPic }
+                      : undefined
+                  }
+                  name={selectedRideData.passengerName}
+                  size={54}
+                />
 
                 <View style={styles.profileInfo}>
                   <Text style={styles.passengerName}>
                     {selectedRideData.passengerName || "Passenger"}
                   </Text>
-
                   <View style={styles.ratingRow}>
-                    <View style={{ flexDirection: "row", gap: 1 }}>
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <Ionicons
-                          key={i}
-                          name={
-                            i <=
-                            Math.round(selectedRideData.passengerRating || 5)
-                              ? "star"
-                              : "star-outline"
-                          }
-                          size={10}
-                          color={
-                            i <=
-                            Math.round(selectedRideData.passengerRating || 5)
-                              ? "#FFC107"
-                              : "#cbd5e1"
-                          }
-                        />
-                      ))}
-                    </View>
-
+                    <Ionicons name="star" size={12} color="#FFC107" />
                     <Text style={styles.ratingValueText}>
-                      (
                       {parseFloat(
                         selectedRideData.passengerRating || "5",
                       ).toFixed(2)}
-                      )
                     </Text>
-
                     <View style={styles.dotSeparator} />
-
                     <Text style={styles.tripCountText}>
                       {selectedRideData.passengerTrips || "0"} trips
                     </Text>
                   </View>
                 </View>
 
-                <View
-                  style={[
-                    styles.priceContainer,
-                    { flexDirection: "row", alignItems: "center", gap: 8 },
-                  ]}
-                >
+                <View style={styles.priceContainer}>
                   <Text style={styles.mainPrice}>${baseOffer?.toFixed(2)}</Text>
                   <View
                     style={[
@@ -344,37 +318,6 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                       {selectedRideData.offerType?.toUpperCase() || "NEW"}
                     </Text>
                   </View>
-                </View>
-              </View>
-
-              <View style={styles.statsStrip}>
-                <View style={styles.statItem}>
-                  <Ionicons name="navigate-circle" size={16} color="#64748B" />
-                  <Text style={styles.statValue}>
-                    {selectedRideData.rideDistanceKm?.toFixed(1)} km
-                  </Text>
-                  <Text style={styles.statLabel}>Trip</Text>
-                </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statItem}>
-                  <Ionicons name="car" size={16} color="#64748B" />
-                  <Text style={styles.statValue}>
-                    {parseFloat(
-                      selectedRideData.pickupDistanceKm || "0",
-                    ).toFixed(2)}{" "}
-                    km
-                  </Text>
-                  <Text style={styles.statLabel}>Pickup</Text>
-                </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statItem}>
-                  <Ionicons name="wallet" size={16} color="#64748B" />
-                  <Text style={styles.statValue}>
-                    {selectedRideData.paymentMethod === "ecocash"
-                      ? "Eco"
-                      : "Cash"}
-                  </Text>
-                  <Text style={styles.statLabel}>Pay</Text>
                 </View>
               </View>
 
@@ -437,7 +380,6 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                 />
               </>
             )}
-
             <IRButton title="CLOSE" variant="outline" onPress={handleClose} />
           </View>
         </View>
@@ -492,30 +434,15 @@ const styles = StyleSheet.create({
   scrollArea: {
     flex: 1,
   },
-  mapContainer: {
-    height: 140,
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#F1F5F9",
-    marginBottom: 20,
-  },
-  mapDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 2,
-    borderColor: "#FFF",
-  },
   middleSection: {
     flex: 1,
+    paddingTop: 15,
   },
   profileRow: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 20,
   },
-  avatarContainer: {},
   profileInfo: {
     flex: 1,
     marginLeft: 12,
@@ -562,47 +489,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    alignSelf: "flex-start",
   },
   badgeText: {
     fontSize: 9,
     fontWeight: "900",
   },
-  statsStrip: {
-    flexDirection: "row",
-    backgroundColor: "#F8FAFC",
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 10,
-    alignItems: "center",
-    justifyContent: "space-around",
-    borderWidth: 1,
-    borderColor: "#F1F5F9",
-  },
-  statItem: {
-    alignItems: "center",
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#1E293B",
-    marginTop: 2,
-  },
-  statLabel: {
-    fontSize: 10,
-    color: "#94A3B8",
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  statDivider: {
-    width: 1,
-    height: 10,
-    backgroundColor: "#E2E8F0",
-  },
   addressSection: {
     paddingLeft: 8,
-    marginBottom: 10,
+    marginVertical: 15,
     position: "relative",
   },
   timelineLine: {

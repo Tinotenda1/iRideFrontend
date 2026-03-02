@@ -101,21 +101,35 @@ export default function SessionChecker({ children }: Props) {
         );
         setDeviceValid(deviceValidation.isValid);
 
+        // ✅ Fully logged in + onboarded
         if (
           session.isAuthenticated &&
           session.onboardingCompleted &&
           deviceValidation.isValid
         ) {
           console.log("✅ Session check successful");
+
           if (session.userInfo.userType === "driver") {
             router.replace(ROUTES.DRIVER.HOME as never);
           } else {
             router.replace(ROUTES.PASSENGER.HOME as never);
           }
-        } else if (!session.isAuthenticated) {
-          router.replace(ROUTES.ONBOARDING.GET_STARTED as never);
-        } else {
+
+          return;
+        }
+
+        // ✅ Logged in but NOT onboarded
+        if (session.isAuthenticated && !session.onboardingCompleted) {
+          console.log("🟡 User needs onboarding");
           router.replace(ROUTES.ONBOARDING.WELCOME as never);
+          return;
+        }
+
+        // ✅ Not logged in
+        if (!session.isAuthenticated) {
+          console.log("🔴 Not authenticated");
+          router.replace(ROUTES.ONBOARDING.GET_STARTED as never);
+          return;
         }
       } catch (error) {
         console.error("❌ Error checking session:", error);

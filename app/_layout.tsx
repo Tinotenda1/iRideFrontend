@@ -12,6 +12,7 @@ import {
 
 import { RideBookingProvider } from "./context/RideBookingContext";
 
+import { initializeAuthToken } from "../utils/api";
 import {
   connectDriver,
   getDriverSocketStatus,
@@ -154,6 +155,19 @@ function RootContent() {
       setReconnecting(false);
       console.log("⚡ Initial socket connection process finished.");
     }
+  }, []);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        await initializeAuthToken();
+        console.log("🔐 Auth token initialized");
+      } catch (e) {
+        console.warn("⚠️ Failed to initialize auth token", e);
+      }
+    };
+
+    initAuth();
   }, []);
 
   useEffect(() => {

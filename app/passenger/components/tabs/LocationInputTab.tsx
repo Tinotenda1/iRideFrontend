@@ -159,21 +159,24 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
   // 1. Auto-set Pickup to Current Location AND Clear Destination on mount
   useEffect(() => {
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
 
-      let location = await Location.getCurrentPositionAsync({});
-      let reverse = await Location.reverseGeocodeAsync({
+      const location = await Location.getCurrentPositionAsync({});
+
+      const reverse = await Location.reverseGeocodeAsync({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
 
+      const address = reverse[0]
+        ? `${reverse[0].name || ""} ${reverse[0].street || ""}`.trim()
+        : "Current Location";
+
       const currentPlace: Place = {
         id: "current",
-        name: "Current Location",
-        address: reverse[0]
-          ? `${reverse[0].name || ""} ${reverse[0].street || ""}`.trim()
-          : "Current Location",
+        name: address || "Current Location",
+        address: address || "Current Location",
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       };
@@ -181,14 +184,6 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
       updateRideData({ pickupLocation: currentPlace });
     })();
   }, []);
-
-  // 2. Fetch prices when destination is selected (and pickup exists)
-  // 2. Trigger fetch prices
-  useEffect(() => {
-    if (rideData.pickupLocation?.latitude && rideData.destination?.latitude) {
-      fetchPrices(rideData.pickupLocation, rideData.destination);
-    }
-  }, [rideData.destination, rideData.pickupLocation]);
 
   // ✅ 3. Log prices in the Tab whenever they are updated in context
   useEffect(() => {
@@ -204,11 +199,20 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
     field: "pickup" | "destination",
     place: Place | null,
   ) => {
-    updateRideData({ [field]: place });
-    console.log(`[RideTab] ${field} set to:`, place);
     if (field === "destination" && place) {
+      updateRideData({
+        [field]: place,
+        status: "booking", // ✅ trigger status change
+      });
+
       onSuggestionSelect?.(place);
+    } else {
+      updateRideData({
+        [field]: place,
+      });
     }
+
+    console.log(`[RideTab] ${field} set to:`, place);
   };
 
   const recentDestinations = rideData.recentDestinations || [];

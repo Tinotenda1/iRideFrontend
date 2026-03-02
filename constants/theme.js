@@ -63,7 +63,7 @@ export const theme = {
   typography: {
     h1: {
       fontSize: 28,
-      fontWeight: "800",
+      fontWeight: "800", // ✅ string
       lineHeight: 36,
     },
     h2: {

@@ -272,13 +272,21 @@ export const onRideCancelled = (callback: (data: any) => void) => {
     socket?.off(eventName, callback);
   };
 };
-
 export const onRemoveRideRequest = (callback: (data: any) => void) => {
-  if (!socket) return () => {};
-  const eventName = "ride:remove_request";
-  socket.on(eventName, callback);
+  const activeSocket = socket; // capture reference
+
+  if (!activeSocket) return () => {};
+
+  const events = ["ride:remove_request", "request_cancelled"];
+
+  events.forEach((event) => {
+    activeSocket.on(event, callback);
+  });
+
   return () => {
-    socket?.off(eventName, callback);
+    events.forEach((event) => {
+      activeSocket.off(event, callback);
+    });
   };
 };
 

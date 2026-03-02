@@ -67,7 +67,7 @@ const InputTray = forwardRef<any, InputTrayProps>(
         console.log(`[InputTray] Destination selected:`, place);
         updateRideData({
           destination: place,
-          status: "active",
+          status: "booking",
         });
       }
       handleClose();

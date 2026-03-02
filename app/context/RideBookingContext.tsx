@@ -20,6 +20,8 @@ export interface RideBookingData {
   passengerPhone: string;
   pickupLocation: Place | null;
   destination: Place | null;
+  distance?: string;
+  duration?: string;
   vehicleType: string;
   paymentMethod: string;
   additionalInfo?: string;
@@ -36,8 +38,18 @@ export interface RideBookingData {
   startedAt?: string;
   arrivedAt?: string;
 
+  route?: {
+    coordinates: {
+      latitude: number;
+      longitude: number;
+    }[];
+    distance: number; // km (raw)
+    duration: number; // minutes (raw)
+  };
+
   status?:
     | "idle"
+    | "booking"
     | "searching"
     | "matched"
     | "arrived"
@@ -144,7 +156,12 @@ interface RideBookingContextType {
   cancelRide: () => Promise<void>;
   fetchRecentDestinations: () => Promise<void>;
   hideRecentDestination: (rideId: string) => Promise<void>;
-  fetchPrices: (pickup: Place, destination: Place) => Promise<void>;
+  fetchPrices: (
+    pickup: Place,
+    destination: Place,
+    distance: string,
+    duration: string,
+  ) => Promise<void>;
 }
 
 const RideBookingContext = createContext<RideBookingContextType | undefined>(
@@ -155,6 +172,9 @@ const initialRideData: RideBookingData = {
   passengerPhone: "",
   pickupLocation: null,
   destination: null,
+  distance: "",
+  duration: "",
+  route: undefined,
   vehicleType: "",
   paymentMethod: "",
   additionalInfo: "",
@@ -203,7 +223,12 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
   }, []);
 
   const fetchPrices = useCallback(
-    async (pickup: Place, destination: Place) => {
+    async (
+      pickup: Place,
+      destination: Place,
+      distance: string,
+      duration: string,
+    ) => {
       const MAX_RETRIES = 3;
 
       if (!pickup.latitude || !destination.latitude) return;
@@ -216,11 +241,18 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
       while (attempt <= MAX_RETRIES && !success) {
         try {
           const response = await api.post("/pricing/suggest", {
-            pickup: { latitude: pickup.latitude, longitude: pickup.longitude },
+            pickup: {
+              latitude: pickup.latitude,
+              longitude: pickup.longitude,
+            },
+
             destination: {
               latitude: destination.latitude,
               longitude: destination.longitude,
             },
+
+            distance,
+            duration,
           });
 
           /*
@@ -297,6 +329,7 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
           longitude: Number(rideData.destination?.longitude),
           address: rideData.destination?.address || "",
         },
+        route: rideData.route,
 
         vehicleType: rideData.vehicleType,
         paymentMethod: rideData.paymentMethod,

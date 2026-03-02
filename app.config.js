@@ -47,6 +47,8 @@ export default {
     },
     extra: {
       googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
+      respondedRideTimeout:
+        process.env.RESPONDED_RIDE_REQUEST_CARD_AUTO_REMOVAL_DELAY,
     },
     plugins: [
       "expo-router",

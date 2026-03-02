@@ -51,26 +51,13 @@ const RideTab: React.FC<TabProps> = ({
     }
   }, [rideData.vehiclePrices]);
 
-  // 1. INITIALIZATION & PRICE FETCHING
+  // 1. INITIALIZATION LOGIC
   useEffect(() => {
     const initTab = async () => {
       // Set default vehicle if none selected
       if (!rideData.vehicleType) {
         updateRideData({ vehicleType: "4seater" });
       }
-
-      if (rideData.pickupLocation && rideData.destination) {
-        try {
-          setIsFetchingPrices(true);
-          // fetchPrices now updates vehiclePrices in context correctly
-          await fetchPrices(rideData.pickupLocation, rideData.destination);
-        } catch (error) {
-          console.error("Failed to fetch prices:", error);
-        } finally {
-          setIsFetchingPrices(false);
-        }
-      }
-
       setTimeout(() => setIsReady(true), 500);
     };
 

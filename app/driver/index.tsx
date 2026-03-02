@@ -1,12 +1,11 @@
 // app/driver/index.tsx
 import { getUserInfo } from "@/utils/storage";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native"; // Added ActivityIndicator
 
 import TripStatusModal, { ModalType } from "../../components/TripStatusModal";
 import { useSessionRestoration } from "../services/useSessionRestoration";
-import DriverFooterNav from "./components/DriverFooterNav";
 import DriverHeader from "./components/DriverHeader";
 import Sidebar from "./components/DriverSideBar";
 import DriverSettingsTray from "./components/trays/DriverSettingsTray";
@@ -19,7 +18,6 @@ import {
   handleDriverResponse,
   onNewRideRequest,
   onReconnectState,
-  onRemoveRideRequest,
   onStatusChange,
 } from "./socketConnectionUtility/driverSocketService";
 
@@ -39,9 +37,8 @@ const DriverDashboard: React.FC = () => {
   const [incomingRides, setIncomingRides] = useState<any[]>([]);
   const [online, setOnline] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [trayHeight, setTrayHeight] = useState(0);
+  const [trayHeight, setTrayHeight] = useState(0); // ✅ Use the restoration hook
 
-  // ✅ Use the restoration hook
   const hasInitialized = useRef(false);
 
   const [modalConfig, setModalConfig] = useState({
@@ -56,9 +53,8 @@ const DriverDashboard: React.FC = () => {
   >({});
   const [submittedOffers, setSubmittedOffers] = useState<
     Record<string, number>
-  >({});
+  >({}); // 1. Unified Initialization Logic
 
-  // 1. Unified Initialization Logic
   useEffect(() => {
     const initDriver = async () => {
       if (hasInitialized.current) return;
@@ -71,9 +67,7 @@ const DriverDashboard: React.FC = () => {
           router.replace("/auth/get-started" as any);
           return;
         }
-        setDriverInfo(user);
-
-        // ✅ Extracting logic to the service module
+        setDriverInfo(user); // ✅ Extracting logic to the service module
       } catch (err) {
         console.error("❌ Driver Init Error:", err);
       } finally {
@@ -92,9 +86,8 @@ const DriverDashboard: React.FC = () => {
     const unsubscribe = onReconnectState((data) => {
       if (data) {
         console.log("🔄 Reconnect Data Received, Restoring Session:", data);
-        restoreSession(data);
+        restoreSession(data); // If they were on a trip, clear the local pending requests to avoid clutter
 
-        // If they were on a trip, clear the local pending requests to avoid clutter
         if (data.activeTrip) {
           setIncomingRides([]);
           setSubmissionStates({});
@@ -106,42 +99,45 @@ const DriverDashboard: React.FC = () => {
     return () => {
       unsubscribe();
     };
-  }, [restoreSession]);
+  }, [restoreSession]); // 2. Existing Handlers
 
-  // 2. Existing Handlers
   const handleCloseModal = () => {
     setModalConfig((prev) => ({ ...prev, visible: false }));
     if (driverTrayRef.current) {
       driverTrayRef.current.goOnline();
     }
-  };
-
-  // 3. Socket Listeners
-  useEffect(() => {
-    if (!online) return;
-    const unsubscribe = onRemoveRideRequest((rideId) => {
-      console.log("📡 Driver - Ride removed:", rideId);
-      setIncomingRides((prev) => prev.filter((r) => r.rideId !== rideId));
-    });
-    return () => unsubscribe();
-  }, [online]);
+  }; // socket listener for new ride requests
 
   useEffect(() => {
     if (!online) return;
+
     const unsubscribe = onNewRideRequest((newRide: any) => {
       setIncomingRides((prev) => {
         if (prev.find((r) => r.rideId === newRide.rideId)) return prev;
         return [...prev, newRide];
       });
+
+      const priorityDuration = newRide.priorityDurationMs || 30000;
+      // ✅ Tray always receives same parameters
+      rideTrayRef.current?.open(
+        newRide.rideId,
+        priorityDuration,
+        priorityDuration,
+        //10000, // For testing purposes, we can set this to a fixed value or use the actual priorityDuration
+        //5000, // For testing purposes, we can set this to a fixed value or use the actual remainingMs
+        submittedOffers[newRide.rideId] ?? null,
+        submissionStates[newRide.rideId] ?? "idle",
+        newRide,
+      );
     });
+
     return () => unsubscribe();
-  }, [online]);
+  }, [online, submittedOffers, submissionStates]);
 
   useEffect(() => {
     return () => disconnectDriver();
-  }, []);
+  }, []); // 4. Status Sync
 
-  // 4. Status Sync
   useEffect(() => {
     const unsubscribe = onStatusChange((s) => {
       setOnline(s === "connected");
@@ -155,7 +151,8 @@ const DriverDashboard: React.FC = () => {
   const handleDecline = (ride: any) => {
     setIncomingRides((prev) =>
       prev.filter((r) => r.rideId !== (ride.rideId || ride)),
-    );
+    ); // ✅ Close tray when card expires/slides out
+    rideTrayRef.current?.close();
   };
 
   const handleOfferSubmission = async (
@@ -185,26 +182,32 @@ const DriverDashboard: React.FC = () => {
     }
   };
 
-  const handleSelect = (
-    rideId: string,
-    progress: number,
-    msLeft: number,
-    rideData: any,
-  ) => {
-    rideTrayRef.current?.open(
-      rideId,
-      progress,
-      msLeft,
-      submittedOffers[rideId] ?? null,
-      submissionStates[rideId] ?? "idle",
-      rideData,
-    );
-  };
+  const handleSelect = useCallback(
+    (
+      rideId: string,
+      rideData: any,
+      priorityDurationMs: number,
+      remainingMs: number,
+    ) => {
+      // ✅ Always pass: rideId, priorityDuration, remainingMs, submittedOffer, submissionState, rideData
+      rideTrayRef.current?.open(
+        rideId,
+        priorityDurationMs,
+        remainingMs,
+        submittedOffers[rideId] ?? null,
+        submissionStates[rideId] ?? "idle",
+        rideData,
+      );
+    },
+    [submittedOffers, submissionStates],
+  );
+
   const renderScreen = () => {
     switch (activeScreen) {
       default:
         return (
           <DriverHome
+            rideTrayRef={rideTrayRef}
             online={online}
             isConnecting={isConnecting}
             incomingRides={incomingRides}
@@ -248,13 +251,13 @@ const DriverDashboard: React.FC = () => {
           rideTrayRef.current?.close();
         }}
       />
+
       <RideRequestTray
         ref={rideTrayRef}
         driverId={driverInfo?.id}
         onOfferSubmitted={handleOfferSubmission}
         onClose={() => {}}
       />
-      <DriverFooterNav active={activeScreen} onChange={setActiveScreen} />
       <TripStatusModal
         visible={modalConfig.visible}
         type={modalConfig.type}

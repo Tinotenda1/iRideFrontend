@@ -12,6 +12,12 @@ import {
   View,
 } from "react-native";
 import { IRAvatar } from "../../../components/IRAvatar";
+import {
+  onRemoveRideRequest,
+  onRideCancelled,
+} from "../socketConnectionUtility/driverSocketService";
+
+const RESPONDED_RIDE_CARD_AUTO_REMOVE_DELAY = 60000; // 35 seconds - can be configured via .env and app.config.js
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SLIDE_DURATION = 400;
@@ -24,10 +30,11 @@ interface Props {
   onExpire?: (rideId: string) => void;
   onSelect?: (
     rideId: string,
-    currentProgress: number,
-    remainingMs: number,
     rideData: any,
+    priorityDurationMs: number,
+    remainingPriorityMs: number,
   ) => void;
+  rideTrayRef?: React.RefObject<any>;
 }
 
 export default function RideRequestCard({
@@ -37,6 +44,7 @@ export default function RideRequestCard({
   submittedOffer,
   onExpire,
   onSelect,
+  rideTrayRef,
 }: Props) {
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -49,6 +57,11 @@ export default function RideRequestCard({
   const animationStartedRef = useRef(false);
 
   const isSubmitted = submittedOffer !== undefined;
+  const isPriority = rideData.broadcastType === "priority";
+
+  const priorityDurationMs = isPriority
+    ? Number(rideData.priorityDurationMs) || 0
+    : 0;
 
   // Badge configuration based on offerType with distinct colors
   const getOfferBadge = (type: string) => {
@@ -111,16 +124,60 @@ export default function RideRequestCard({
     [slideAnim, opacityAnim],
   );
 
-  const handleSelect = () => {
-    onSelect?.(
-      rideId,
-      progressValue.current,
-      Math.max(0, expiresAt - Date.now()),
-      rideData,
-    );
-    console.log("RideRequestCard selected:", rideData);
+  const handleSelectCard = () => {
+    const remainingMs = isPriority
+      ? Math.round(progressValue.current * priorityDurationMs)
+      : 0;
+
+    onSelect?.(rideId, rideData, priorityDurationMs, remainingMs);
   };
 
+  // Auto-expire after if responded to
+  useEffect(() => {
+    if (!isSubmitted) return;
+
+    const timer = setTimeout(() => {
+      slideOut(() => {
+        // ✅ Close tray directly
+        rideTrayRef?.current?.close();
+
+        // Optional: keep old logic
+        onExpire?.(rideId);
+      });
+    }, RESPONDED_RIDE_CARD_AUTO_REMOVE_DELAY); // seconds
+
+    return () => clearTimeout(timer);
+  }, [isSubmitted, slideOut, onExpire, rideId]);
+
+  // Socket Listeners to remove expired/declined rides
+  useEffect(() => {
+    const unsubscribe = onRemoveRideRequest((rideId) => {
+      slideOut(() => {
+        // ✅ Close tray directly
+        rideTrayRef?.current?.close();
+
+        // Optional: keep old logic
+        onExpire?.(rideId);
+      });
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Socket Listeners to remove expired/declined rides
+  useEffect(() => {
+    const unsubscribe = onRideCancelled((rideId) => {
+      slideOut(() => {
+        // ✅ Close tray directly
+        rideTrayRef?.current?.close();
+
+        // Optional: keep old logic
+        onExpire?.(rideId);
+      });
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Animation and timer management
   useEffect(() => {
     const listenerId = progressAnim.addListener(({ value }) => {
       progressValue.current = value;
@@ -133,6 +190,11 @@ export default function RideRequestCard({
     }
 
     const remainingMs = expiresAt - Date.now();
+
+    const activeTimerMs = isPriority
+      ? Math.max(0, Math.min(priorityDurationMs, remainingMs))
+      : 0;
+
     if (remainingMs <= 0) {
       slideOut(() => onExpire?.(rideId));
       return () => progressAnim.removeListener(listenerId);
@@ -161,16 +223,22 @@ export default function RideRequestCard({
       animationStartedRef.current = true;
     }
 
-    Animated.timing(progressAnim, {
-      toValue: 0,
-      duration: remainingMs,
-      easing: Easing.linear,
-      useNativeDriver: false,
-    }).start();
+    if (isPriority) {
+      progressAnim.setValue(1); // reset to full
 
-    timerRef.current = setTimeout(() => {
-      slideOut(() => onExpire?.(rideId));
-    }, remainingMs);
+      Animated.timing(progressAnim, {
+        toValue: 0,
+        duration: activeTimerMs,
+        easing: Easing.linear,
+        useNativeDriver: false,
+      }).start();
+    }
+
+    if (isPriority) {
+      timerRef.current = setTimeout(() => {
+        progressAnim.setValue(0);
+      }, activeTimerMs);
+    }
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -238,7 +306,7 @@ export default function RideRequestCard({
 
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={handleSelect}
+        onPress={handleSelectCard}
         disabled={false}
         style={styles.content}
       >
@@ -327,13 +395,14 @@ export default function RideRequestCard({
             <Text
               style={[styles.distanceText, isSubmitted && styles.submittedText]}
             >
-              {parseFloat(rideData.pickupDistanceKm || "0").toFixed(1)}km away
+              {(rideData.distanceToPickup / 1000)?.toFixed(1)} km away (
+              {Math.ceil(rideData.etaToPickup / 60)} min)
             </Text>
-            <View style={styles.dotSeparator} />
+
             <Text
               style={[styles.metaLabel, isSubmitted && styles.submittedText]}
             >
-              {parseFloat(rideData.rideDistanceKm || "0").toFixed(2)}km
+              {(rideData.route?.distance || 0)?.toFixed(2)} km
             </Text>
           </View>
 
@@ -401,7 +470,7 @@ export default function RideRequestCard({
         </View>
       </TouchableOpacity>
 
-      {!isSubmitted && (
+      {!isSubmitted && isPriority && (
         <View style={styles.progressBar}>
           <Animated.View
             style={[styles.progressFill, { width: progressWidth }]}

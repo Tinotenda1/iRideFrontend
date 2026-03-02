@@ -5,6 +5,7 @@ import { getUserInfo } from "@/utils/storage";
 import * as Location from "expo-location";
 import * as Network from "expo-network";
 import { Socket } from "socket.io-client";
+import { Place } from "../components/map/LocationSearch";
 
 /* ----------------------------------------
    TYPES
@@ -76,7 +77,7 @@ const startHeartbeat = () => {
    LOCATION
 ---------------------------------------- */
 
-const getPassengerLocation = async () => {
+const getPassengerLocation = async (onLocation?: (place: Place) => void) => {
   try {
     const { status: permissionStatus } =
       await Location.getForegroundPermissionsAsync();
@@ -86,6 +87,24 @@ const getPassengerLocation = async () => {
     const loc = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
     });
+
+    const reverse = await Location.reverseGeocodeAsync({
+      latitude: loc.coords.latitude,
+      longitude: loc.coords.longitude,
+    });
+
+    const currentPlace: Place = {
+      id: "current",
+      name: "Current Location",
+      address: reverse[0]
+        ? `${reverse[0].name || ""} ${reverse[0].street || ""}`.trim()
+        : "Current Location",
+      latitude: loc.coords.latitude,
+      longitude: loc.coords.longitude,
+    };
+
+    // ✅ Pass back to React instead of using hook
+    onLocation?.(currentPlace);
 
     return {
       latitude: loc.coords.latitude,

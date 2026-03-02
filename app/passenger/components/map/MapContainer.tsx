@@ -1,189 +1,214 @@
+// app/passenger/components/map/MapContainer.tsx
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import * as Location from "expo-location";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Dimensions,
   StyleSheet,
+  Text,
   TouchableOpacity,
   View,
 } from "react-native";
+
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
-// ✅ REANIMATED 3 IMPORTS
-import {
-  runOnJS,
-  useAnimatedReaction,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
-
 import { theme } from "../../../../constants/theme";
 import { useRideBooking } from "../../../context/RideBookingContext";
 
-/* -------------------------------------------------------------------------- */
-
-const GOOGLE_MAPS_APIKEY = Constants.expoConfig?.extra?.googleMapsApiKey;
+const GOOGLE_MAPS_APIKEY = Constants.expoConfig?.extra?.googleMapsApiKey ?? "";
 const { width, height } = Dimensions.get("window");
-
-const SPRING_CONFIG = {
-  damping: 20,
-  stiffness: 90,
-  mass: 1,
-};
-
-/* -------------------------------------------------------------------------- */
 
 interface MapContainerProps {
   trayHeight?: number;
   topPadding?: number;
-  traySettled?: boolean;
 }
-
-type CameraMode = "user" | "route";
-
-/* -------------------------------------------------------------------------- */
 
 const MapContainer: React.FC<MapContainerProps> = ({
   trayHeight = 0,
   topPadding = 0,
-  traySettled = true,
 }) => {
   const mapRef = useRef<MapView>(null);
-  const { rideData } = useRideBooking();
-  const { pickupLocation, destination } = rideData;
+  const { rideData, updateRideData, fetchPrices } = useRideBooking();
+  const { pickupLocation, destination, status } = rideData;
 
-  /* ------------------------- State & Refs ------------------------ */
   const [userRegion, setUserRegion] = useState<Region | null>(null);
   const [loading, setLoading] = useState(true);
-  const [cameraMode, setCameraMode] = useState<CameraMode>("user");
   const [isMoved, setIsMoved] = useState(false);
-  const [routeReady, setRouteReady] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [lockedPadding, setLockedPadding] = useState(trayHeight);
 
-  const animatingRef = useRef(false);
+  const [snappedPoints, setSnappedPoints] = useState<{
+    start: { latitude: number; longitude: number };
+    end: { latitude: number; longitude: number };
+  } | null>(null);
 
-  // ✅ REANIMATED 3 SHARED VALUE
-  const animatedBottomPadding = useSharedValue(trayHeight);
-  const [currentBottomPadding, setCurrentBottomPadding] = useState(trayHeight);
+  // Tracks screen coordinates for both tooltips
+  const [positions, setPositions] = useState<{
+    pickup: { x: number; y: number } | null;
+    dropoff: { x: number; y: number } | null;
+  }>({ pickup: null, dropoff: null });
 
-  /* ---------------------- Sync tray animation -------------------- */
-
-  // Update the shared value whenever trayHeight changes
   useEffect(() => {
-    animatedBottomPadding.value = withSpring(
-      trayHeight,
-      SPRING_CONFIG,
-      (finished) => {
-        if (finished && traySettled) {
-          runOnJS(animateCamera)();
-        }
-      },
-    );
-  }, [trayHeight, traySettled]);
+    setSnappedPoints(null);
+    setPositions({ pickup: null, dropoff: null });
+  }, [pickupLocation, destination]);
 
-  // MapView padding isn't a "Style" we can animate natively via SharedValue,
-  // so we react to the animation and update the state for the MapView prop.
-  useAnimatedReaction(
-    () => animatedBottomPadding.value,
-    (val) => {
-      runOnJS(setCurrentBottomPadding)(val);
-    },
-  );
+  /* ------------------- TOOLTIP POSITION SYNCHRONIZER ------------------- */
+  const syncTooltips = useCallback(async () => {
+    if (!mapRef.current) return;
 
-  /* ---------------------- Aspect Ratio -------------------------- */
-  const usableHeight = height - trayHeight - topPadding;
-  const aspectRatio = width / (usableHeight > 0 ? usableHeight : height);
+    const startCoord = snappedPoints?.start || pickupLocation;
+    const endCoord = snappedPoints?.end || destination;
 
-  /* ---------------------- User Location ------------------------- */
+    const newPositions: { pickup: any; dropoff: any } = {
+      pickup: null,
+      dropoff: null,
+    };
+
+    if (startCoord) {
+      newPositions.pickup = await mapRef.current.pointForCoordinate(startCoord);
+    }
+    if (endCoord) {
+      newPositions.dropoff = await mapRef.current.pointForCoordinate(endCoord);
+    }
+
+    setPositions(newPositions);
+  }, [pickupLocation, destination, snappedPoints]);
+
+  const animateCamera = useCallback(() => {
+    if (!mapRef.current) return;
+    const start = snappedPoints?.start || pickupLocation;
+    const end = snappedPoints?.end || destination;
+
+    if (start && end) {
+      const latDelta = Math.abs(start.latitude - end.latitude) * 1.5;
+      const lngDelta = Math.abs(start.longitude - end.longitude) * 1.5;
+
+      mapRef.current.animateToRegion(
+        {
+          latitude: (start.latitude + end.latitude) / 2,
+          longitude: (start.longitude + end.longitude) / 2,
+          latitudeDelta: latDelta || 0.012,
+          longitudeDelta: lngDelta || 0.012,
+        },
+        800,
+      );
+    } else if (userRegion) {
+      mapRef.current.animateToRegion(userRegion, 800);
+    }
+  }, [pickupLocation, destination, snappedPoints, userRegion]);
+
+  useEffect(() => {
+    if (!status) return;
+    if (
+      [
+        "booking",
+        "searching",
+        "matched",
+        "arrived",
+        "on_trip",
+        "completed",
+      ].includes(status)
+    ) {
+      animateCamera();
+    }
+  }, [status, animateCamera]);
+
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
-
+      const { status: locStatus } =
+        await Location.requestForegroundPermissionsAsync();
+      if (locStatus !== "granted") return;
       const loc = await Location.getCurrentPositionAsync({});
       if (!mounted) return;
 
-      const latitudeDelta = 0.012;
-      const longitudeDelta = latitudeDelta * aspectRatio;
-
-      const region: Region = {
+      setUserRegion({
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
-        latitudeDelta,
-        longitudeDelta,
-      };
-
-      setUserRegion(region);
+        latitudeDelta: 0.012,
+        longitudeDelta: 0.012 * (width / height),
+      });
       setLoading(false);
     })();
-
     return () => {
       mounted = false;
     };
-  }, [aspectRatio]);
+  }, []);
 
-  /* ---------------------- Camera Mode Sync --------------------------- */
+  /* ------------------------ MEMOIZED ROUTE & MARKERS ----------------------- */
+  const directions = useMemo(() => {
+    if (!pickupLocation || !destination || !GOOGLE_MAPS_APIKEY) return null;
 
-  useEffect(() => {
-    if (pickupLocation && destination) {
-      setCameraMode("route");
-    } else {
-      setRouteReady(false);
-      setCameraMode("user");
-    }
-  }, [pickupLocation, destination]);
+    return (
+      <>
+        <MapViewDirections
+          origin={pickupLocation}
+          destination={destination}
+          apikey={GOOGLE_MAPS_APIKEY}
+          strokeWidth={4}
+          strokeColor={theme.colors.primary}
+          precision="high"
+          onReady={(result) => {
+            const distanceText = `${result.distance.toFixed(1)} km`;
+            const durationText = `${Math.ceil(result.duration)} min`;
 
-  /* ---------------------- Animate Camera ------------------------ */
-  const animateCamera = useCallback(() => {
-    if (!mapRef.current || !traySettled || animatingRef.current) return;
+            const start = result.coordinates[0];
+            const end = result.coordinates[result.coordinates.length - 1];
 
-    animatingRef.current = true;
-    setRouteReady(false);
+            setSnappedPoints({ start, end });
 
-    if (cameraMode === "route" && pickupLocation && destination) {
-      mapRef.current.fitToCoordinates(
-        [
-          {
-            latitude: pickupLocation.latitude,
-            longitude: pickupLocation.longitude,
-          },
-          { latitude: destination.latitude, longitude: destination.longitude },
-        ],
-        {
-          edgePadding: {
-            top: topPadding + 40,
-            bottom: currentBottomPadding + 40,
-            left: 40,
-            right: 40,
-          },
-          animated: true,
-        },
-      );
-    }
+            // ✅ SAVE ROUTE IN CONTEXT
+            updateRideData({
+              distance: distanceText,
+              duration: durationText,
 
-    if (cameraMode === "user" && userRegion) {
-      mapRef.current.animateToRegion(userRegion, 800);
-    }
+              route: {
+                coordinates: result.coordinates,
+                distance: result.distance,
+                duration: result.duration,
+              },
+            });
 
-    setTimeout(() => {
-      animatingRef.current = false;
-      if (cameraMode === "route" && pickupLocation && destination) {
-        setRouteReady(true);
-      }
-    }, 600);
-  }, [
-    cameraMode,
-    pickupLocation,
-    destination,
-    userRegion,
-    topPadding,
-    currentBottomPadding,
-    traySettled,
-  ]);
+            // 🚀 Fetch prices
+            if (pickupLocation && destination) {
+              fetchPrices(
+                pickupLocation,
+                destination,
+                distanceText,
+                durationText,
+              );
+            }
 
-  /* ----------------------- Loading ----------------------------- */
+            setTimeout(syncTooltips, 150);
+          }}
+        />
+        <Marker
+          coordinate={snappedPoints?.start || pickupLocation}
+          anchor={{ x: 0.5, y: 0.5 }}
+          tracksViewChanges={false}
+        >
+          <View style={styles.staticDotStart} />
+        </Marker>
+        <Marker
+          coordinate={snappedPoints?.end || destination}
+          anchor={{ x: 0.5, y: 0.5 }}
+          tracksViewChanges={false}
+        >
+          <View style={styles.staticDotEnd} />
+        </Marker>
+      </>
+    );
+  }, [pickupLocation, destination, snappedPoints, syncTooltips]);
+
   if (loading || !userRegion) {
     return (
       <View style={styles.center}>
@@ -202,45 +227,81 @@ const MapContainer: React.FC<MapContainerProps> = ({
         showsUserLocation
         showsMyLocationButton={false}
         customMapStyle={googleMapStyle}
-        // ✅ Uses the state synced via useAnimatedReaction
         mapPadding={{
           top: topPadding,
-          bottom: currentBottomPadding,
+          bottom: lockedPadding + 70,
           left: 0,
           right: 0,
         }}
         onPanDrag={() => setIsMoved(true)}
+        onRegionChange={syncTooltips}
+        onRegionChangeComplete={() => {
+          setIsAnimating(false);
+          syncTooltips();
+        }}
       >
-        {routeReady &&
-          cameraMode === "route" &&
-          pickupLocation &&
-          destination && (
-            <>
-              <MapViewDirections
-                origin={pickupLocation}
-                destination={destination}
-                apikey={GOOGLE_MAPS_APIKEY}
-                strokeWidth={4}
-                strokeColor={theme.colors.primary}
-                precision="high"
-              />
-              <Marker coordinate={pickupLocation}>
-                <View style={styles.premiumPickup}>
-                  <View style={styles.pickupInner} />
-                </View>
-              </Marker>
-              <Marker coordinate={destination}>
-                <View style={styles.premiumDestination}>
-                  <View style={styles.destinationInner} />
-                </View>
-              </Marker>
-            </>
-          )}
+        {directions}
       </MapView>
 
-      {isMoved && (
+      {/* --------------------- FLOATING TOOLTIPS --------------------- */}
+
+      {/* PICKUP TOOLTIP */}
+      {positions.dropoff && pickupLocation && (
+        <View
+          style={[
+            styles.tooltipAnchor,
+            { left: positions.pickup?.x, top: positions.pickup?.y },
+          ]}
+        >
+          <View
+            style={[
+              styles.tooltipBox,
+              { backgroundColor: theme.colors.primary },
+            ]}
+          >
+            <Text style={styles.tooltipTitle}>Pickup</Text>
+            <View
+              style={[
+                styles.tooltipTriangle,
+                { borderTopColor: theme.colors.primary },
+              ]}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* DROPOFF TOOLTIP */}
+      {positions.dropoff && destination && (
+        <View
+          style={[
+            styles.tooltipAnchor,
+            { left: positions.dropoff.x, top: positions.dropoff.y },
+          ]}
+        >
+          <View
+            style={[styles.tooltipBox, { backgroundColor: theme.colors.error }]}
+          >
+            <Text style={styles.tooltipTitle}>Dropoff</Text>
+            {rideData?.duration ? (
+              <Text style={styles.tooltipValue}>{rideData.duration}</Text>
+            ) : (
+              <View style={styles.loaderWrapper}>
+                <ActivityIndicator size="small" color="#fff" />
+              </View>
+            )}
+            <View
+              style={[
+                styles.tooltipTriangle,
+                { borderTopColor: theme.colors.error },
+              ]}
+            />
+          </View>
+        </View>
+      )}
+
+      {isMoved && !isAnimating && (
         <TouchableOpacity
-          style={[styles.recenterButton, { bottom: currentBottomPadding + 20 }]}
+          style={[styles.recenterButton, { bottom: trayHeight }]}
           onPress={() => {
             setIsMoved(false);
             animateCamera();
@@ -253,62 +314,75 @@ const MapContainer: React.FC<MapContainerProps> = ({
   );
 };
 
-/* ... styles and googleMapStyle remain the same ... */
-/* ----------------------------- Styles ----------------------------- */
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
-
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#fff",
   },
-
-  premiumPickup: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-  },
-
-  pickupInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: theme.colors.primary,
-  },
-
-  premiumDestination: {
-    width: 20,
-    height: 20,
-    backgroundColor: "#000",
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 4,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-  },
-
-  destinationInner: {
-    width: 8,
-    height: 8,
-    backgroundColor: "#fff",
-  },
-
   recenterButton: {
     position: "absolute",
     right: 15,
-    zIndex: 10,
+    //zIndex: 10,
+    //backgroundColor: "#fff",
+    padding: 5,
+    elevation: 5,
+  },
+  staticDotStart: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: theme.colors.primary,
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  staticDotEnd: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: theme.colors.error,
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  tooltipAnchor: {
+    position: "absolute",
+    width: 0,
+    height: 0,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    zIndex: 100,
+  },
+  tooltipBox: {
+    position: "absolute",
+    bottom: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    alignItems: "center",
+    elevation: 4,
+    minWidth: 70,
+  },
+  tooltipTitle: {
+    color: "rgba(255, 255, 255, 0.8)",
+    fontSize: 9,
+    fontWeight: "600",
+    textTransform: "uppercase",
+  },
+  tooltipValue: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  loaderWrapper: { height: 18, justifyContent: "center" },
+  tooltipTriangle: {
+    position: "absolute",
+    bottom: -5,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 5,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
   },
 });
 

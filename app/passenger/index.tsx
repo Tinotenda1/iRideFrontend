@@ -572,12 +572,12 @@ const PassengerScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.contentArea}>
-        *{" "}
+        {/* MAP */}
         <MapContainer
           trayHeight={trayHeight || BASE_TRAY_HEIGHT}
           topPadding={TOP_CARD_HEIGHT}
-          traySettled={traySettled}
         />
+
         <Animated.View
           style={[styles.menuButton, { opacity: menuOpacity }]}
           pointerEvents={rideData.destination ? "none" : "auto"}

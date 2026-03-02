@@ -2,7 +2,13 @@
 import { theme } from "@/constants/theme";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -31,6 +37,7 @@ if (
 
 interface RideState {
   rideId: string;
+  broadcastType: "priority" | "other";
   expiresAt: number;
   data: any;
 }
@@ -42,17 +49,19 @@ interface Props {
   submittedOffers: { [rideId: string]: number };
   onRideSelect: (
     rideId: string,
-    progress: number,
-    msLeft: number,
+    priorityDurationMs: number,
+    remainingMs: number,
     rideData: any,
   ) => void;
   onRideExpire: (ride: any) => void;
   trayPadding: number;
+  rideTrayRef: React.RefObject<any>;
 }
 
 const DEFAULT_EXPIRE_TIME = 10000;
 
 const DriverHome: React.FC<Props> = ({
+  rideTrayRef,
   online,
   isConnecting,
   incomingRides = [],
@@ -108,6 +117,7 @@ const DriverHome: React.FC<Props> = ({
     }
 
     const currentRideIds = new Set(incomingRides.map((r) => r.rideId));
+
     const newRides: RideState[] = [];
 
     incomingRides.forEach((ride) => {
@@ -116,6 +126,7 @@ const DriverHome: React.FC<Props> = ({
 
         newRides.push({
           rideId: ride.rideId,
+          broadcastType: ride.broadcastType || "other",
           expiresAt: Date.now() + expiresIn,
           data: ride,
         });
@@ -146,9 +157,13 @@ const DriverHome: React.FC<Props> = ({
 
   /* ---------------- Radar Animation ---------------- */
 
+  const reversedRides = useMemo(() => [...rides].reverse(), [rides]);
+
+  /* Radar animation cleanup */
   useEffect(() => {
+    let animation: Animated.CompositeAnimation;
     if (online && !isConnecting) {
-      const animation = Animated.loop(
+      animation = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
             toValue: 1.15,
@@ -162,20 +177,23 @@ const DriverHome: React.FC<Props> = ({
           }),
         ]),
       );
-
       animation.start();
-
-      return () => animation.stop();
     } else {
       pulseAnim.setValue(1);
     }
+    return () => animation?.stop();
   }, [online, isConnecting]);
 
   /* ---------------- Handlers ---------------- */
 
   const handleCardSelect = useCallback(
-    (rideId: string, progress: number, msLeft: number, rideData: any) => {
-      onRideSelect(rideId, progress, msLeft, rideData);
+    (
+      rideId: string,
+      rideData: any,
+      priorityDurationMs: number,
+      remainingMs: number,
+    ) => {
+      onRideSelect(rideId, rideData, priorityDurationMs, remainingMs);
     },
     [onRideSelect],
   );
@@ -338,10 +356,10 @@ const DriverHome: React.FC<Props> = ({
           pointerEvents="box-none"
         >
           <FlatList
-            data={[...rides].reverse()}
+            data={reversedRides}
             keyExtractor={(item) => item.rideId}
             renderItem={({ item }) => (
-              <View style={styles.cardWrapper}>
+              <View style={[styles.cardWrapper, { overflow: "visible" }]}>
                 <RideRequestCard
                   rideId={item.rideId}
                   rideData={item.data}
@@ -349,12 +367,11 @@ const DriverHome: React.FC<Props> = ({
                   submittedOffer={submittedOffers[item.rideId]}
                   onSelect={handleCardSelect}
                   onExpire={handleCardExpire}
+                  rideTrayRef={rideTrayRef}
                 />
               </View>
             )}
-            contentContainerStyle={{
-              paddingHorizontal: 16,
-            }}
+            contentContainerStyle={{ paddingHorizontal: 16 }}
             showsVerticalScrollIndicator={false}
           />
         </View>
