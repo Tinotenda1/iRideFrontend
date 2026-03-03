@@ -1,3 +1,4 @@
+// app/driver/components/maps/RideRequestMap.tsx
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import React, {
   useCallback,
@@ -49,8 +50,6 @@ const RideRequestMap: React.FC<Props> = ({
     pickup: Point | null;
     dropoff: Point | null;
   }>({ pickup: null, dropoff: null });
-
-  const isPriority = rideData?.broadcastType === "priority";
 
   // --- 1. TOOLTIP POSITION SYNC ---
   const syncTooltips = useCallback(async () => {
@@ -168,7 +167,7 @@ const RideRequestMap: React.FC<Props> = ({
               <View style={styles.premiumBadge}>
                 <MaterialCommunityIcons
                   name="car-sports" // Note the 's' at the end
-                  size={22}
+                  size={18}
                   color="#FFF"
                 />
               </View>
@@ -196,7 +195,7 @@ const RideRequestMap: React.FC<Props> = ({
             <Text style={styles.tooltipTitle}>{"PICKUP"}</Text>
             <Text style={styles.tooltipValue}>
               {(rideData.distanceToPickup / 1000).toFixed(1)} km
-              {"("} {Math.ceil(rideData.etaToPickup / 60)} min
+              {" ("} {Math.ceil(rideData.etaToPickup / 60)} min
               {")"}
             </Text>
             <View
@@ -239,10 +238,10 @@ const RideRequestMap: React.FC<Props> = ({
       {/* RECENTER BUTTON */}
       {isMoved && (
         <TouchableOpacity
-          style={[styles.recenterButton, { bottom: trayHeight + 20 }]}
+          style={[styles.recenterButton, { bottom: trayHeight }]}
           onPress={fitToRoute}
         >
-          <Ionicons name="navigate" size={24} color={theme.colors.primary} />
+          <Ionicons name="navigate" size={20} color={theme.colors.primary} />
         </TouchableOpacity>
       )}
     </View>
@@ -262,10 +261,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   premiumBadge: {
-    width: 36,
-    height: 36,
+    width: 28,
+    height: 28,
     borderRadius: 18,
-    backgroundColor: "#1A1A1A", // Sleek black
+    backgroundColor: "#001986", // Sleek black
     borderWidth: 2,
     borderColor: "#FFD700", // Gold border
     alignItems: "center",
@@ -291,7 +290,7 @@ const styles = StyleSheet.create({
     height: 0,
     alignItems: "center",
     justifyContent: "flex-end",
-    zIndex: 100,
+    //zIndex: 100,
   },
   tooltipBox: {
     position: "absolute",
@@ -334,14 +333,8 @@ const styles = StyleSheet.create({
   recenterButton: {
     position: "absolute",
     right: 15,
-    backgroundColor: "#fff",
-    borderRadius: 30,
     padding: 10,
     elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
   },
 });
 

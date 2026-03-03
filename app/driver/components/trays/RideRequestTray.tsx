@@ -31,8 +31,8 @@ import { OfferFareControl } from "../DriverOfferFareControl";
 import RideRequestMap from "../maps/RideRequestMap";
 
 const { height: windowHeight } = Dimensions.get("window");
-const OPEN_HEIGHT = windowHeight * 0.88;
-const MAP_MIN_HEIGHT = OPEN_HEIGHT * 0.3;
+const OPEN_HEIGHT = windowHeight * 0.9;
+const MAP_MIN_HEIGHT = OPEN_HEIGHT * 0.35;
 
 export interface RideRequestTrayRef {
   open: (
@@ -94,6 +94,19 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
       pickup2seater: "2 SEATER PICKUP",
       pickup4seater: "4 SEATER PICKUP",
     };
+
+    const vehicleType = selectedRideData?.vehicleType;
+
+    const vehicleLabel = vehicleTypeLabels[vehicleType] || "STANDARD";
+
+    const baseHeaderText = `NEW REQUEST - ${vehicleLabel}`;
+
+    const headerText =
+      isPriority && secondsLeft > 0
+        ? `${baseHeaderText} (PRIORITY WINDOW • 00:${secondsLeft
+            .toString()
+            .padStart(2, "0")})`
+        : baseHeaderText;
 
     useEffect(() => {
       const unsubscribe = watchDriverLocation(
@@ -221,6 +234,11 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
       outputRange: ["#EF4444", "#F59E0B", "#32D74B"],
     });
 
+    const rating = parseFloat(selectedRideData?.passengerRating || "5");
+
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating - fullStars >= 0.5;
+
     return (
       <>
         <TouchableOpacity
@@ -239,15 +257,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
           )}
           <View style={styles.headerArea}>
             <View style={styles.handle} />
-            <Text style={styles.timerDigits}>
-              {isPriority
-                ? secondsLeft > 0
-                  ? `NEW REQUEST (PRIORITY WINDOW • 00:${secondsLeft
-                      .toString()
-                      .padStart(2, "0")})`
-                  : "NEW REQUEST"
-                : "NEW REQUEST"}
-            </Text>
+            <Text style={styles.timerDigits}>{headerText}</Text>
           </View>
 
           <ScrollView
@@ -255,11 +265,19 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
             style={styles.scrollArea}
             contentContainerStyle={{ flexGrow: 1 }}
           >
-            <RideRequestMap
-              rideData={selectedRideData}
-              driverLocation={currentDriverLocation || undefined}
-              minHeight={MAP_MIN_HEIGHT}
-            />
+            <View
+              style={{
+                minHeight: MAP_MIN_HEIGHT,
+                borderRadius: 16,
+                overflow: "hidden",
+              }}
+            >
+              <RideRequestMap
+                rideData={selectedRideData}
+                driverLocation={currentDriverLocation || undefined}
+                minHeight={MAP_MIN_HEIGHT}
+              />
+            </View>
 
             <View style={styles.middleSection}>
               <View style={styles.profileRow}>
@@ -278,13 +296,48 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                     {selectedRideData.passengerName || "Passenger"}
                   </Text>
                   <View style={styles.ratingRow}>
-                    <Ionicons name="star" size={12} color="#FFC107" />
-                    <Text style={styles.ratingValueText}>
-                      {parseFloat(
-                        selectedRideData.passengerRating || "5",
-                      ).toFixed(2)}
+                    {/* Stars */}
+                    {Array.from({ length: 5 }).map((_, index) => {
+                      if (index < fullStars) {
+                        return (
+                          <Ionicons
+                            key={index}
+                            name="star"
+                            size={12}
+                            color="#FFC107"
+                          />
+                        );
+                      }
+
+                      if (index === fullStars && hasHalfStar) {
+                        return (
+                          <Ionicons
+                            key={index}
+                            name="star-half"
+                            size={12}
+                            color="#FFC107"
+                          />
+                        );
+                      }
+
+                      return (
+                        <Ionicons
+                          key={index}
+                          name="star-outline"
+                          size={12}
+                          color="#FFC107"
+                        />
+                      );
+                    })}
+
+                    {/* Rating Number */}
+                    <Text style={[styles.ratingValueText, { marginLeft: 4 }]}>
+                      {rating.toFixed(2)}
                     </Text>
+
                     <View style={styles.dotSeparator} />
+
+                    {/* Trips */}
                     <Text style={styles.tripCountText}>
                       {selectedRideData.passengerTrips || "0"} trips
                     </Text>
@@ -292,7 +345,24 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                 </View>
 
                 <View style={styles.priceContainer}>
-                  <Text style={styles.mainPrice}>${baseOffer?.toFixed(2)}</Text>
+                  {/* Price + Payment */}
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <Text style={styles.mainPrice}>
+                      ${baseOffer?.toFixed(2)}
+                    </Text>
+
+                    {/* Separator */}
+                    <Text style={{ marginHorizontal: 6, color: "#999" }}>
+                      •
+                    </Text>
+
+                    {/* Payment Method */}
+                    <Text style={styles.paymentMethodText}>
+                      {(selectedRideData.paymentMethod || "CASH").toUpperCase()}
+                    </Text>
+                  </View>
+
+                  {/* Offer Badge */}
                   <View
                     style={[
                       styles.offerBadge,
@@ -441,7 +511,6 @@ const styles = StyleSheet.create({
   profileRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
   },
   profileInfo: {
     flex: 1,
@@ -494,9 +563,14 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "900",
   },
+  paymentMethodText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#555",
+  },
   addressSection: {
     paddingLeft: 8,
-    marginVertical: 15,
+    marginVertical: 10,
     position: "relative",
   },
   timelineLine: {

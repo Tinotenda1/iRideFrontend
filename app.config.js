@@ -12,7 +12,7 @@ export default {
     newArchEnabled: true,
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.yourname.irideapp",
+      bundleIdentifier: "com.iride.app",
       config: {
         googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
       },
@@ -27,7 +27,7 @@ export default {
       },
     },
     android: {
-      package: "com.yourname.irideapp",
+      package: "com.iride.app",
       config: {
         googleMaps: {
           apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
@@ -46,6 +46,9 @@ export default {
       ],
     },
     extra: {
+      eas: {
+        projectId: "c7da1c55-8235-4a51-9539-cb7bf583d0ce",
+      },
       googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
       respondedRideTimeout:
         process.env.RESPONDED_RIDE_REQUEST_CARD_AUTO_REMOVAL_DELAY,

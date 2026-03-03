@@ -27,7 +27,7 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
   const [showNoDrivers, setShowNoDrivers] = useState(false);
 
   const isMounted = useRef(true);
-  const NO_DRIVERS_TIMEOUT = 60000;
+  const NO_DRIVERS_TIMEOUT = 300000; // 5 minutes
 
   // ✅ Log on mount/prop change
   useEffect(() => {

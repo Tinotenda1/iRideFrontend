@@ -294,7 +294,6 @@ export default function RideRequestCard({
         },
       ]}
     >
-      {/* CARD TITLE HEADER */}
       <View style={styles.cardTitleHeader}>
         <Text
           style={[styles.cardTitleText, isSubmitted && styles.submittedText]}
@@ -307,10 +306,9 @@ export default function RideRequestCard({
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={handleSelectCard}
-        disabled={false}
         style={styles.content}
       >
-        {/* LEFT COLUMN */}
+        {/* LEFT COLUMN: Avatar, Name, Rating */}
         <View style={[styles.leftCol, isSubmitted && styles.desaturated]}>
           <IRAvatar
             source={
@@ -319,6 +317,15 @@ export default function RideRequestCard({
             name={rideData.passengerName}
             size="md"
           />
+          <Text
+            style={[
+              styles.nameUnderAvatar,
+              isSubmitted && styles.submittedText,
+            ]}
+            numberOfLines={2}
+          >
+            {rideData.passengerName || "Passenger"}
+          </Text>
           <View style={styles.ratingRow}>
             {renderStars(parseFloat(rideData.passengerRating || "5"))}
             <Text
@@ -339,16 +346,23 @@ export default function RideRequestCard({
 
         {/* RIGHT COLUMN */}
         <View style={styles.rightCol}>
+          {/* TOP ROW: Distance/ETA left, Badge/Price/Payment right */}
           <View style={styles.headerRow}>
-            <Text
-              style={[
-                styles.passengerName,
-                isSubmitted && styles.submittedText,
-              ]}
-              numberOfLines={1}
-            >
-              {rideData.passengerName || "Passenger"}
-            </Text>
+            <View style={styles.topLeftInfo}>
+              <Text
+                style={[
+                  styles.distanceText,
+                  isSubmitted && styles.submittedText,
+                ]}
+              >
+                {(rideData.distanceToPickup / 1000)?.toFixed(1)} km away
+              </Text>
+              <Text
+                style={[styles.etaText, isSubmitted && styles.submittedText]}
+              >
+                ({Math.ceil(rideData.etaToPickup / 60)} min)
+              </Text>
+            </View>
 
             <View style={styles.priceContainer}>
               {badge && !isSubmitted && (
@@ -381,29 +395,15 @@ export default function RideRequestCard({
                   ) ?? "--"}
                 </Text>
               </Animated.View>
+              <Text
+                style={[
+                  styles.paymentLabel,
+                  isSubmitted && styles.submittedText,
+                ]}
+              >
+                {rideData.paymentMethod === "ecocash" ? "ECO" : "CASH"}
+              </Text>
             </View>
-          </View>
-
-          {/* META INFO */}
-          <View style={styles.metaInfoRow}>
-            <Text
-              style={[styles.metaLabel, isSubmitted && styles.submittedText]}
-            >
-              {rideData.paymentMethod === "ecocash" ? "Eco" : "Cash"}
-            </Text>
-            <View style={styles.dotSeparator} />
-            <Text
-              style={[styles.distanceText, isSubmitted && styles.submittedText]}
-            >
-              {(rideData.distanceToPickup / 1000)?.toFixed(1)} km away (
-              {Math.ceil(rideData.etaToPickup / 60)} min)
-            </Text>
-
-            <Text
-              style={[styles.metaLabel, isSubmitted && styles.submittedText]}
-            >
-              {(rideData.route?.distance || 0)?.toFixed(2)} km
-            </Text>
           </View>
 
           {/* ADDRESS SECTION */}
@@ -444,7 +444,17 @@ export default function RideRequestCard({
             </View>
           </View>
 
-          {/* FOOTER */}
+          {/* TRIP DISTANCE: Below Addresses */}
+          <Text
+            style={[
+              styles.tripDistanceMeta,
+              isSubmitted && styles.submittedText,
+            ]}
+          >
+            Trip distance: {(rideData.route?.distance || 0)?.toFixed(2)} km
+          </Text>
+
+          {/* FOOTER: Additional Info */}
           {(rideData.additionalInfo || isSubmitted) && (
             <View style={styles.footerRow}>
               <View style={{ flex: 1 }}>
@@ -500,7 +510,6 @@ const styles = StyleSheet.create({
   desaturated: { opacity: 0.5 },
   submittedText: { color: "#94a3b8" },
   submittedPrice: { color: "#94a3b8" },
-
   card: { borderRadius: 12, marginBottom: 8, overflow: "hidden" },
   cardTitleHeader: {
     backgroundColor: "#f8fafc",
@@ -510,16 +519,26 @@ const styles = StyleSheet.create({
     borderBottomColor: "#f1f5f9",
   },
   cardTitleText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "800",
     color: theme.colors.primary,
     letterSpacing: 0.5,
   },
   content: { flexDirection: "row", padding: 10 },
-  leftCol: { alignItems: "center", width: 68 },
+
+  // Left Column Styles
+  leftCol: { alignItems: "center", width: 75 },
+  nameUnderAvatar: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#1e293b",
+    textAlign: "center",
+    marginTop: 4,
+    width: "100%",
+  },
   ratingRow: {
     flexDirection: "row",
-    marginTop: 4,
+    marginTop: 2,
     gap: 1,
     alignItems: "center",
   },
@@ -533,58 +552,53 @@ const styles = StyleSheet.create({
     fontSize: 8,
     color: "#94a3b8",
     fontWeight: "600",
-    marginTop: 2,
+    marginTop: 1,
   },
 
-  rightCol: { flex: 1, marginLeft: 10 },
+  // Right Column Styles
+  rightCol: { flex: 1, marginLeft: 12 },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+    marginBottom: 6,
   },
-  passengerName: { fontWeight: "700", fontSize: 14, color: "#1e293b", flex: 1 },
-  priceContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+  topLeftInfo: { flexDirection: "row", alignItems: "center", gap: 4 },
+  distanceText: { fontSize: 11, color: "#10B981", fontWeight: "800" },
+  etaText: { fontSize: 11, color: "#64748b", fontWeight: "600" },
+
+  priceContainer: { flexDirection: "row", alignItems: "center", gap: 4 },
+  paymentLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#64748b",
+    marginLeft: 2,
   },
   offerBadge: {
     borderWidth: 1,
-    paddingHorizontal: 5,
+    paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 4,
   },
-  offerBadgeText: {
-    fontSize: 8,
-    fontWeight: "900",
-  },
+  offerBadgeText: { fontSize: 7, fontWeight: "900" },
   priceRow: { flexDirection: "row", alignItems: "center" },
-  priceText: { fontWeight: "800", color: "#10B981", fontSize: 16 },
+  priceText: { fontWeight: "900", color: "#10B981", fontSize: 15 },
 
-  metaInfoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 2,
-    marginBottom: 4,
-  },
-  metaLabel: { fontSize: 10, color: "#64748b", fontWeight: "600" },
-  distanceText: { fontSize: 10, color: "#10B981", fontWeight: "800" },
-  dotSeparator: {
-    width: 2,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: "#cbd5e1",
-    marginHorizontal: 6,
-  },
-  addressSection: { gap: 2 },
+  addressSection: { gap: 3 },
   addressLine: { flexDirection: "row", alignItems: "center", gap: 6 },
   dot: { width: 5, height: 5, borderRadius: 2.5 },
   addressText: { fontSize: 12, color: "#475569", fontWeight: "500", flex: 1 },
+  tripDistanceMeta: {
+    fontSize: 10,
+    color: "#64748b",
+    fontWeight: "600",
+    marginTop: 4,
+  },
 
   footerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 8,
+    marginTop: 4,
     alignItems: "center",
   },
   infoPreview: { fontSize: 10, color: "#94a3b8", fontStyle: "italic" },
