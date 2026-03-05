@@ -43,12 +43,12 @@ const TripLocationCard: React.FC<TripLocationCardProps> = ({
         styles.animatedWrapper,
         {
           transform: [{ translateY }],
-          opacity: isBookingActive ? 1 : 0.9,
+          opacity: 1,
         },
       ]}
     >
       <TouchableOpacity
-        activeOpacity={0.9}
+        //activeOpacity={0.9}
         onPress={onPress}
         disabled={!isBookingActive}
         style={styles.cardContent}
@@ -117,6 +117,10 @@ const styles = createStyles({
     padding: theme.spacing.md,
     alignItems: "center",
     minHeight: 80,
+
+    // ✅ Black border
+    borderWidth: 1,
+    borderColor: "#000",
   },
   lineDecorator: {
     alignItems: "center",

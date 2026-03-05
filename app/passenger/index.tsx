@@ -58,7 +58,7 @@ const PassengerScreen: React.FC = () => {
   const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
   // Layout percentages
-  const TOP_CARD_PERCENT = 0.18; // 12%
+  const TOP_CARD_PERCENT = 0.2; // 12%
   const BOTTOM_TRAY_PERCENT = 0.32; // 32%
 
   const TOP_CARD_HEIGHT = SCREEN_HEIGHT * TOP_CARD_PERCENT;
@@ -429,7 +429,6 @@ const PassengerScreen: React.FC = () => {
 
     const handleTripStarted = () => {
       updateRideData({ status: "on_trip" });
-
       setModalConfig({
         visible: true,
         type: "started",
@@ -570,82 +569,80 @@ const PassengerScreen: React.FC = () => {
   =========================== */
 
   return (
-    <View style={styles.container}>
-      <View style={styles.contentArea}>
-        {/* MAP */}
-        <MapContainer
-          trayHeight={trayHeight || BASE_TRAY_HEIGHT}
-          topPadding={TOP_CARD_HEIGHT}
+    <>
+      <View style={styles.container}>
+        <View style={styles.contentArea}>
+          {/* MAP */}
+          <MapContainer />
+
+          <Animated.View
+            style={[styles.menuButton, { opacity: menuOpacity }]}
+            pointerEvents={rideData.destination ? "none" : "auto"}
+          >
+            <TouchableOpacity onPress={() => sidebarRef.current?.open()}>
+              <Ionicons name="menu" size={28} color="#00000096" />
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+
+        <Tray
+          ref={trayRef}
+          onTrayHeightChange={handleTrayHeightChange}
+          onTrayStateChange={setIsTrayOpen}
+          onTraySettled={setTraySettled} // ✅ new
+          onLocationInputFocus={(f: "pickup" | "destination") => {
+            setActiveInputField(f);
+            inputTrayRef.current?.open();
+          }}
+          onOpenAdditionalInfo={() => infoTrayRef.current?.open()}
+          hasOffers={offers.length > 0}
+          onClearOffers={() => {
+            const id = currentRide?.rideId || rideData?.activeTrip?.rideId;
+            if (id) removeOfferForUnmatchedDrivers(id);
+          }}
         />
 
-        <Animated.View
-          style={[styles.menuButton, { opacity: menuOpacity }]}
-          pointerEvents={rideData.destination ? "none" : "auto"}
-        >
-          <TouchableOpacity onPress={() => sidebarRef.current?.open()}>
-            <Ionicons name="menu" size={28} color="#00000096" />
-          </TouchableOpacity>
-        </Animated.View>
+        {offers.length > 0 && rideData.status !== "matched" && (
+          <View style={styles.offersOverlay}>
+            <FlatList
+              data={offers}
+              keyExtractor={(i) => i.driver.phone}
+              renderItem={({ item }) => (
+                <DriverOfferCard
+                  offer={item}
+                  status={submissionStates[item.driver.phone] || "idle"}
+                  onAccept={handleAcceptOffer}
+                  onDecline={() => handleDeclineOffer(item)}
+                  onExpire={() => removeOffer(item.driver.phone, item.rideId)}
+                />
+              )}
+            />
+          </View>
+        )}
+
+        <TripStatusModal {...modalConfig} onClose={handleCloseModal} />
+
+        <RatingModal
+          visible={ratingVisible}
+          title="Trip Complete!"
+          userName={ratingSnapshot?.driverName}
+          userImage={ratingSnapshot?.driverPic}
+          subtitle="How was your experience?"
+          onSelectRating={handleRatingSubmit}
+          isLoading={isSubmitting} // Use the variable here to fix the ESLint error
+        />
+
+        <TripLocationCard
+          topPosition={cardTopPosition}
+          onPress={() => trayRef.current?.switchToInput()}
+        />
+
+        <InputTray ref={inputTrayRef} activeField={activeInputField} />
+
+        <AdditionalInfoTray ref={infoTrayRef} />
       </View>
-
-      <Tray
-        ref={trayRef}
-        onTrayHeightChange={handleTrayHeightChange}
-        onTrayStateChange={setIsTrayOpen}
-        onTraySettled={setTraySettled} // ✅ new
-        onLocationInputFocus={(f: "pickup" | "destination") => {
-          setActiveInputField(f);
-          inputTrayRef.current?.open();
-        }}
-        onOpenAdditionalInfo={() => infoTrayRef.current?.open()}
-        hasOffers={offers.length > 0}
-        onClearOffers={() => {
-          const id = currentRide?.rideId || rideData?.activeTrip?.rideId;
-          if (id) removeOfferForUnmatchedDrivers(id);
-        }}
-      />
-
-      {offers.length > 0 && rideData.status !== "matched" && (
-        <View style={styles.offersOverlay}>
-          <FlatList
-            data={offers}
-            keyExtractor={(i) => i.driver.phone}
-            renderItem={({ item }) => (
-              <DriverOfferCard
-                offer={item}
-                status={submissionStates[item.driver.phone] || "idle"}
-                onAccept={handleAcceptOffer}
-                onDecline={() => handleDeclineOffer(item)}
-                onExpire={() => removeOffer(item.driver.phone, item.rideId)}
-              />
-            )}
-          />
-        </View>
-      )}
-
-      <TripStatusModal {...modalConfig} onClose={handleCloseModal} />
-
-      <RatingModal
-        visible={ratingVisible}
-        title="Trip Complete!"
-        userName={ratingSnapshot?.driverName}
-        userImage={ratingSnapshot?.driverPic}
-        subtitle="How was your experience?"
-        onSelectRating={handleRatingSubmit}
-        isLoading={isSubmitting} // Use the variable here to fix the ESLint error
-      />
-
-      <TripLocationCard
-        topPosition={cardTopPosition}
-        onPress={() => trayRef.current?.switchToInput()}
-      />
-
-      <InputTray ref={inputTrayRef} activeField={activeInputField} />
-
-      <AdditionalInfoTray ref={infoTrayRef} />
-
       <Sidebar ref={sidebarRef} userType="passenger" />
-    </View>
+    </>
   );
 };
 

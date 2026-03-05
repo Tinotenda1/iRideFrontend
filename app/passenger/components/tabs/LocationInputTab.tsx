@@ -13,8 +13,7 @@ import {
   View,
 } from "react-native";
 import {
-  GestureHandlerRootView,
-  PanGestureHandler,
+  GestureHandlerRootView
 } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -30,8 +29,6 @@ import { Place } from "../map/LocationSearch";
 /* =====================================================
     Elastic Swipe Item (No Spring)
 ===================================================== */
-const SWIPE_TRIGGER = -70;
-const ELASTIC_FACTOR = 0.35;
 
 interface SwipeItemProps {
   item: Place;
@@ -68,18 +65,6 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
     return () => sub.remove();
   }, []);
 
-  const onGestureEvent = (e: any) => {
-    const x = e.nativeEvent.translationX;
-    if (x < 0) translateX.value = x * ELASTIC_FACTOR;
-  };
-
-  const onEnd = () => {
-    if (translateX.value < SWIPE_TRIGGER * ELASTIC_FACTOR) {
-      isArmed.value = true;
-    }
-    translateX.value = withTiming(0, { duration: 180 });
-  };
-
   const rowStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
@@ -106,32 +91,30 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
         </TouchableOpacity>
       </Animated.View>
 
-      <PanGestureHandler onGestureEvent={onGestureEvent} onEnded={onEnd}>
-        <Animated.View style={rowStyle}>
-          <TouchableOpacity
-            style={[styles.suggestionItem, isLast && styles.noBorder]}
-            activeOpacity={0.85}
-            onPress={() => {
-              if (!isArmed.value) onPress();
-            }}
-          >
-            <View style={styles.iconCircle}>
-              {index === 0 ? (
-                <Star size={18} color={theme.colors.textSecondary} />
-              ) : (
-                <Clock size={18} color={theme.colors.textSecondary} />
-              )}
-            </View>
-            <View style={styles.textContainer}>
-              <Text style={styles.placeName}>{item.name}</Text>
-              <Text style={styles.placeAddress} numberOfLines={1}>
-                {item.address}
-              </Text>
-            </View>
-            <Navigation size={16} color={theme.colors.border} />
-          </TouchableOpacity>
-        </Animated.View>
-      </PanGestureHandler>
+      <Animated.View style={rowStyle}>
+        <TouchableOpacity
+          style={[styles.suggestionItem, isLast && styles.noBorder]}
+          activeOpacity={0.85}
+          onPress={() => {
+            if (!isArmed.value) onPress();
+          }}
+        >
+          <View style={styles.iconCircle}>
+            {index === 0 ? (
+              <Star size={18} color={theme.colors.textSecondary} />
+            ) : (
+              <Clock size={18} color={theme.colors.textSecondary} />
+            )}
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={styles.placeName}>{item.name}</Text>
+            <Text style={styles.placeAddress} numberOfLines={1}>
+              {item.address}
+            </Text>
+          </View>
+          <Navigation size={16} color={theme.colors.border} />
+        </TouchableOpacity>
+      </Animated.View>
     </View>
   );
 };
@@ -148,13 +131,8 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
   onFocus,
   onSuggestionSelect,
 }) => {
-  const {
-    rideData,
-    updateRideData,
-    loading,
-    hideRecentDestination,
-    fetchPrices,
-  } = useRideBooking();
+  const { rideData, updateRideData, loading, hideRecentDestination } =
+    useRideBooking();
 
   // 1. Auto-set Pickup to Current Location AND Clear Destination on mount
   useEffect(() => {

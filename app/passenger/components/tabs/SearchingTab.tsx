@@ -6,6 +6,7 @@ import { Animated, BackHandler, StyleSheet, Text, View } from "react-native";
 import CancelButton from "../../../../components/CancelButton";
 import { theme } from "../../../../constants/theme";
 import { getUserInfo } from "../../../../utils/storage";
+import { useRideBooking } from "../../../context/RideBookingContext";
 
 interface SearchingTabProps {
   onCancel: () => void;
@@ -25,6 +26,7 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [isCancelling, setIsCancelling] = useState(false);
   const [showNoDrivers, setShowNoDrivers] = useState(false);
+  const { updateRideData } = useRideBooking();
 
   const isMounted = useRef(true);
   const NO_DRIVERS_TIMEOUT = 300000; // 5 minutes
@@ -51,6 +53,7 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
       if (showNoDrivers) {
         setShowNoDrivers(false);
         onBackToRide();
+        updateRideData({ status: "booking" });
         return true;
       }
       return true;
@@ -178,6 +181,7 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
           console.log("4️⃣ [SearchingTab] Finally block executing");
 
           setIsCancelling(false);
+          updateRideData({ status: "idle" });
 
           if (onClearOffers) {
             console.log("5️⃣ [SearchingTab] Calling onClearOffers()...");

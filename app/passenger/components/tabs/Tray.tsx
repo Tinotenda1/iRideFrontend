@@ -30,7 +30,7 @@ import TripTab from "./TripTab";
 
 const { width, height: screenHeight } = Dimensions.get("window");
 
-const HEIGHTS = {
+export const HEIGHTS = {
   input: screenHeight * 0.5,
   ride: screenHeight * 0.4,
   searching: screenHeight * 0.3,
@@ -46,8 +46,7 @@ const TAB_INDEX = {
   ride: 1,
   searching: 2,
   matched: 3,
-  on_trip: 4,
-  expanded: 5,
+  on_trip: 3, // Same index as matched since they use the same TripTab component
 } as const;
 
 type TabType = keyof typeof TAB_INDEX;
@@ -58,8 +57,15 @@ const SPRING_CONFIG = {
   mass: 1,
 };
 
+// Add a separate shared value for expanded state
+const EXPANDED_SPRING_CONFIG = {
+  damping: 20,
+  stiffness: 150,
+  mass: 0.5,
+};
+
 /* -------------------------------------------------------------------------- */
-/* NEW SUB-COMPONENT TO SOLVE ESLINT HOOK RULE                    */
+/* TAB SLIDE COMPONENT                                      */
 /* -------------------------------------------------------------------------- */
 
 interface TabSlideProps {
@@ -70,20 +76,18 @@ interface TabSlideProps {
 
 const TabSlide = ({ index, transitionIndex, children }: TabSlideProps) => {
   const animatedStyle = useAnimatedStyle(() => {
-    // Horizontal sliding logic
     const translateX = interpolate(
       transitionIndex.value,
-      [0, 1, 2, 3, 4],
+      [0, 1, 2, 3],
       [
         width * index,
         width * (index - 1),
         width * (index - 2),
         width * (index - 3),
-        width * (index - 4),
       ],
+      Extrapolation.CLAMP,
     );
 
-    // Subtle fade for that premium transition
     const opacity = interpolate(
       transitionIndex.value,
       [index - 0.5, index, index + 0.5],
@@ -105,7 +109,7 @@ const TabSlide = ({ index, transitionIndex, children }: TabSlideProps) => {
 };
 
 /* -------------------------------------------------------------------------- */
-/* MAIN TRAY                                   */
+/* MAIN TRAY                                                                  */
 /* -------------------------------------------------------------------------- */
 
 const Tray = forwardRef<any, any>((props, ref) => {
@@ -121,9 +125,11 @@ const Tray = forwardRef<any, any>((props, ref) => {
 
   const { rideData, updateRideData } = useRideBooking();
   const [currentTab, setCurrentTab] = useState<TabType>("input");
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const transitionIndex = useSharedValue(0);
   const translateY = useSharedValue(0);
+  const expandedProgress = useSharedValue(0); // 0 = collapsed, 1 = expanded
 
   const notifyTrayFinished = (h: number, isOpen: boolean) => {
     onTrayHeightChange?.(h);
@@ -132,12 +138,22 @@ const Tray = forwardRef<any, any>((props, ref) => {
   };
 
   const animateTo = useCallback(
-    (tab: TabType, isExpanded = false) => {
-      const index = isExpanded ? TAB_INDEX.expanded : TAB_INDEX[tab];
-      const targetHeight =
-        isExpanded && tab === "on_trip" ? HEIGHTS.expanded : HEIGHTS[tab];
+    (tab: TabType, expand = false) => {
+      const index = TAB_INDEX[tab];
 
-      // ✅ ADDED: Logic to clear destination whenever returning to input
+      // Update expanded state
+      if (tab === "on_trip" || tab === "matched") {
+        setIsExpanded(expand);
+        expandedProgress.value = withSpring(
+          expand ? 1 : 0,
+          EXPANDED_SPRING_CONFIG,
+        );
+      } else {
+        setIsExpanded(false);
+        expandedProgress.value = withSpring(0, EXPANDED_SPRING_CONFIG);
+      }
+
+      // Clear destination when returning to input
       if (tab === "input") {
         updateRideData({ destination: null, vehiclePrices: {} });
       }
@@ -146,47 +162,71 @@ const Tray = forwardRef<any, any>((props, ref) => {
 
       transitionIndex.value = withSpring(index, SPRING_CONFIG, (finished) => {
         if (finished) {
-          runOnJS(notifyTrayFinished)(targetHeight, true);
+          // Calculate final height based on tab and expanded state
+          let finalHeight = HEIGHTS[tab];
+          if ((tab === "on_trip" || tab === "matched") && expand) {
+            finalHeight = HEIGHTS.expanded;
+          }
+          runOnJS(notifyTrayFinished)(finalHeight, true);
         }
       });
     },
-    [transitionIndex, updateRideData], // Added updateRideData to dependencies
+    [transitionIndex, updateRideData, expandedProgress],
   );
 
   const openTray = useCallback(() => {
     translateY.value = withSpring(0, SPRING_CONFIG, (finished) => {
       if (finished) {
-        runOnJS(notifyTrayFinished)(HEIGHTS[currentTab], true);
+        let height = HEIGHTS[currentTab];
+        if (
+          (currentTab === "on_trip" || currentTab === "matched") &&
+          isExpanded
+        ) {
+          height = HEIGHTS.expanded;
+        }
+        runOnJS(notifyTrayFinished)(height, true);
       }
     });
-  }, [currentTab, translateY]);
+  }, [currentTab, isExpanded, translateY]);
 
   const closeTray = useCallback(() => {
-    const target = HEIGHTS[currentTab] - CLOSED_HEIGHT;
+    let currentHeight = HEIGHTS[currentTab];
+    if ((currentTab === "on_trip" || currentTab === "matched") && isExpanded) {
+      currentHeight = HEIGHTS.expanded;
+    }
+    const target = currentHeight - CLOSED_HEIGHT;
+
     translateY.value = withSpring(target, SPRING_CONFIG, (finished) => {
       if (finished) {
         runOnJS(notifyTrayFinished)(CLOSED_HEIGHT, false);
       }
     });
-  }, [currentTab, translateY]);
+  }, [currentTab, isExpanded, translateY]);
 
   const containerStyle = useAnimatedStyle(() => {
-    const currentHeight = interpolate(
-      transitionIndex.value,
-      [0, 1, 2, 3, 4, 5],
-      [
-        HEIGHTS.input,
-        HEIGHTS.ride,
-        HEIGHTS.searching,
-        HEIGHTS.matched,
-        HEIGHTS.on_trip,
-        HEIGHTS.expanded,
-      ],
-      Extrapolation.CLAMP,
-    );
+    // Get base height from transition index
+    let baseHeight: number;
+
+    if (transitionIndex.value === 3) {
+      // matched or on_trip tab
+      // Interpolate between normal and expanded height based on expandedProgress
+      baseHeight = interpolate(
+        expandedProgress.value,
+        [0, 1],
+        [HEIGHTS.matched, HEIGHTS.expanded],
+        Extrapolation.CLAMP,
+      );
+    } else {
+      baseHeight = interpolate(
+        transitionIndex.value,
+        [0, 1, 2],
+        [HEIGHTS.input, HEIGHTS.ride, HEIGHTS.searching],
+        Extrapolation.CLAMP,
+      );
+    }
 
     return {
-      height: currentHeight,
+      height: baseHeight,
       transform: [{ translateY: translateY.value }],
     };
   });
@@ -217,7 +257,7 @@ const Tray = forwardRef<any, any>((props, ref) => {
   useEffect(() => {
     const handler = () => {
       if (currentTab === "ride") {
-        updateRideData({ destination: null });
+        updateRideData({ destination: null, status: "idle" });
         animateTo("input");
         return true;
       }
@@ -229,14 +269,15 @@ const Tray = forwardRef<any, any>((props, ref) => {
 
   useImperativeHandle(ref, () => ({
     openTray,
-    //closeTray,
     switchToRides: () => animateTo("ride"),
     switchToInput: () => animateTo("input"),
     switchToSearching: () => animateTo("searching"),
     switchToMatched: () => animateTo("matched"),
     switchToOnTrip: () => animateTo("on_trip"),
     toggleTripExpansion: (value: boolean) => {
-      if (currentTab === "on_trip") animateTo("on_trip", value);
+      if (currentTab === "on_trip" || currentTab === "matched") {
+        animateTo(currentTab, value);
+      }
     },
   }));
 
@@ -317,7 +358,6 @@ const styles = createStyles({
     width: 40,
     height: 5,
     backgroundColor: theme.colors.border,
-    //borderRadius: 0,
     alignSelf: "center",
     marginTop: 8,
     marginBottom: 4,

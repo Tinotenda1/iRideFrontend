@@ -115,6 +115,7 @@ const RideTab: React.FC<TabProps> = ({
         );
         return;
       }
+      updateRideData({ status: "searching" });
       onSwitchToSearching();
     } catch (error) {
       Alert.alert(

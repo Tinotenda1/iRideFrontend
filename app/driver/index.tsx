@@ -14,6 +14,7 @@ import RideRequestTray from "./components/trays/RideRequestTray";
 import DriverHome from "./screens/DriverHome";
 
 import {
+  connectDriver,
   disconnectDriver,
   handleDriverResponse,
   onNewRideRequest,
@@ -81,25 +82,31 @@ const DriverDashboard: React.FC = () => {
   const { restoreSession } = useSessionRestoration();
 
   useEffect(() => {
-    console.log("🛠️ Initializing Reconnect Listener");
+    // Make sure the driver socket is connected first
+    connectDriver().then(() => {
+      const unsubscribe = onReconnectState((data) => {
+        console.log("🔔 onReconnectState callback triggered");
+        if (data) {
+          console.log("🔄 Reconnect Data Received:", data);
+          console.log("➡️ Restoring session...");
+          restoreSession(data);
 
-    const unsubscribe = onReconnectState((data) => {
-      if (data) {
-        console.log("🔄 Reconnect Data Received, Restoring Session:", data);
-        restoreSession(data); // If they were on a trip, clear the local pending requests to avoid clutter
-
-        if (data.activeTrip) {
-          setIncomingRides([]);
-          setSubmissionStates({});
-          setSubmittedOffers({});
+          if (data.activeTrip) {
+            console.log("⚠️ Active trip detected, clearing local ride states");
+            setIncomingRides([]);
+            setSubmissionStates({});
+            setSubmittedOffers({});
+          } else {
+            console.log("ℹ️ No active trip, skipping ride state reset");
+          }
+        } else {
+          console.log("❌ No data received on reconnect");
         }
-      }
-    });
+      });
 
-    return () => {
-      unsubscribe();
-    };
-  }, [restoreSession]); // 2. Existing Handlers
+      return () => unsubscribe();
+    });
+  }, [restoreSession]);
 
   const handleCloseModal = () => {
     setModalConfig((prev) => ({ ...prev, visible: false }));

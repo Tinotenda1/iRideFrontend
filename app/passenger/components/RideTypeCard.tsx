@@ -88,7 +88,7 @@ const styles = createStyles({
     paddingLeft: 4, // Scootch image to the left edge
     paddingRight: theme.spacing.sm,
     borderRadius: 16,
-    borderWidth: 2,
+    borderWidth: 1,
     position: "relative",
     backgroundColor: theme.colors.surface,
     // Soft Bolt-style shadow
@@ -99,7 +99,7 @@ const styles = createStyles({
     elevation: 2,
   },
   cardUnselected: {
-    borderColor: theme.colors.border + "30",
+    borderColor: "#000",
   },
   cardSelected: {
     borderColor: theme.colors.primary,

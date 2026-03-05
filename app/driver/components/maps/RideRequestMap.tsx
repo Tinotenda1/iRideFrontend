@@ -219,7 +219,7 @@ const RideRequestMap: React.FC<Props> = ({
           <View
             style={[styles.tooltipBox, { backgroundColor: theme.colors.error }]}
           >
-            <Text style={styles.tooltipTitle}>DESTINATION</Text>
+            <Text style={styles.tooltipTitle}>DROPOFF</Text>
             <Text style={styles.tooltipValue}>
               {rideData.route?.duration
                 ? `${rideData.route.distance.toFixed(1)} km (${Math.ceil(rideData.route.duration)} min)`
