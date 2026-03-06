@@ -27,6 +27,7 @@ import {
   watchDriverLocation,
 } from "../../driverLocationUtility/driverLocation";
 import { SubmissionState } from "../../index";
+import { getDriverSocket } from "../../socketConnectionUtility/driverSocketService";
 import { OfferFareControl } from "../DriverOfferFareControl";
 import RideRequestMap from "../maps/RideRequestMap";
 
@@ -117,6 +118,16 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     }, []);
 
     const handleClose = useCallback(() => {
+      // Emit tray closed event
+      try {
+        const socket = getDriverSocket();
+        socket?.emit("driver:ride_tray_status", {
+          rideId,
+          status: "closed",
+        });
+      } catch (err) {
+        console.warn("Tray close socket emit failed", err);
+      }
       clearTimers();
       progressAnim.stopAnimation();
       setIsOpen(false);
@@ -154,6 +165,16 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
           // Sync timer
           setSecondsLeft(Math.ceil(Math.max(0, remainingMs) / 1000));
 
+          // Emit tray opened event
+          try {
+            const socket = getDriverSocket();
+            socket?.emit("driver:ride_tray_status", {
+              rideId,
+              status: "opened",
+            });
+          } catch (err) {
+            console.warn("Tray open socket emit failed", err);
+          }
           setIsOpen(true);
         },
         close: handleClose,

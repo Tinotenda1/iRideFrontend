@@ -52,9 +52,9 @@ const TAB_INDEX = {
 type TabType = keyof typeof TAB_INDEX;
 
 const SPRING_CONFIG = {
-  damping: 18,
-  stiffness: 120,
-  mass: 1,
+  damping: 20, // Increased slightly to prevent "bouncing" at high speeds
+  stiffness: 250, // Doubled from 120 -> 250 for a much faster launch
+  mass: 0.8, // Dropped from 1 -> 0.8 to make the tray feel lighter
 };
 
 // Add a separate shared value for expanded state
@@ -130,6 +130,7 @@ const Tray = forwardRef<any, any>((props, ref) => {
   const transitionIndex = useSharedValue(0);
   const translateY = useSharedValue(0);
   const expandedProgress = useSharedValue(0); // 0 = collapsed, 1 = expanded
+  const animatedHeight = useSharedValue(HEIGHTS.input);
 
   const notifyTrayFinished = (h: number, isOpen: boolean) => {
     onTrayHeightChange?.(h);
@@ -141,7 +142,16 @@ const Tray = forwardRef<any, any>((props, ref) => {
     (tab: TabType, expand = false) => {
       const index = TAB_INDEX[tab];
 
-      // Update expanded state
+      // Determine the target height for this specific transition
+      let targetHeight = HEIGHTS[tab];
+      if ((tab === "on_trip" || tab === "matched") && expand) {
+        targetHeight = HEIGHTS.expanded;
+      }
+
+      // SMOOTHING MAGIC: Animate the height value independently
+      animatedHeight.value = withSpring(targetHeight, SPRING_CONFIG);
+
+      // Existing logic for expanded state
       if (tab === "on_trip" || tab === "matched") {
         setIsExpanded(expand);
         expandedProgress.value = withSpring(
@@ -153,7 +163,6 @@ const Tray = forwardRef<any, any>((props, ref) => {
         expandedProgress.value = withSpring(0, EXPANDED_SPRING_CONFIG);
       }
 
-      // Clear destination when returning to input
       if (tab === "input") {
         updateRideData({ destination: null, vehiclePrices: {} });
       }
@@ -162,18 +171,12 @@ const Tray = forwardRef<any, any>((props, ref) => {
 
       transitionIndex.value = withSpring(index, SPRING_CONFIG, (finished) => {
         if (finished) {
-          // Calculate final height based on tab and expanded state
-          let finalHeight = HEIGHTS[tab];
-          if ((tab === "on_trip" || tab === "matched") && expand) {
-            finalHeight = HEIGHTS.expanded;
-          }
-          runOnJS(notifyTrayFinished)(finalHeight, true);
+          runOnJS(notifyTrayFinished)(targetHeight, true);
         }
       });
     },
-    [transitionIndex, updateRideData, expandedProgress],
+    [transitionIndex, updateRideData, expandedProgress, animatedHeight],
   );
-
   const openTray = useCallback(() => {
     translateY.value = withSpring(0, SPRING_CONFIG, (finished) => {
       if (finished) {
@@ -204,29 +207,9 @@ const Tray = forwardRef<any, any>((props, ref) => {
   }, [currentTab, isExpanded, translateY]);
 
   const containerStyle = useAnimatedStyle(() => {
-    // Get base height from transition index
-    let baseHeight: number;
-
-    if (transitionIndex.value === 3) {
-      // matched or on_trip tab
-      // Interpolate between normal and expanded height based on expandedProgress
-      baseHeight = interpolate(
-        expandedProgress.value,
-        [0, 1],
-        [HEIGHTS.matched, HEIGHTS.expanded],
-        Extrapolation.CLAMP,
-      );
-    } else {
-      baseHeight = interpolate(
-        transitionIndex.value,
-        [0, 1, 2],
-        [HEIGHTS.input, HEIGHTS.ride, HEIGHTS.searching],
-        Extrapolation.CLAMP,
-      );
-    }
-
     return {
-      height: baseHeight,
+      // Use the value that is already being spring-animated in animateTo
+      height: animatedHeight.value,
       transform: [{ translateY: translateY.value }],
     };
   });
@@ -289,8 +272,6 @@ const Tray = forwardRef<any, any>((props, ref) => {
       />
 
       <View style={styles.contentContainer}>
-        <View style={styles.handle} />
-
         <View style={styles.tabsWrapper}>
           <TabSlide index={0} transitionIndex={transitionIndex}>
             <LocationInputTab

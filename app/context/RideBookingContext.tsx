@@ -274,10 +274,10 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
           }
         } catch (err) {
           attempt++;
-          console.error(
+          /* console.error(
             `❌ Failed to fetch price estimates (Attempt ${attempt}):`,
             err,
-          );
+          );*/
 
           // Wait 500ms before retrying
           if (attempt <= MAX_RETRIES)
@@ -364,7 +364,7 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
 
           return response.data.ride;
         } catch (err: any) {
-          console.error(`❌ Ride request failed (Attempt ${attempt})`, err);
+          //console.error(`❌ Ride request failed (Attempt ${attempt})`, err);
 
           // If last attempt → throw
           if (attempt >= MAX_RETRIES) {
@@ -407,7 +407,7 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
         attempt++;
 
         try {
-          console.log(`🛑 Cancelling ride (Attempt ${attempt})...`);
+          //console.log(`🛑 Cancelling ride (Attempt ${attempt})...`);
 
           await api.post("/rides/cancel", {
             passengerPhone: userInfo.phone,
@@ -433,7 +433,7 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
         }
       }
     } catch (err) {
-      console.error("❌ Failed to cancel trip after retries:", err);
+      // console.error("❌ Failed to cancel trip after retries:", err);
       throw err;
     } finally {
       setLoading(false);
@@ -466,9 +466,9 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
         attempt++;
 
         try {
-          console.log(
+          /* console.log(
             `📍 Fetching recent destinations (Attempt ${attempt})...`,
-          );
+          );*/
 
           /*
           // Force failure for testing
@@ -492,10 +492,10 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
           success = true;
           return;
         } catch (err) {
-          console.error(
+          /* console.error(
             `❌ Recent destinations failed (Attempt ${attempt})`,
             err,
-          );
+          );*/
 
           if (attempt < MAX_RETRIES) {
             await new Promise((r) => setTimeout(r, 500));

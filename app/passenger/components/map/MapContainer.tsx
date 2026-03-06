@@ -72,7 +72,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
     searching: "searching",
     matched: "matched",
     arrived: "matched",
-    on_trip: "matched",
+    on_trip: "on_trip",
     completed: "input",
   };
 
@@ -247,11 +247,11 @@ const MapContainer: React.FC<MapContainerProps> = ({
     !!destination;
 
   if (loading || !userRegion) {
-    return (
+    return /*(
       <View style={styles.center}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
-    );
+    )*/;
   }
 
   return (

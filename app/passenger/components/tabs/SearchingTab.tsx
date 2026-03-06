@@ -26,11 +26,15 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [isCancelling, setIsCancelling] = useState(false);
   const [showNoDrivers, setShowNoDrivers] = useState(false);
-  const { updateRideData } = useRideBooking();
+  const { updateRideData, rideData } = useRideBooking();
+  const [viewingDrivers, setViewingDrivers] = useState<Set<string>>(new Set());
+  // The derived count for your UI
+  const viewingDriversCount = viewingDrivers.size;
 
   const isMounted = useRef(true);
   const NO_DRIVERS_TIMEOUT = 300000; // 5 minutes
 
+  /*
   // ✅ Log on mount/prop change
   useEffect(() => {
     console.log("👀 [SearchingTab] Prop update:", {
@@ -46,6 +50,67 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
       console.log("🚫 [SearchingTab] Unmounted");
     };
   }, []);
+  */
+
+  // ✅ Listen for drivers opening/closing the ride view
+  useEffect(() => {
+    console.log("🎬 [SearchingTab] Listener mounting...");
+    let socketInstance: any;
+
+    const setupSocket = async () => {
+      try {
+        const { getPassengerSocket } =
+          await import("../../socketConnectionUtility/passengerSocketService");
+        socketInstance = getPassengerSocket();
+
+        if (!socketInstance) {
+          console.error("❌ [SearchingTab] Socket utility returned null");
+          return;
+        }
+
+        // Start listening immediately
+        console.log(
+          "📡 [SearchingTab] Attaching 'ride:tray_status' listener...",
+        );
+
+        socketInstance.on(
+          "ride:tray_status",
+          (data: { status: "opened" | "closed"; driverPhone: string }) => {
+            console.log("📥 [SearchingTab] Socket Event Received:", data);
+
+            if (!data.driverPhone) {
+              console.warn(
+                "⚠️ [SearchingTab] Received event without driverPhone. Skipping.",
+              );
+              return;
+            }
+
+            setViewingDrivers((prevSet) => {
+              const newSet = new Set(prevSet);
+              if (data.status === "opened") {
+                newSet.add(data.driverPhone);
+              } else {
+                newSet.delete(data.driverPhone);
+              }
+              console.log(`📊 [SearchingTab] Updated Count: ${newSet.size}`);
+              return newSet;
+            });
+          },
+        );
+      } catch (err) {
+        console.error("❌ [SearchingTab] Setup Error:", err);
+      }
+    };
+
+    setupSocket();
+
+    return () => {
+      if (socketInstance) {
+        console.log("🧹 [SearchingTab] Cleaning up listener");
+        socketInstance.off("ride:tray_status");
+      }
+    };
+  }, [isActive]); // Empty dependency array: runs once on mount, stays active until unmount.// This ensures if the ID finally arrives, we start listening.
 
   useEffect(() => {
     if (!isActive) return;
@@ -164,27 +229,27 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
               passengerPhone: formattedPhone,
             });
           } else {
-            console.warn(
+            /*console.warn(
               "⚠️ [SearchingTab] Socket not connected, cancel not emitted",
-            );
+            );*/
           }
         } else {
-          console.warn(
+          /*console.warn(
             "⚠️ [SearchingTab] Cancel API did not return rideId:",
             result,
-          );
+          );*/
         }
       } catch (error) {
-        console.error("❌ [SearchingTab] Cancel API failed:", error);
+        //console.error("❌ [SearchingTab] Cancel API failed:", error);
       } finally {
         if (isMounted.current) {
-          console.log("4️⃣ [SearchingTab] Finally block executing");
+          //console.log("4️⃣ [SearchingTab] Finally block executing");
 
           setIsCancelling(false);
           updateRideData({ status: "idle" });
 
           if (onClearOffers) {
-            console.log("5️⃣ [SearchingTab] Calling onClearOffers()...");
+            // console.log("5️⃣ [SearchingTab] Calling onClearOffers()...");
             onClearOffers();
           }
 
@@ -217,6 +282,40 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
       <View style={styles.content}>
         {!showNoDrivers ? (
           <>
+            {!showNoDrivers && (
+              <View style={styles.premiumRow}>
+                <View style={styles.liveIndicator}>
+                  <View
+                    style={[
+                      styles.liveDot,
+                      viewingDriversCount === 0 && {
+                        backgroundColor: "#94A3B8", // Grey when 0
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.liveDotPulse,
+                      viewingDriversCount === 0 && {
+                        backgroundColor: "rgba(148, 163, 184, 0.2)", // Grey pulse
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.premiumText}>
+                  <Text
+                    style={[
+                      styles.countHighlight,
+                      viewingDriversCount === 0 && { color: "#64748b" },
+                    ]}
+                  >
+                    {viewingDriversCount}
+                  </Text>
+                  {viewingDriversCount === 1 ? " driver is " : " drivers are "}
+                  currently viewing your request
+                </Text>
+              </View>
+            )}
             <Animated.View
               style={[
                 styles.pulseCircle,
@@ -254,6 +353,7 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
 };
 
 const styles = StyleSheet.create({
+  // ... (container and content styles remain the same)
   container: {
     flex: 1,
     paddingHorizontal: 20,
@@ -265,6 +365,44 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
   },
+
+  premiumRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingBottom: 15,
+    paddingHorizontal: 16,
+  },
+  liveIndicator: {
+    width: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 10,
+  },
+  liveDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#00D26A", // Matches Driver OnlineTab
+    zIndex: 2,
+  },
+  liveDotPulse: {
+    position: "absolute",
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "rgba(0, 210, 106, 0.2)", // Matches Driver OnlineTab
+  },
+  premiumText: {
+    fontSize: 16, // Adjusted for better fit with the larger dot
+    fontWeight: "400",
+    color: theme.colors.textSecondary,
+  },
+  countHighlight: {
+    color: "#00D26A", // Primary brand green
+    fontWeight: "800",
+  },
+  // ... (rest of the styles remain unchanged)
   noDriversContainer: {
     alignItems: "center",
     marginBottom: 10,

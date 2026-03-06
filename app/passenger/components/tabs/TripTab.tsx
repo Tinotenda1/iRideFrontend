@@ -418,6 +418,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 15,
     backgroundColor: "#fff",
     justifyContent: "space-between",
     paddingHorizontal: 16,
