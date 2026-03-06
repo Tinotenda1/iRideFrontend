@@ -218,10 +218,27 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
             <View>
               <Text style={styles.driverName}>{driver.name}</Text>
               <View style={styles.ratingBadge}>
-                <Ionicons name="star" size={12} color="#FFC107" />
+                {/* Render 5 stars based on driver rating */}
+                {Array.from({ length: 5 }).map((_, i) => {
+                  const safeRating = typeof rating === "number" ? rating : 5;
+
+                  return (
+                    <Ionicons
+                      key={i}
+                      name="star"
+                      size={12}
+                      color={i < Math.round(safeRating) ? "#FFC107" : "#E5E7EB"} // Gold = filled, Gray = empty
+                      style={{ marginRight: 1 }}
+                    />
+                  );
+                })}
+
+                {/* Numeric rating value */}
                 <Text style={styles.ratingText}>
                   {typeof rating === "number" ? rating.toFixed(2) : "5.00"}
                 </Text>
+
+                {/* Total trips */}
                 <Text style={styles.tripCount}> • {totalTrips} rides</Text>
               </View>
             </View>

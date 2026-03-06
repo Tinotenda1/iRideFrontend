@@ -676,7 +676,7 @@ const styles = StyleSheet.create({
 
   offersOverlay: {
     position: "absolute",
-    top: 125,
+    top: 150,
     bottom: 0,
     width: "100%",
     zIndex: 5,

@@ -1,7 +1,7 @@
 // app/passenger/components/tabs/LocationInputTab.tsx
 
-import * as Location from "expo-location"; // Ensure this is installed
-import { Clock, Navigation, Search, Star, Trash2 } from "lucide-react-native";
+import * as Location from "expo-location";
+import { Clock, Navigation, Search, Trash2 } from "lucide-react-native";
 import React, { useEffect } from "react";
 import {
   Alert,
@@ -13,27 +13,33 @@ import {
   View,
 } from "react-native";
 import {
-  GestureHandlerRootView
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Animated, {
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withTiming,
+  withSpring,
 } from "react-native-reanimated";
 
+import { ActivityIndicator } from "react-native"; // Add this to your imports
 import { theme } from "../../../../constants/theme";
 import { createStyles } from "../../../../utils/styles";
 import { useRideBooking } from "../../../context/RideBookingContext";
 import { Place } from "../map/LocationSearch";
 
 /* =====================================================
-    Elastic Swipe Item (No Spring)
+    Elastic Swipe Item
 ===================================================== */
 
 interface SwipeItemProps {
   item: Place;
   index: number;
   isLast: boolean;
+  armedRowId: string | null;
+  setArmedRowId: (id: string | null) => void;
   onPress: () => void;
   onDelete: () => void;
 }
@@ -42,86 +48,113 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
   item,
   index,
   isLast,
+  armedRowId,
+  setArmedRowId,
   onPress,
   onDelete,
 }) => {
+  const [isDeleting, setIsDeleting] = React.useState(false);
   const translateX = useSharedValue(0);
-  const isArmed = useSharedValue(false);
 
-  const reset = () => {
-    isArmed.value = false;
-    translateX.value = withTiming(0, { duration: 180 });
+  // FIX: Keep the UI in the "armed" state even if the parent state is cleared,
+  // as long as we are currently deleting.
+  const isArmed = armedRowId === item.id || isDeleting;
+
+  const fastSnapConfig = {
+    damping: 20,
+    stiffness: 300,
+    mass: 0.5,
   };
 
-  useEffect(() => {
-    const backAction = () => {
-      if (isArmed.value) {
-        reset();
-        return true;
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .onUpdate((event) => {
+      if (isDeleting) return; // Disable swipe while deleting
+      if (event.translationX < 0) {
+        translateX.value = event.translationX * 0.35;
+      } else {
+        translateX.value = 0;
       }
-      return false;
-    };
-    const sub = BackHandler.addEventListener("hardwareBackPress", backAction);
-    return () => sub.remove();
-  }, []);
+    })
+    .onEnd((event) => {
+      if (event.translationX < -60) {
+        runOnJS(setArmedRowId)(item.id || null);
+      }
+      translateX.value = withSpring(0, fastSnapConfig);
+    })
+    .onFinalize(() => {
+      if (translateX.value !== 0) {
+        translateX.value = withSpring(0, fastSnapConfig);
+      }
+    });
 
   const rowStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
 
-  const deleteStyle = useAnimatedStyle(() => ({
-    opacity: isArmed.value ? 1 : 0,
-    transform: [
-      { scale: withTiming(isArmed.value ? 1 : 0.8, { duration: 150 }) },
-    ],
-  }));
-
   return (
-    <View style={{ position: "relative" }}>
-      <Animated.View style={[styles.elasticDelete, deleteStyle]}>
-        <TouchableOpacity
-          onPress={() => {
-            Alert.alert("Remove Destination", item.name, [
-              { text: "Cancel", style: "cancel", onPress: reset },
-              { text: "Delete", style: "destructive", onPress: onDelete },
-            ]);
-          }}
-        >
-          <Trash2 size={16} color="white" />
-        </TouchableOpacity>
-      </Animated.View>
-
+    <GestureDetector gesture={panGesture}>
       <Animated.View style={rowStyle}>
         <TouchableOpacity
           style={[styles.suggestionItem, isLast && styles.noBorder]}
           activeOpacity={0.85}
           onPress={() => {
-            if (!isArmed.value) onPress();
+            if (!isArmed && !isDeleting) onPress();
           }}
         >
           <View style={styles.iconCircle}>
-            {index === 0 ? (
-              <Star size={18} color={theme.colors.textSecondary} />
-            ) : (
-              <Clock size={18} color={theme.colors.textSecondary} />
-            )}
+            <Clock size={18} color={theme.colors.textSecondary} />
           </View>
+
           <View style={styles.textContainer}>
             <Text style={styles.placeName}>{item.name}</Text>
             <Text style={styles.placeAddress} numberOfLines={1}>
               {item.address}
             </Text>
           </View>
-          <Navigation size={16} color={theme.colors.border} />
+
+          {isArmed ? (
+            <View style={{ width: 30, alignItems: "center" }}>
+              {isDeleting ? (
+                <ActivityIndicator size="small" color="#FF3B30" />
+              ) : (
+                <TouchableOpacity
+                  onPress={async () => {
+                    // Changed to async
+                    setIsDeleting(true);
+                    try {
+                      // Logic: call onDelete and wait for it
+                      await onDelete();
+                    } catch (error) {
+                      // If parent throws, stop loading
+                      setIsDeleting(false);
+                    } finally {
+                      // Only disarm if successful or specifically needed
+                      setArmedRowId(null);
+                    }
+                  }}
+                >
+                  {isDeleting ? (
+                    <ActivityIndicator size="small" color="#FF3B30" />
+                  ) : (
+                    <Trash2 size={18} color="#FF3B30" />
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <Navigation size={16} color={theme.colors.border} />
+          )}
         </TouchableOpacity>
       </Animated.View>
-    </View>
+    </GestureDetector>
   );
 };
 
 /* =====================================================
     Main Component
 ===================================================== */
+
 interface LocationInputTabProps {
   onFocus?: (field: "pickup" | "destination") => void;
   onSuggestionSelect?: (place: Place) => void;
@@ -134,14 +167,32 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
   const { rideData, updateRideData, loading, hideRecentDestination } =
     useRideBooking();
 
-  // 1. Auto-set Pickup to Current Location AND Clear Destination on mount
+  const [armedRowId, setArmedRowId] = React.useState<string | null>(null);
+
+  // Back handler to disarm when hardware back is pressed
+  useEffect(() => {
+    const backAction = () => {
+      if (armedRowId) {
+        setArmedRowId(null);
+        return true; // prevent default back behavior
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction,
+    );
+    return () => subscription.remove();
+  }, [armedRowId]);
+
+  // Auto-set Pickup to Current Location on mount
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
 
       const location = await Location.getCurrentPositionAsync({});
-
       const reverse = await Location.reverseGeocodeAsync({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
@@ -163,7 +214,7 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
     })();
   }, []);
 
-  // ✅ 3. Log prices in the Tab whenever they are updated in context
+  // Log prices whenever they are updated (optional)
   useEffect(() => {
     if (
       rideData.vehiclePrices &&
@@ -180,16 +231,14 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
     if (field === "destination" && place) {
       updateRideData({
         [field]: place,
-        status: "booking", // ✅ trigger status change
+        status: "booking", // trigger status change
       });
-
       onSuggestionSelect?.(place);
     } else {
       updateRideData({
         [field]: place,
       });
     }
-
     console.log(`[RideTab] ${field} set to:`, place);
   };
 
@@ -238,26 +287,48 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
           contentContainerStyle={styles.suggestionsContainer}
           showsVerticalScrollIndicator={false}
         >
-          {/* ✅ PREMIUM HIDE HEADING IF NO DATA/NETWORK */}
           {recentDestinations.length > 0 && (
             <Text style={styles.sectionTitle}>Recent Destinations</Text>
           )}
 
           {loading && recentDestinations.length === 0 ? (
-            <View style={styles.loaderContainer}></View>
+            <View style={styles.loaderContainer} />
           ) : recentDestinations.length > 0 ? (
-            recentDestinations.map((item: Place, index: number) => (
-              <SwipeableDestinationItem
-                key={item.id || `recent-${index}`}
-                item={item}
-                index={index}
-                isLast={index === recentDestinations.length - 1}
-                onPress={() => handleSelect("destination", item)}
-                onDelete={() => hideRecentDestination(item.id || "")}
-              />
-            ))
+            // Removed the extra { } here. Just go straight to the map.
+            recentDestinations.map((item: Place, index: number) => {
+              const stableKey =
+                item.id || `${item.latitude}-${item.longitude}-${index}`;
+
+              return (
+                <SwipeableDestinationItem
+                  key={stableKey}
+                  item={item}
+                  index={index}
+                  isLast={index === recentDestinations.length - 1}
+                  armedRowId={armedRowId}
+                  setArmedRowId={setArmedRowId}
+                  onPress={() => handleSelect("destination", item)}
+                  onDelete={async () => {
+                    // Changed to async
+                    if (item.id) {
+                      try {
+                        await hideRecentDestination(item.id);
+                      } catch (err) {
+                        // Trigger the Alert on failure
+                        Alert.alert(
+                          "Deletion Failed",
+                          "We couldn't remove this destination. Please check your network connection and try again.",
+                          [{ text: "OK" }],
+                        );
+                        throw err; // Re-throw so the item can reset its 'isDeleting' state
+                      }
+                    }
+                  }}
+                />
+              );
+            })
           ) : (
-            /* ✅ PREMIUM OFFLINE / EMPTY STATE - Now takes full prominence */
+            /* Premium offline / empty state */
             <View style={styles.errorContainer}>
               <View style={styles.errorIconCircle}>
                 <View style={styles.statusDot} />
@@ -363,20 +434,7 @@ const styles = createStyles({
     textAlign: "center",
     marginTop: 20,
   },
-  elasticDelete: {
-    position: "absolute",
-    right: 15,
-    top: "50%",
-    backgroundColor: "#FF3B30",
-    width: 25,
-    height: 25,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 30,
-    elevation: 6,
-  },
-  // ✅ Premium Offline/Empty State Styles
+  // Premium offline/empty state styles
   errorContainer: {
     alignItems: "center",
     justifyContent: "center",
@@ -392,7 +450,6 @@ const styles = createStyles({
     justifyContent: "center",
     marginBottom: 16,
     position: "relative",
-    // Slight shadow for depth
     elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -406,7 +463,7 @@ const styles = createStyles({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#FF3B30", // Premium red for error
+    backgroundColor: "#FF3B30",
     borderWidth: 2,
     borderColor: theme.colors.surface,
     zIndex: 1,
@@ -415,7 +472,7 @@ const styles = createStyles({
     fontSize: 15,
     fontWeight: "600",
     color: theme.colors.text,
-    letterSpacing: -0.3, // Tighter spacing for modern look
+    letterSpacing: -0.3,
   },
   errorSubtext: {
     fontSize: 13,

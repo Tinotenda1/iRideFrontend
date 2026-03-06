@@ -176,6 +176,32 @@ const RideRequestMap: React.FC<Props> = ({
         )}
       </MapView>
 
+      {/* Pickup dot */}
+      {positions.pickup && (
+        <View
+          style={[
+            styles.dotPickup,
+            {
+              left: positions.pickup.x - 7,
+              top: positions.pickup.y - 7,
+            },
+          ]}
+        />
+      )}
+
+      {/* Dropoff dot */}
+      {positions.dropoff && (
+        <View
+          style={[
+            styles.dotDropoff,
+            {
+              left: positions.dropoff.x - 7,
+              top: positions.dropoff.y - 7,
+            },
+          ]}
+        />
+      )}
+
       {/* --- FLOATING TOOLTIPS --- */}
 
       {/* PICKUP TOOLTIP */}
@@ -198,12 +224,14 @@ const RideRequestMap: React.FC<Props> = ({
               {" ("} {Math.ceil(rideData.etaToPickup / 60)} min
               {")"}
             </Text>
+            {/*
             <View
               style={[
                 styles.tooltipTriangle,
                 { borderTopColor: theme.colors.primary },
               ]}
             />
+            */}
           </View>
         </View>
       )}
@@ -225,12 +253,14 @@ const RideRequestMap: React.FC<Props> = ({
                 ? `${rideData.route.distance.toFixed(1)} km (${Math.ceil(rideData.route.duration)} min)`
                 : "Calculating..."}
             </Text>
+            {/*
             <View
               style={[
                 styles.tooltipTriangle,
                 { borderTopColor: theme.colors.error },
               ]}
             />
+            */}
           </View>
         </View>
       )}
@@ -284,6 +314,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#FFD700",
   },
+  dotPickup: {
+    position: "absolute",
+    width: 14,
+    height: 14,
+    borderRadius: 7, // circle
+    backgroundColor: theme.colors.primary,
+    borderWidth: 2,
+    borderColor: "#000",
+    zIndex: 20, // below tooltips
+  },
+
+  dotDropoff: {
+    position: "absolute",
+    width: 14,
+    height: 14,
+    borderRadius: 0, // square
+    backgroundColor: theme.colors.error,
+    borderWidth: 2,
+    borderColor: "#000",
+    zIndex: 20,
+  },
   tooltipAnchor: {
     position: "absolute",
     width: 0,
@@ -294,10 +345,10 @@ const styles = StyleSheet.create({
   },
   tooltipBox: {
     position: "absolute",
-    bottom: 12,
+    bottom: 15,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 50,
     alignItems: "center",
     elevation: 6,
     minWidth: 100,

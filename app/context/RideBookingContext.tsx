@@ -520,17 +520,53 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
 
   const hideRecentDestination = useCallback(
     async (rideId: string) => {
-      try {
-        const response = await api.patch("/rides/hide-destination", { rideId });
+      const MAX_RETRIES = 3;
+      let attempt = 0;
+      let success = false;
 
-        if (response.data.success) {
-          const updated = (rideData.recentDestinations || []).filter(
-            (dest) => dest.id !== rideId,
+      while (attempt < MAX_RETRIES && !success) {
+        attempt++;
+        try {
+          console.log(
+            `🗑️ Hiding destination ${rideId} (Attempt ${attempt})...`,
           );
-          updateRideData({ recentDestinations: updated });
+
+          /*
+          // Force failure for testing
+          throw new Error("Simulated API failure");
+          */
+
+          const response = await api.patch("/rides/hide-destination", {
+            rideId,
+          });
+
+          // IMPORTANT: Uncomment your real logic and remove the forced error when done testing
+          if (response.data.success) {
+            const updated = (rideData.recentDestinations || []).filter(
+              (dest) => dest.id !== rideId,
+            );
+            updateRideData({ recentDestinations: updated });
+            console.log(`✅ Destination ${rideId} hidden successfully`);
+            success = true;
+            return;
+          } else {
+            throw new Error("API returned success: false");
+          }
+        } catch (err) {
+          console.error(
+            `❌ Failed to hide destination (Attempt ${attempt}):`,
+            err,
+          );
+
+          if (attempt < MAX_RETRIES) {
+            await new Promise((r) => setTimeout(r, 500));
+          } else {
+            //console.error(`🛑 Maximum retries reached for hiding destination ${rideId}`,);
+
+            // CRITICAL: Throw the error here so the UI (LocationInputTab) can catch it
+            throw err;
+          }
         }
-      } catch (err) {
-        console.error("❌ Failed to hide destination:", err);
       }
     },
     [rideData.recentDestinations, updateRideData],

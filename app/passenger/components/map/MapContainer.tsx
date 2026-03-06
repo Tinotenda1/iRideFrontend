@@ -18,13 +18,7 @@ import {
   View,
 } from "react-native";
 
-import { useFocusEffect } from "@react-navigation/native";
-import MapView, {
-  Marker,
-  Polyline,
-  PROVIDER_GOOGLE,
-  Region,
-} from "react-native-maps";
+import MapView, { Polyline, PROVIDER_GOOGLE, Region } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 import { theme } from "../../../../constants/theme";
 import { useRideBooking } from "../../../context/RideBookingContext";
@@ -45,6 +39,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
   const mapRef = useRef<MapView>(null);
   const { rideData, updateRideData, fetchPrices } = useRideBooking();
   const { pickupLocation, destination, status } = rideData;
+
   const [currentTrayHeight, setCurrentTrayHeight] = useState(trayHeight);
   const [userRegion, setUserRegion] = useState<Region | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +51,18 @@ const MapContainer: React.FC<MapContainerProps> = ({
   const [routeCoordinates, setRouteCoordinates] = useState<
     { latitude: number; longitude: number }[]
   >([]);
+  const [snappedPoints, setSnappedPoints] = useState<{
+    start: { latitude: number; longitude: number };
+    end: { latitude: number; longitude: number };
+  } | null>(null);
+
+  const [positions, setPositions] = useState<{
+    pickup: { x: number; y: number } | null;
+    dropoff: { x: number; y: number } | null;
+  }>({
+    pickup: null,
+    dropoff: null,
+  });
 
   const TOP_LIMIT = height * 0.2;
 
@@ -65,24 +72,11 @@ const MapContainer: React.FC<MapContainerProps> = ({
     searching: "searching",
     matched: "matched",
     arrived: "matched",
-    on_trip: "on_trip",
+    on_trip: "matched",
     completed: "input",
   };
 
-  const [snappedPoints, setSnappedPoints] = useState<{
-    start: { latitude: number; longitude: number };
-    end: { latitude: number; longitude: number };
-  } | null>(null);
-
-  const [positions, setPositions] = useState<{
-    pickup: { x: number; y: number } | null;
-    dropoff: { x: number; y: number } | null;
-  }>({ pickup: null, dropoff: null });
-
-  useEffect(() => {
-    setCurrentTrayHeight(trayHeight);
-  }, [trayHeight]);
-
+  // --- Reset on ride change ---
   useEffect(() => {
     setAnimatedCoords([]);
     setSnappedPoints(null);
@@ -90,8 +84,16 @@ const MapContainer: React.FC<MapContainerProps> = ({
     setPositions({ pickup: null, dropoff: null });
   }, [pickupLocation, destination]);
 
-  // ✅ UPDATED: Balanced padding ensures the "Center" of the map
-  // is the middle of the visible area (above the tray)
+  // --- Update tray height based on ride status ---
+  useEffect(() => {
+    if (!status) return;
+    const key = STATUS_TO_TRAY_HEIGHT[status];
+    if (!key) return;
+    const newHeight = HEIGHTS[key];
+    if (newHeight !== currentTrayHeight) setCurrentTrayHeight(newHeight);
+  }, [status, currentTrayHeight]);
+
+  // --- Map padding to avoid overlays ---
   const getMapPadding = useCallback(
     () => ({
       top: TOP_LIMIT,
@@ -99,110 +101,16 @@ const MapContainer: React.FC<MapContainerProps> = ({
       left: 0,
       right: 0,
     }),
-    [currentTrayHeight, TOP_LIMIT],
+    [currentTrayHeight],
   );
 
-  useEffect(() => {
-    if (!rideData.status) return;
-    const key = STATUS_TO_TRAY_HEIGHT[rideData.status];
-    if (!key) return;
-    const newHeight = HEIGHTS[key];
-    if (newHeight !== currentTrayHeight) {
-      setCurrentTrayHeight(newHeight);
-    }
-  }, [rideData.status, currentTrayHeight]);
-
-  useFocusEffect(
-    useCallback(() => {
-      return () => {
-        setAnimatedCoords([]);
-        setSnappedPoints(null);
-        setPositions({ pickup: null, dropoff: null });
-      };
-    }, []),
-  );
-
-  useEffect(() => {
-    if (routeCoordinates.length > 0) {
-      const timer = setTimeout(animateCamera, 200);
-      return () => clearTimeout(timer);
-    }
-  }, [routeCoordinates]);
-
-  const syncTooltips = useCallback(async () => {
-    if (!mapRef.current) return;
-    const startCoord = snappedPoints?.start || pickupLocation;
-    const endCoord = snappedPoints?.end || destination;
-    const newPositions: any = { pickup: null, dropoff: null };
-
-    if (startCoord)
-      newPositions.pickup = await mapRef.current.pointForCoordinate(startCoord);
-    if (endCoord)
-      newPositions.dropoff = await mapRef.current.pointForCoordinate(endCoord);
-    setPositions(newPositions);
-  }, [pickupLocation, destination, snappedPoints]);
-
-  const animateCamera = useCallback(() => {
-    if (!mapRef.current) return;
-
-    const points: { latitude: number; longitude: number }[] = [];
-    if (routeCoordinates.length > 0) {
-      points.push(...routeCoordinates);
-    } else {
-      if (userRegion)
-        points.push({
-          latitude: userRegion.latitude,
-          longitude: userRegion.longitude,
-        });
-      if (pickupLocation) points.push(pickupLocation);
-      if (destination) points.push(destination);
-    }
-
-    if (points.length < 2) {
-      if (points.length === 1) {
-        mapRef.current.animateToRegion({
-          ...points[0],
-          latitudeDelta: 0.012,
-          longitudeDelta: 0.012 * (width / height),
-        });
-      }
-      return;
-    }
-
-    // ✅ UPDATED: bottom padding should include the currentTrayHeight
-    // to keep the route/user from being hidden behind the tray.
-    mapRef.current.fitToCoordinates(points, {
-      edgePadding: {
-        top: 20,
-        bottom: 40,
-        left: 50,
-        right: 50,
-      },
-      animated: true,
-    });
-  }, [
-    userRegion,
-    pickupLocation,
-    destination,
-    routeCoordinates,
-    currentTrayHeight,
-    TOP_LIMIT,
-  ]);
-
-  useEffect(() => {
-    const timeout = setTimeout(animateCamera, 150);
-    return () => clearTimeout(timeout);
-  }, [currentTrayHeight, animateCamera]);
-
-  useEffect(() => {
-    if (status && status !== "idle") animateCamera();
-  }, [status, animateCamera]);
-
+  // --- Track user location ---
   useEffect(() => {
     let subscription: Location.LocationSubscription | null = null;
     const startTracking = async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
+
       subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
@@ -224,74 +132,119 @@ const MapContainer: React.FC<MapContainerProps> = ({
     return () => subscription?.remove();
   }, []);
 
+  // --- Animate map camera to fit all points ---
+  const animateCamera = useCallback(() => {
+    if (!mapRef.current) return;
+
+    const points: { latitude: number; longitude: number }[] = [];
+    if (routeCoordinates.length > 0) {
+      points.push(...routeCoordinates);
+    } else {
+      if (userRegion) points.push(userRegion);
+      if (pickupLocation) points.push(pickupLocation);
+      if (destination) points.push(destination);
+    }
+
+    if (points.length < 2) {
+      if (points.length === 1) {
+        mapRef.current.animateToRegion({
+          ...points[0],
+          latitudeDelta: 0.012,
+          longitudeDelta: 0.012 * (width / height),
+        });
+      }
+      return;
+    }
+
+    mapRef.current.fitToCoordinates(points, {
+      edgePadding: { top: 20, bottom: 40, left: 50, right: 50 },
+      animated: true,
+    });
+  }, [userRegion, pickupLocation, destination, routeCoordinates]);
+
+  useEffect(() => {
+    const timeout = setTimeout(animateCamera, 150);
+    return () => clearTimeout(timeout);
+  }, [currentTrayHeight, animateCamera]);
+
+  useEffect(() => {
+    if (status && status !== "idle") animateCamera();
+  }, [status, animateCamera]);
+
+  // --- Convert coordinates to screen points for tooltips ---
+  const syncTooltips = useCallback(async () => {
+    if (!mapRef.current || !snappedPoints) return;
+
+    const newPositions: any = { pickup: null, dropoff: null };
+    newPositions.pickup = await mapRef.current.pointForCoordinate(
+      snappedPoints.start,
+    );
+    newPositions.dropoff = await mapRef.current.pointForCoordinate(
+      snappedPoints.end,
+    );
+    setPositions(newPositions);
+  }, [snappedPoints]);
+
+  // --- Animate route polyline ---
+  const startRouteAnimation = useCallback((coords: any[]) => {
+    const duration = 1200;
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const visibleCount = Math.floor(progress * coords.length);
+      setAnimatedCoords(coords.slice(0, Math.max(visibleCount, 2)));
+      if (progress < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  }, []);
+
+  // --- Directions component ---
   const directions = useMemo(() => {
     if (!pickupLocation || !destination || !GOOGLE_MAPS_APIKEY) return null;
 
-    const startRouteAnimation = (coords: any[]) => {
-      const duration = 1200;
-      const startTime = Date.now();
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        const visibleCount = Math.floor(progress * coords.length);
-        setAnimatedCoords(coords.slice(0, Math.max(visibleCount, 2)));
-        if (progress < 1) requestAnimationFrame(animate);
-      };
-      requestAnimationFrame(animate);
-    };
-
     return (
-      <>
-        <MapViewDirections
-          origin={pickupLocation}
-          destination={destination}
-          apikey={GOOGLE_MAPS_APIKEY}
-          strokeWidth={0}
-          precision="high"
-          onReady={(result) => {
-            const distanceText = `${result.distance.toFixed(1)} km`;
-            const durationText = `${Math.ceil(result.duration)} min`;
-            setSnappedPoints({
-              start: result.coordinates[0],
-              end: result.coordinates[result.coordinates.length - 1],
-            });
-            setRouteCoordinates(result.coordinates);
-            startRouteAnimation(result.coordinates);
-            updateRideData({
-              distance: distanceText,
-              duration: durationText,
-              route: {
-                coordinates: result.coordinates,
-                distance: result.distance,
-                duration: result.duration,
-              },
-            });
-            fetchPrices(
-              pickupLocation,
-              destination,
-              distanceText,
-              durationText,
-            );
-            setTimeout(syncTooltips, 150);
-          }}
-        />
-        <Marker
-          coordinate={snappedPoints?.start || pickupLocation}
-          anchor={{ x: 0.5, y: 0.5 }}
-          tracksViewChanges={false}
-        >
-          <View style={styles.staticDotStart} />
-        </Marker>
-        <Marker
-          coordinate={snappedPoints?.end || destination}
-          anchor={{ x: 0.5, y: 0.5 }}
-          tracksViewChanges={false}
-        >
-          <View style={styles.staticDotEnd} />
-        </Marker>
-      </>
+      <MapViewDirections
+        origin={pickupLocation}
+        destination={destination}
+        apikey={GOOGLE_MAPS_APIKEY}
+        strokeWidth={0}
+        precision="high"
+        onReady={(result) => {
+          const distanceText = `${result.distance.toFixed(1)} km`;
+          const durationText = `${Math.ceil(result.duration)} min`;
+
+          const start = result.coordinates[0];
+          const end = result.coordinates[result.coordinates.length - 1];
+          setSnappedPoints({ start, end });
+          setRouteCoordinates(result.coordinates);
+
+          updateRideData({
+            distance: distanceText,
+            duration: durationText,
+            route: {
+              coordinates: result.coordinates,
+              distance: result.distance,
+              duration: result.duration,
+            },
+          });
+
+          fetchPrices(pickupLocation, destination, distanceText, durationText);
+          startRouteAnimation(result.coordinates);
+
+          setTimeout(syncTooltips, 150);
+        }}
+      />
     );
-  }, [pickupLocation, destination, snappedPoints, syncTooltips]);
+  }, [pickupLocation, destination, syncTooltips, startRouteAnimation]);
+
+  // --- Check if markers and tooltips are ready ---
+  const isRouteUIReady =
+    !!snappedPoints &&
+    !!positions.pickup &&
+    !!positions.dropoff &&
+    !!pickupLocation &&
+    !!destination;
 
   if (loading || !userRegion) {
     return (
@@ -307,7 +260,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map}
-        // ✅ This ensures the map opens exactly on the user
         initialRegion={userRegion}
         showsUserLocation
         showsMyLocationButton={false}
@@ -321,6 +273,8 @@ const MapContainer: React.FC<MapContainerProps> = ({
         }}
       >
         {directions}
+
+        {/* Animated polyline */}
         {animatedCoords.length > 1 && (
           <Polyline
             coordinates={animatedCoords}
@@ -330,12 +284,38 @@ const MapContainer: React.FC<MapContainerProps> = ({
         )}
       </MapView>
 
-      {/* TOOLTIPS */}
-      {positions.dropoff && pickupLocation && (
+      {/* Pickup dot */}
+      {isRouteUIReady && (
+        <View
+          style={[
+            styles.dotPickup,
+            {
+              left: positions.pickup!.x - 7,
+              top: positions.pickup!.y - 7,
+            },
+          ]}
+        />
+      )}
+
+      {/* Dropoff dot */}
+      {isRouteUIReady && (
+        <View
+          style={[
+            styles.dotDropoff,
+            {
+              left: positions.dropoff!.x - 7,
+              top: positions.dropoff!.y - 7,
+            },
+          ]}
+        />
+      )}
+
+      {/* TOOLTIP: Pickup */}
+      {isRouteUIReady && (
         <View
           style={[
             styles.tooltipAnchor,
-            { left: positions.pickup?.x, top: positions.pickup?.y },
+            { left: positions.pickup!.x, top: positions.pickup!.y },
           ]}
         >
           <View
@@ -345,21 +325,24 @@ const MapContainer: React.FC<MapContainerProps> = ({
             ]}
           >
             <Text style={styles.tooltipTitle}>Pickup</Text>
+            {/*
             <View
               style={[
                 styles.tooltipTriangle,
                 { borderTopColor: theme.colors.primary },
               ]}
             />
+            */}
           </View>
         </View>
       )}
 
-      {positions.dropoff && destination && (
+      {/* TOOLTIP: Dropoff */}
+      {isRouteUIReady && (
         <View
           style={[
             styles.tooltipAnchor,
-            { left: positions.dropoff.x, top: positions.dropoff.y },
+            { left: positions.dropoff!.x, top: positions.dropoff!.y },
           ]}
         >
           <View
@@ -373,19 +356,22 @@ const MapContainer: React.FC<MapContainerProps> = ({
                 <ActivityIndicator size="small" color="#fff" />
               </View>
             )}
+            {/*
             <View
               style={[
                 styles.tooltipTriangle,
                 { borderTopColor: theme.colors.error },
               ]}
             />
+            */}
           </View>
         </View>
       )}
 
+      {/* RECENTER BUTTON */}
       {isMoved && !isAnimating && (
         <TouchableOpacity
-          style={[styles.recenterButton, { bottom: currentTrayHeight + 20 }]}
+          style={[styles.recenterButton, { bottom: currentTrayHeight }]}
           onPress={() => {
             setIsMoved(false);
             animateCamera();
@@ -412,24 +398,26 @@ const styles = StyleSheet.create({
     right: 15,
     padding: 5,
     elevation: 5,
-    backgroundColor: "#fff",
-    borderRadius: 20,
   },
-  staticDotStart: {
+  dotPickup: {
+    position: "absolute",
     width: 14,
     height: 14,
     borderRadius: 7,
     backgroundColor: theme.colors.primary,
     borderWidth: 2,
-    borderColor: "#fff",
+    borderColor: "#000000",
+    zIndex: 10, // below tooltips (zIndex 100)
   },
-  staticDotEnd: {
+  dotDropoff: {
+    position: "absolute",
     width: 14,
     height: 14,
-    borderRadius: 7,
-    backgroundColor: theme.colors.error,
+    borderRadius: 0, // square
+    backgroundColor: "red",
     borderWidth: 2,
-    borderColor: "#fff", // Fixed color to white for contrast
+    borderColor: "#000000",
+    zIndex: 10,
   },
   tooltipAnchor: {
     position: "absolute",
@@ -441,10 +429,10 @@ const styles = StyleSheet.create({
   },
   tooltipBox: {
     position: "absolute",
-    bottom: 12,
+    bottom: 15,
     paddingVertical: 5,
     paddingHorizontal: 10,
-    borderRadius: 6,
+    borderRadius: 50,
     alignItems: "center",
     elevation: 4,
     minWidth: 70,

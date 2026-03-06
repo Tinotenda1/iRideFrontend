@@ -124,8 +124,21 @@ export const DriverOfferCard: React.FC<Props> = ({
             size="md"
           />
           <View style={styles.ratingBadge}>
-            <Ionicons name="star" size={10} color="#FFC107" />
-            <Text style={styles.ratingText}>{offer.driver.rating}</Text>
+            {Array.from({ length: 5 }).map((_, i) => {
+              const rating = Number(offer.driver.rating) || 0;
+
+              return (
+                <Ionicons
+                  key={i}
+                  name="star"
+                  size={8}
+                  color={i < Math.round(rating) ? "#FFC107" : "#E5E7EB"} // gold vs gray
+                  style={{ marginRight: 1 }}
+                />
+              );
+            })}
+
+            <Text style={styles.ratingText}>({offer.driver.rating})</Text>
           </View>
           <Text style={styles.ridesText}>
             {offer.driver.totalTrips || 0} rides
@@ -272,7 +285,11 @@ const styles = StyleSheet.create({
   },
 
   // Price & Badges
-  priceContainer: { alignItems: "flex-end" },
+  priceContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   priceText: { fontWeight: "800", color: "#10B981", fontSize: 18 },
   yourFareBadge: {
     backgroundColor: "#DCFCE7",

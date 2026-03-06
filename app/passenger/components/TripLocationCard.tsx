@@ -72,18 +72,23 @@ const TripLocationCard: React.FC<TripLocationCardProps> = ({
             </Text>
           </View>
           <View style={styles.divider} />
-          <View style={styles.locationRow}>
-            <Text
-              style={[
-                styles.locationText,
-                styles.destinationText,
-                !isBookingActive && styles.disabledText,
-              ]}
-              numberOfLines={1}
-            >
-              {currentRide?.destination?.name || rideData.destination?.name}
-            </Text>
-          </View>
+          <Text
+            style={[
+              styles.locationText,
+              styles.destinationText,
+              !isBookingActive && styles.disabledText,
+            ]}
+            numberOfLines={1}
+          >
+            {
+              // Prefer restored address → then name → then fallback
+              currentRide?.destination?.address ||
+                currentRide?.destination?.name ||
+                rideData.destination?.address ||
+                rideData.destination?.name ||
+                "Select destination"
+            }
+          </Text>
         </View>
 
         {isBookingActive && (
