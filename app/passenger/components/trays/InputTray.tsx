@@ -1,6 +1,7 @@
 // components/trays/InputTray.tsx
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import {
+  Alert,
   BackHandler,
   Dimensions,
   StyleSheet,
@@ -63,7 +64,16 @@ const InputTray = forwardRef<any, InputTrayProps>(
       if (activeField === "pickup") {
         updateRideData({ pickupLocation: place });
       } else {
-        // ✅ Add status: "active" here to trigger the UI Controller
+        // VALIDATION: Check if pickup exists before moving to booking
+        if (!rideData.pickupLocation) {
+          Alert.alert(
+            "Pickup Required",
+            "Please select a pickup location before choosing your destination.",
+            [{ text: "OK" }],
+          );
+          return; // Stop execution here
+        }
+
         console.log(`[InputTray] Destination selected:`, place);
         updateRideData({
           destination: place,

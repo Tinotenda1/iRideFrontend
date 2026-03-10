@@ -224,11 +224,23 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
     }
   }, [rideData.vehiclePrices]);
 
+  // Inside LocationInputTab.tsx
+
   const handleSelect = (
     field: "pickup" | "destination",
     place: Place | null,
   ) => {
     if (field === "destination" && place) {
+      // VALIDATION: Check if pickup exists
+      if (!rideData.pickupLocation) {
+        Alert.alert(
+          "Pickup Missing",
+          "We need to know where to pick you up first!",
+          [{ text: "OK" }],
+        );
+        return; // Stop the flow
+      }
+
       updateRideData({
         [field]: place,
         status: "booking", // trigger status change

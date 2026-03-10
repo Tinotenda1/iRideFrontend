@@ -33,7 +33,7 @@ import RideRequestMap from "../maps/RideRequestMap";
 
 const { height: windowHeight } = Dimensions.get("window");
 const OPEN_HEIGHT = windowHeight * 0.9;
-const MAP_MIN_HEIGHT = OPEN_HEIGHT * 0.35;
+const MAP_MIN_HEIGHT = OPEN_HEIGHT * 0.4;
 
 export interface RideRequestTrayRef {
   open: (
@@ -104,7 +104,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
 
     const headerText =
       isPriority && secondsLeft > 0
-        ? `${baseHeaderText} (PRIORITY WINDOW • 00:${secondsLeft
+        ? `${baseHeaderText} (EXCLUSIVE WINDOW • 00:${secondsLeft
             .toString()
             .padStart(2, "0")})`
         : baseHeaderText;
@@ -277,7 +277,6 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
             />
           )}
           <View style={styles.headerArea}>
-            <View style={styles.handle} />
             <Text style={styles.timerDigits}>{headerText}</Text>
           </View>
 
@@ -417,7 +416,6 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                 <View style={styles.addressRow}>
                   <View style={[styles.dot, { backgroundColor: "#00D26A" }]} />
                   <View style={styles.addressTextContainer}>
-                    <Text style={styles.addressLabelSmall}>PICKUP</Text>
                     <Text style={styles.addressText} numberOfLines={1}>
                       {selectedRideData.pickup?.address}
                     </Text>
@@ -426,7 +424,6 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                 <View style={[styles.addressRow, { marginTop: 12 }]}>
                   <View style={[styles.dot, { backgroundColor: "#FF4B55" }]} />
                   <View style={styles.addressTextContainer}>
-                    <Text style={styles.addressLabelSmall}>DESTINATION</Text>
                     <Text style={styles.addressText} numberOfLines={1}>
                       {selectedRideData.destination?.address}
                     </Text>
@@ -613,7 +610,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginTop: 18,
+    marginTop: 8,
   },
   addressTextContainer: {
     flex: 1,

@@ -10,7 +10,6 @@ import React, {
   useState,
 } from "react";
 import {
-  ActivityIndicator,
   Dimensions,
   StyleSheet,
   Text,
@@ -199,7 +198,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
     requestAnimationFrame(animate);
   }, []);
 
-  // --- Directions component ---
+  // --- Directions component. Fetch and render the route ---
   const directions = useMemo(() => {
     if (!pickupLocation || !destination || !GOOGLE_MAPS_APIKEY) return null;
 
@@ -312,62 +311,82 @@ const MapContainer: React.FC<MapContainerProps> = ({
 
       {/* TOOLTIP: Pickup */}
       {isRouteUIReady && (
-        <View
-          style={[
-            styles.tooltipAnchor,
-            { left: positions.pickup!.x, top: positions.pickup!.y },
-          ]}
-        >
-          <View
-            style={[
-              styles.tooltipBox,
-              { backgroundColor: theme.colors.primary },
-            ]}
-          >
-            <Text style={styles.tooltipTitle}>Pickup</Text>
-            {/*
+        <>
+          {/* --- PICKUP TOOLTIP --- */}
+          {positions.pickup && (
             <View
               style={[
-                styles.tooltipTriangle,
-                { borderTopColor: theme.colors.primary },
+                styles.tooltipAnchor,
+                { left: positions.pickup.x, top: positions.pickup.y },
               ]}
-            />
-            */}
-          </View>
-        </View>
-      )}
-
-      {/* TOOLTIP: Dropoff */}
-      {isRouteUIReady && (
-        <View
-          style={[
-            styles.tooltipAnchor,
-            { left: positions.dropoff!.x, top: positions.dropoff!.y },
-          ]}
-        >
-          <View
-            style={[styles.tooltipBox, { backgroundColor: theme.colors.error }]}
-          >
-            <Text style={styles.tooltipTitle}>Dropoff</Text>
-            {rideData?.duration ? (
-              <Text style={styles.tooltipValue}>{rideData.duration}</Text>
-            ) : (
-              <View style={styles.loaderWrapper}>
-                <ActivityIndicator size="small" color="#fff" />
+            >
+              <View style={[styles.tooltipHead, { backgroundColor: "#fff" }]}>
+                <Ionicons name="flag" size={18} color="#000" />
               </View>
-            )}
-            {/*
+
+              <View
+                style={[
+                  styles.tooltipLine,
+                  { backgroundColor: "#000", height: 20 },
+                ]}
+              />
+            </View>
+          )}
+
+          {/* --- DROPOFF TOOLTIP --- */}
+          {positions.dropoff && (
             <View
               style={[
-                styles.tooltipTriangle,
-                { borderTopColor: theme.colors.error },
+                styles.tooltipAnchor,
+                { left: positions.dropoff.x, top: positions.dropoff.y },
+              ]}
+            >
+              <View style={[styles.tooltipHead, { backgroundColor: "#000" }]}>
+                <View>
+                  <Ionicons name="flag" size={16} color="#ffffff" />
+                </View>
+                <Text style={[styles.tooltipValue2, { color: "#fff" }]}>
+                  {rideData.route?.duration
+                    ? `${Math.ceil(rideData.route.duration)} min`
+                    : "..."}
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.tooltipLine,
+                  { backgroundColor: "#000", height: 20 },
+                ]}
+              />
+            </View>
+          )}
+
+          {/* Pickup & Dropoff Dots */}
+          {positions.pickup && (
+            <View
+              style={[
+                styles.dotPickup,
+                {
+                  left: positions.pickup.x - 7,
+                  top: positions.pickup.y - 7,
+                },
               ]}
             />
-            */}
-          </View>
-        </View>
-      )}
+          )}
 
+          {positions.dropoff && (
+            <View
+              style={[
+                styles.dotDropoff,
+                {
+                  left: positions.dropoff.x - 7,
+                  top: positions.dropoff.y - 7,
+                },
+              ]}
+            />
+          )}
+        </>
+      )}
       {/* RECENTER BUTTON */}
       {isMoved && !isAnimating && (
         <TouchableOpacity
@@ -377,7 +396,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
             animateCamera();
           }}
         >
-          <Ionicons name="navigate" size={24} color={theme.colors.primary} />
+          <Ionicons name="navigate" size={28} color={theme.colors.primary} />
         </TouchableOpacity>
       )}
     </View>
@@ -395,9 +414,14 @@ const styles = StyleSheet.create({
   },
   recenterButton: {
     position: "absolute",
+    width: 34,
+    height: 34,
+    borderRadius: 1,
+    //backgroundColor: "#ffffff",
     right: 15,
-    padding: 5,
-    elevation: 5,
+    padding: 3,
+    marginBottom: 10,
+    //elevation: 5,
   },
   dotPickup: {
     position: "absolute",
@@ -406,55 +430,54 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     backgroundColor: theme.colors.primary,
     borderWidth: 2,
-    borderColor: "#000000",
-    zIndex: 10, // below tooltips (zIndex 100)
+    borderColor: "#000",
+    zIndex: 20,
   },
   dotDropoff: {
     position: "absolute",
     width: 14,
     height: 14,
-    borderRadius: 0, // square
-    backgroundColor: "red",
+    borderRadius: 1,
+    backgroundColor: theme.colors.error,
     borderWidth: 2,
-    borderColor: "#000000",
-    zIndex: 10,
+    borderColor: "#000",
+    zIndex: 20,
   },
   tooltipAnchor: {
     position: "absolute",
     width: 0,
     height: 0,
     alignItems: "center",
-    justifyContent: "flex-end",
-    zIndex: 100,
+    justifyContent: "flex-end", // grows upwards from marker
   },
-  tooltipBox: {
-    position: "absolute",
-    bottom: 15,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+  tooltipLine: {
+    width: 2,
+    marginBottom: 4,
+  },
+  tooltipHead: {
+    width: 45,
+    height: 45,
+    borderWidth: 1,
     borderRadius: 50,
+    justifyContent: "center",
     alignItems: "center",
     elevation: 4,
-    minWidth: 70,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    padding: 4,
+    //marginBottom: 4,
   },
-  tooltipTitle: {
-    color: "rgba(255, 255, 255, 0.8)",
-    fontSize: 9,
+  tooltipValue1: {
+    fontSize: 12,
     fontWeight: "600",
-    textTransform: "uppercase",
+    textAlign: "center",
   },
-  tooltipValue: { color: "#fff", fontSize: 13, fontWeight: "800" },
-  loaderWrapper: { height: 18, justifyContent: "center" },
-  tooltipTriangle: {
-    position: "absolute",
-    bottom: -5,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 5,
-    borderRightWidth: 5,
-    borderTopWidth: 5,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
+  tooltipValue2: {
+    fontSize: 10,
+    fontWeight: "400",
+    textAlign: "center",
   },
 });
 

@@ -82,21 +82,21 @@ const styles = createStyles({
   card: {
     flexDirection: "row",
     alignItems: "center",
-    // UNIFORM DIMENSIONS
+    //UNIFORM DIMENSIONS
     width: 140,
     height: 85,
     paddingLeft: 4, // Scootch image to the left edge
     paddingRight: theme.spacing.sm,
     borderRadius: 16,
-    borderWidth: 1,
+    //borderWidth: 1,
     position: "relative",
-    backgroundColor: theme.colors.surface,
+    backgroundColor: "#e6e6e6",
     // Soft Bolt-style shadow
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
-    elevation: 2,
+    //elevation: 2,
   },
   cardUnselected: {
     borderColor: "#000",

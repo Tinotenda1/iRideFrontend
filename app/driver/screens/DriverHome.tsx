@@ -17,11 +17,11 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TouchableOpacity,
   UIManager,
-  View,
+  View
 } from "react-native";
-import MapView, { PROVIDER_GOOGLE, Region } from "react-native-maps";
+import MapView, { Region } from "react-native-maps";
+import DriverMap from "../components/maps/DriverMap";
 import RideRequestCard from "../components/RideRequestCard";
 import {
   onRemoveRideRequest,
@@ -292,57 +292,15 @@ const DriverHome: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        provider={PROVIDER_GOOGLE}
-        style={StyleSheet.absoluteFill}
-        mapPadding={{
-          top: 60,
-          right: 0,
-          bottom: trayPadding,
-          left: 0,
-        }}
-        initialRegion={userRegion}
-        showsUserLocation
-        showsMyLocationButton={false}
+      <DriverMap
+        mapRef={mapRef}
+        userRegion={userRegion}
+        trayPadding={trayPadding}
+        pulseAnim={pulseAnim}
+        showRecenter={showRecenter}
+        onRecenter={handleRecenter}
         onRegionChangeComplete={onRegionChangeComplete}
-        loadingEnabled
-        pitchEnabled={false}
-        rotateEnabled={false}
       />
-
-      <View
-        style={[
-          styles.radarLayer,
-          {
-            top: 60,
-            bottom: trayPadding,
-          },
-        ]}
-        pointerEvents="none"
-      >
-        <Animated.View
-          style={[styles.pulseCircle, { transform: [{ scale: pulseAnim }] }]}
-        />
-
-        <Animated.View
-          style={[
-            styles.pulseCircleOuter,
-            { transform: [{ scale: pulseAnim }] },
-          ]}
-        />
-
-        <View style={styles.driverDot} />
-      </View>
-
-      {showRecenter && (
-        <TouchableOpacity
-          style={[styles.recenterButton, { bottom: trayPadding + 16 }]}
-          onPress={handleRecenter}
-        >
-          <Ionicons name="navigate" size={24} color={theme.colors.primary} />
-        </TouchableOpacity>
-      )}
 
       {rides.length > 0 && (
         <View

@@ -44,14 +44,13 @@ const RideRequestMap: React.FC<Props> = ({
 }) => {
   const mapRef = useRef<MapView>(null);
 
-  const [mapReady, setMapReady] = useState(false); // ✅ ADD THIS
+  const [mapReady, setMapReady] = useState(false);
   const [isMoved, setIsMoved] = useState(false);
   const [positions, setPositions] = useState<{
     pickup: Point | null;
     dropoff: Point | null;
   }>({ pickup: null, dropoff: null });
 
-  // --- 1. TOOLTIP POSITION SYNC ---
   const syncTooltips = useCallback(async () => {
     if (!mapRef.current || !mapReady || !rideData) return;
 
@@ -79,7 +78,8 @@ const RideRequestMap: React.FC<Props> = ({
     }
   }, [rideData, mapReady]);
 
-  // --- 2. FIT MAP TO ROUTE ---
+  // Replace your existing fitToRoute function with this version:
+
   const fitToRoute = useCallback(() => {
     if (!mapRef.current || !rideData) return;
 
@@ -96,10 +96,11 @@ const RideRequestMap: React.FC<Props> = ({
 
     mapRef.current.fitToCoordinates(pointsToFit, {
       edgePadding: {
-        top: topPadding + 40,
-        bottom: trayHeight + 40,
-        left: 60,
-        right: 60,
+        // Increased top padding to ensure the 65px Tooltip Head fits
+        top: topPadding + 45,
+        bottom: trayHeight + 20,
+        left: 30,
+        right: 30,
       },
       animated: true,
     });
@@ -120,7 +121,6 @@ const RideRequestMap: React.FC<Props> = ({
     }
   }, [rideData, mapReady]);
 
-  // --- 3. LOADING STATE ---
   if (!rideData || !rideData.pickup) {
     return (
       <View style={[styles.center, { minHeight }]}>
@@ -143,32 +143,37 @@ const RideRequestMap: React.FC<Props> = ({
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFillObject}
-        onMapReady={() => setMapReady(true)} // ✅ ADD THIS
+        onMapReady={() => setMapReady(true)}
         showsUserLocation={false}
         showsMyLocationButton={false}
         onPanDrag={() => setIsMoved(true)}
         onRegionChange={syncTooltips}
         onRegionChangeComplete={syncTooltips}
       >
-        {/* Route Line */}
         {routeCoords.length > 0 && (
           <Polyline
             coordinates={routeCoords}
-            strokeColor={theme.colors.primary}
+            strokeColor={"#000"}
             strokeWidth={5}
             lineJoin="round"
           />
         )}
 
-        {/* --- PREMIUM DRIVER MARKER --- */}
+        {/* --- GOOGLE NAVIGATION DRIVER MARKER --- */}
         {driverLocation && (
-          <Marker coordinate={driverLocation} flat anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={styles.premiumMarkerContainer}>
-              <View style={styles.premiumBadge}>
+          <Marker
+            coordinate={driverLocation}
+            flat // Makes the marker lay flat on the map for perspective
+            anchor={{ x: 0.5, y: 0.5 }} // Rotates around the exact center
+            rotation={driverLocation.heading || 0} // Uses heading for direction
+          >
+            <View style={styles.navMarkerContainer}>
+              <View style={styles.navMarkerCircle}>
                 <MaterialCommunityIcons
-                  name="car-sports" // Note the 's' at the end
-                  size={18}
-                  color="#FFF"
+                  name="navigation" // Navigation chevron icon
+                  size={22}
+                  color="#000000"
+                  style={{ transform: [{ translateY: -1 }] }} // Centers the icon visually
                 />
               </View>
             </View>
@@ -176,7 +181,65 @@ const RideRequestMap: React.FC<Props> = ({
         )}
       </MapView>
 
-      {/* Pickup dot */}
+      {/* --- PICKUP TOOLTIP --- */}
+      {positions.pickup && (
+        <View
+          style={[
+            styles.tooltipAnchor,
+            { left: positions.pickup.x, top: positions.pickup.y },
+          ]}
+        >
+          {/* Circle Head */}
+          <View style={[styles.tooltipHead, { backgroundColor: "#fff" }]}>
+            <Text style={[styles.tooltipValue1, { color: "#000" }]}>
+              {(rideData.distanceToPickup / 1000).toFixed(1)} km
+            </Text>
+            <Text style={[styles.tooltipValue2, { color: "#000" }]}>
+              {Math.ceil(rideData.etaToPickup / 60)} min
+            </Text>
+          </View>
+          {/* Line Connector */}
+          <View
+            style={[
+              styles.tooltipLine,
+              { backgroundColor: "#000", height: 20 },
+            ]}
+          />
+        </View>
+      )}
+
+      {/* --- DROPOFF TOOLTIP --- */}
+      {positions.dropoff && (
+        <View
+          style={[
+            styles.tooltipAnchor,
+            { left: positions.dropoff.x, top: positions.dropoff.y },
+          ]}
+        >
+          {/* Circle Head */}
+          <View style={[styles.tooltipHead, { backgroundColor: "#000" }]}>
+            <Text style={[styles.tooltipValue1, { color: "#fff" }]}>
+              {rideData.route?.duration
+                ? `${rideData.route.distance.toFixed(1)} km`
+                : "..."}
+            </Text>
+            <Text style={[styles.tooltipValue2, { color: "#fff" }]}>
+              {rideData.route?.duration
+                ? `${Math.ceil(rideData.route.duration)} min`
+                : "..."}
+            </Text>
+          </View>
+          {/* Line Connector */}
+          <View
+            style={[
+              styles.tooltipLine,
+              { backgroundColor: "#000", height: 20 },
+            ]}
+          />
+        </View>
+      )}
+
+      {/* Pickup & Dropoff Dots */}
       {positions.pickup && (
         <View
           style={[
@@ -189,7 +252,6 @@ const RideRequestMap: React.FC<Props> = ({
         />
       )}
 
-      {/* Dropoff dot */}
       {positions.dropoff && (
         <View
           style={[
@@ -202,70 +264,6 @@ const RideRequestMap: React.FC<Props> = ({
         />
       )}
 
-      {/* --- FLOATING TOOLTIPS --- */}
-
-      {/* PICKUP TOOLTIP */}
-      {positions.pickup && (
-        <View
-          style={[
-            styles.tooltipAnchor,
-            { left: positions.pickup.x, top: positions.pickup.y },
-          ]}
-        >
-          <View
-            style={[
-              styles.tooltipBox,
-              { backgroundColor: theme.colors.primary },
-            ]}
-          >
-            <Text style={styles.tooltipTitle}>{"PICKUP"}</Text>
-            <Text style={styles.tooltipValue}>
-              {(rideData.distanceToPickup / 1000).toFixed(1)} km
-              {" ("} {Math.ceil(rideData.etaToPickup / 60)} min
-              {")"}
-            </Text>
-            {/*
-            <View
-              style={[
-                styles.tooltipTriangle,
-                { borderTopColor: theme.colors.primary },
-              ]}
-            />
-            */}
-          </View>
-        </View>
-      )}
-
-      {/* DROPOFF TOOLTIP */}
-      {positions.dropoff && (
-        <View
-          style={[
-            styles.tooltipAnchor,
-            { left: positions.dropoff.x, top: positions.dropoff.y },
-          ]}
-        >
-          <View
-            style={[styles.tooltipBox, { backgroundColor: theme.colors.error }]}
-          >
-            <Text style={styles.tooltipTitle}>DROPOFF</Text>
-            <Text style={styles.tooltipValue}>
-              {rideData.route?.duration
-                ? `${rideData.route.distance.toFixed(1)} km (${Math.ceil(rideData.route.duration)} min)`
-                : "Calculating..."}
-            </Text>
-            {/*
-            <View
-              style={[
-                styles.tooltipTriangle,
-                { borderTopColor: theme.colors.error },
-              ]}
-            />
-            */}
-          </View>
-        </View>
-      )}
-
-      {/* RECENTER BUTTON */}
       {isMoved && (
         <TouchableOpacity
           style={[styles.recenterButton, { bottom: trayHeight }]}
@@ -285,7 +283,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.colors.background,
   },
-  // Premium Driver Styles
   premiumMarkerContainer: {
     alignItems: "center",
     justifyContent: "center",
@@ -294,9 +291,9 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 18,
-    backgroundColor: "#001986", // Sleek black
+    backgroundColor: "white",
     borderWidth: 2,
-    borderColor: "#FFD700", // Gold border
+    borderColor: "#000000",
     alignItems: "center",
     justifyContent: "center",
     elevation: 8,
@@ -305,31 +302,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
   },
-  premiumCrown: {
-    position: "absolute",
-    top: -8,
-    backgroundColor: "#1A1A1A",
-    borderRadius: 10,
-    padding: 2,
-    borderWidth: 1,
-    borderColor: "#FFD700",
-  },
   dotPickup: {
     position: "absolute",
     width: 14,
     height: 14,
-    borderRadius: 7, // circle
+    borderRadius: 7,
     backgroundColor: theme.colors.primary,
     borderWidth: 2,
     borderColor: "#000",
-    zIndex: 20, // below tooltips
+    zIndex: 20,
   },
-
   dotDropoff: {
     position: "absolute",
     width: 14,
     height: 14,
-    borderRadius: 0, // square
+    borderRadius: 0,
     backgroundColor: theme.colors.error,
     borderWidth: 2,
     borderColor: "#000",
@@ -340,46 +327,56 @@ const styles = StyleSheet.create({
     width: 0,
     height: 0,
     alignItems: "center",
-    justifyContent: "flex-end",
-    //zIndex: 100,
+    justifyContent: "flex-end", // grows upwards from marker
   },
-  tooltipBox: {
-    position: "absolute",
-    bottom: 15,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+  tooltipLine: {
+    width: 2,
+    marginBottom: 4,
+  },
+  tooltipHead: {
+    width: 45,
+    height: 45,
+    borderWidth: 1,
     borderRadius: 50,
+    justifyContent: "center",
     alignItems: "center",
-    elevation: 6,
-    minWidth: 100,
+    elevation: 4,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    padding: 4,
+    //marginBottom: 4,
   },
-  tooltipTitle: {
-    color: "rgba(255, 255, 255, 0.85)",
-    fontSize: 9,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  tooltipValue: {
-    color: "#fff",
+  tooltipValue1: {
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
+    textAlign: "center",
   },
-  tooltipTriangle: {
-    position: "absolute",
-    bottom: -5,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderTopWidth: 6,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
+  tooltipValue2: {
+    fontSize: 10,
+    fontWeight: "200",
+    textAlign: "center",
+  },
+  navMarkerContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  navMarkerCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 18,
+    backgroundColor: "#ffffff", // Google Blue
+    borderWidth: 3,
+    borderColor: "#000",
+    alignItems: "center",
+    justifyContent: "center",
+    // Adding shadow for depth
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
   },
   recenterButton: {
     position: "absolute",
