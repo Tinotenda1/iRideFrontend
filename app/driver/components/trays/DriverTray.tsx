@@ -53,8 +53,8 @@ const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
 
 const HEIGHT_WELCOME = windowHeight * 0.35;
 const HEIGHT_ONLINE = windowHeight * 0.3;
-const HEIGHT_ACTIVE_COMPACT = windowHeight * 0.2;
-const HEIGHT_ACTIVE_EXPANDED = windowHeight * 0.38;
+const HEIGHT_ACTIVE_COMPACT = windowHeight * 0.24;
+const HEIGHT_ACTIVE_EXPANDED = windowHeight * 0.35;
 
 if (
   Platform.OS === "android" &&

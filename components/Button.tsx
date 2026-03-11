@@ -1,17 +1,13 @@
-import React from 'react';
-import {
-  ActivityIndicator,
-  Text,
-  TouchableOpacity
-} from 'react-native';
-import { theme } from '../constants/theme';
-import { createStyles, typedTypography } from '../utils/styles';
+import React from "react";
+import { ActivityIndicator, Text, TouchableOpacity } from "react-native";
+import { theme } from "../constants/theme";
+import { createStyles, typedTypography } from "../utils/styles";
 
 interface ButtonProps {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'outline';
-  size?: 'small' | 'medium' | 'large';
+  variant?: "primary" | "secondary" | "outline";
+  size?: "small" | "medium" | "large";
   loading?: boolean;
   disabled?: boolean;
   fullWidth?: boolean;
@@ -22,8 +18,8 @@ interface ButtonProps {
 export const Button: React.FC<ButtonProps> = ({
   title,
   onPress,
-  variant = 'primary',
-  size = 'medium',
+  variant = "primary",
+  size = "medium",
   loading = false,
   disabled = false,
   fullWidth = false,
@@ -46,18 +42,22 @@ export const Button: React.FC<ButtonProps> = ({
       activeOpacity={0.8}
     >
       {loading ? (
-        <ActivityIndicator 
-          size="small" 
-          color={variant === 'outline' ? theme.colors.primary : theme.colors.surface} 
+        <ActivityIndicator
+          size="small"
+          color={
+            variant === "outline" ? theme.colors.primary : theme.colors.surface
+          }
         />
       ) : (
         <>
           {leftIcon && <>{leftIcon}</>}
-          <Text style={[
-            styles.text,
-            styles[`${variant}Text`],
-            styles[`${size}Text`]
-          ]}>
+          <Text
+            style={[
+              styles.text,
+              styles[`${variant}Text`],
+              styles[`${size}Text`],
+            ]}
+          >
             {title}
           </Text>
           {rightIcon && <>{rightIcon}</>}
@@ -70,9 +70,9 @@ export const Button: React.FC<ButtonProps> = ({
 const styles = createStyles({
   // Base button styles
   button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     borderRadius: theme.borderRadius.md,
     gap: theme.spacing.sm,
     ...theme.shadows.md,
@@ -86,7 +86,7 @@ const styles = createStyles({
     backgroundColor: theme.colors.secondary,
   },
   outline: {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
     borderWidth: 2,
     borderColor: theme.colors.primary,
   },
@@ -122,21 +122,21 @@ const styles = createStyles({
   // Text styles for sizes
   smallText: {
     ...typedTypography.bodySmall,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
   },
   mediumText: {
     ...typedTypography.body,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
   },
   largeText: {
     ...typedTypography.body,
     fontSize: 18,
-    fontWeight: '600' as const,
+    fontWeight: "600" as const,
   },
 
   // Other modifiers
   fullWidth: {
-    width: '100%',
+    width: "100%",
   },
   disabled: {
     opacity: 0.6,
@@ -144,7 +144,7 @@ const styles = createStyles({
 
   // Base text style
   text: {
-    textAlign: 'center' as const,
+    textAlign: "center" as const,
   },
 });
 

@@ -95,7 +95,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15, 23, 42, 0.8)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    paddingTop: 20,
+    paddingHorizontal: 20,
   },
   boltModal: {
     backgroundColor: "#fff",

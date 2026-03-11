@@ -74,7 +74,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     padding: 24,
-    paddingBottom: 40,
   },
   modalIndicator: {
     width: 40,

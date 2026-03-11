@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Linking,
   Modal,
+  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,8 +18,9 @@ import { IRAvatar } from "../../../../../components/IRAvatar";
 import { IRButton } from "../../../../../components/IRButton";
 import { useRideBooking } from "../../../../context/RideBookingContext";
 
+// ... (Interface and PREDEFINED_REASONS remain unchanged)
 interface DriverTripTabProps {
-  onCancel: (reason: string) => Promise<boolean>; // Updated interface
+  onCancel: (reason: string) => Promise<boolean>;
   onArrived: () => void;
   onStartTrip: () => void;
   onEndTrip: () => void;
@@ -47,7 +49,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
 
-  // Single state for action modals
   const [confirmModal, setConfirmModal] = useState<{
     visible: boolean;
     type: "arrived" | "end" | null;
@@ -113,7 +114,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
     setIsActionLoading(true);
 
     try {
-      // Call the parent handler moved to DriverTray
       const success = await onCancel(cancelReason);
 
       if (success && isMounted.current) {
@@ -132,15 +132,15 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
 
   if (!passenger) {
     return (
-      <View style={[styles.container, styles.center]}>
+      <SafeAreaView style={[styles.container, styles.center]}>
         <ActivityIndicator color="#10B981" size="large" />
         <Text style={styles.loadingText}>Loading trip details...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.topSection}>
         <View style={styles.passengerRow}>
           <View style={styles.personInfo}>
@@ -203,8 +203,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
           )}
         </View>
 
-        <View style={styles.divider} />
-
         <View style={styles.addressSection}>
           <View style={styles.addressRow}>
             <View style={[styles.dot, { backgroundColor: "#10B981" }]} />
@@ -238,7 +236,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
           </View>
 
           <View style={styles.paymentBadge}>
-            {/* ✅ Dynamic Icon: 'wallet-outline' for EcoCash, 'cash-outline' for Cash */}
             <Ionicons
               name={
                 rideInfo?.paymentMethod?.toLowerCase() === "ecocash"
@@ -248,8 +245,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
               size={16}
               color="#475569"
             />
-
-            {/* ✅ Dynamic Text: Forced to Uppercase for consistency */}
             <Text style={styles.paymentText}>
               {rideInfo?.paymentMethod?.toLowerCase() === "ecocash"
                 ? "ECOCASH"
@@ -299,7 +294,7 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
         )}
       </View>
 
-      {/* CANCEL MODAL */}
+      {/* Modals remain inside the SafeAreaView or sibling to it */}
       <Modal
         visible={showCancelModal}
         transparent
@@ -359,7 +354,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
         </View>
       </Modal>
 
-      {/* REUSABLE ACTION MODAL (Arrived & End) */}
       <ActionConfirmationModal
         visible={confirmModal.visible}
         title={
@@ -384,17 +378,18 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
         }
         onClose={() => setConfirmModal({ visible: false, type: null })}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
-// ... styles remain the same
+// ... (Styles remain unchanged)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
     paddingHorizontal: 16,
     paddingTop: 10,
+    marginBottom: 8,
   },
   topSection: { flex: 1 },
   center: { justifyContent: "center", alignItems: "center" },
@@ -457,7 +452,7 @@ const styles = StyleSheet.create({
     color: "#10B981",
     textTransform: "uppercase",
   },
-  divider: { height: 1, backgroundColor: "#f1f5f9", marginVertical: 10 },
+  divider: { height: 1, backgroundColor: "#f1f5f9", marginVertical: 5 },
   addressSection: { paddingVertical: 2 },
   addressRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   dot: { width: 8, height: 8, borderRadius: 4 },
