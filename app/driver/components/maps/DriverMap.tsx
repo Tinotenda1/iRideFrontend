@@ -18,7 +18,7 @@ import MapView, {
   PROVIDER_GOOGLE,
   Region,
 } from "react-native-maps";
-
+import ExternalNavButton from "../../../../components/ExternalNavButton";
 import { watchDriverLocation } from "../../driverLocationUtility/driverLocation";
 
 interface Props {
@@ -337,6 +337,17 @@ const DriverMap: React.FC<Props> = ({
         </>
       )}
 
+      <ExternalNavButton
+        status={rideData?.status}
+        pickup={pickupCoord}
+        destination={dropoffCoord}
+        style={{
+          position: "absolute",
+          bottom: trayPadding + 10,
+          alignSelf: "center",
+          zIndex: 50,
+        }}
+      />
       {showRecenter && (
         <TouchableOpacity
           style={[styles.recenterButton, { bottom: trayPadding }]}
@@ -402,7 +413,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 14,
     height: 14,
-    borderRadius: 7,
+    borderRadius: 50,
     backgroundColor: theme.colors.primary,
     borderWidth: 2,
     borderColor: "#000",
@@ -412,7 +423,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 14,
     height: 14,
-    borderRadius: 1,
+    borderRadius: 50,
     backgroundColor: theme.colors.error,
     borderWidth: 2,
     borderColor: "#000",
