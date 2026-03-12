@@ -12,6 +12,7 @@ import React, {
 import {
   Alert,
   Animated,
+  AppState,
   Dimensions,
   LayoutAnimation,
   Platform,
@@ -33,10 +34,12 @@ import {
   onRideCompletedByPassenger,
 } from "../../socketConnectionUtility/driverSocketService";
 
+import { theme } from "@/constants/theme";
 import { getUserInfo } from "@/utils/storage";
 import TripStatusModal, {
   ModalType,
 } from "../../../../components/TripStatusModal";
+import { notifyRideEvent } from "../../../../utils/persistentNotification";
 import OnlineTab from "./tabs/OnlineTab";
 import TripTab from "./tabs/TripTab";
 import WelcomeTab from "./tabs/WelcomeTab";
@@ -204,6 +207,16 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
     /* ---------------- Cancellation Listener ---------------- */
     useEffect(() => {
       const unsubscribeCancel = onRideCancelled((data: any) => {
+        if (AppState.currentState !== "active") {
+          notifyRideEvent(
+            `Drift - Cancelled`,
+            `Drift for ${rideData.activeTrip.passengerName || "a passenger"} has been cancelled.`,
+            {
+              sound: "ride_cancel.wav", // custom cancel sound
+              color: theme.colors.errorNotification, // red or alert color
+            },
+          );
+        }
         // 1. Reset Global Ride Context
         updateRideData({
           status: "idle",
@@ -221,7 +234,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         setStatusModal({
           visible: true,
           type: "cancellation",
-          title: "Trip Cancelled",
+          title: "Drift Cancelled",
           message:
             data.reason || "The passenger has cancelled the trip request.",
         });
@@ -238,6 +251,17 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
 
         handleTransition("online");
 
+        if (AppState.currentState !== "active") {
+          notifyRideEvent(
+            "Drift - Completed",
+            "Thank you for riding with Drift",
+            {
+              sound: "trip_complete.wav",
+              color: theme.colors.standardNotification,
+            },
+          );
+        }
+
         /*// 2. Show the "Completion" Modal
         setStatusModal({
           visible: true,
@@ -252,7 +276,6 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
     );
 
     /* ---------------- Socket Listeners ---------------- */
-
     useEffect(() => {
       // Listen for Completion (Passenger clicked "Drop me here")
       const unsubscribeComplete = onRideCompletedByPassenger((data) => {
@@ -271,14 +294,36 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         const rideId = matchedData.rideId;
         const details = matchedData.tripDetails;
 
+        // Update ride state/UI
         updateRideData({
           requests: [],
           activeTrip: { ...details, rideId },
           status: "matched",
         });
 
+        // Trigger optional callback
         onMatch?.();
 
+        // Show notification if app is in background
+        if (AppState.currentState !== "active") {
+          const ride = details.ride;
+          const pickupAddress = ride?.pickupAddress || "Unknown";
+          const tripDistance = ride?.tripDistance?.toFixed(1) ?? "N/A"; // km
+          const offerAmount = details.offer?.toFixed(2) || "N/A";
+          const passengerName = details.passenger?.name || "a passenger";
+
+          notifyRideEvent(
+            `Drift - Matched`,
+            `${passengerName} has selected you for a drift.\n` +
+              `Pickup: ${pickupAddress}\n` +
+              `Trip Distance: ${tripDistance} km\n` +
+              `Fare: $${offerAmount}`,
+            {
+              sound: "ride_matched.wav", // custom match sound
+              color: theme.colors.successNotification, // green
+            },
+          );
+        }
         handleTransition("active", true);
       });
 

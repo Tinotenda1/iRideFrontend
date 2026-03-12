@@ -14,6 +14,11 @@ export const theme = {
     error: "#EF4444",
     success: "#10B981",
     warning: "#F59E0B",
+    black: "#000000",
+    standardNotification: "#ff00f2",
+    successNotification: "#10B981",
+    errorNotification: "#ff0000",
+    warningNotification: "#ffff00",
   },
   shadows: {
     none: {

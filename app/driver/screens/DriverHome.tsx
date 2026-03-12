@@ -1,5 +1,6 @@
 // app/driver/screens/DriverHome.tsx
 import { theme } from "@/constants/theme";
+import { notifyRideEvent } from "@/utils/persistentNotification";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import React, {
@@ -12,13 +13,14 @@ import React, {
 import {
   ActivityIndicator,
   Animated,
+  AppState,
   FlatList,
   LayoutAnimation,
   Platform,
   StyleSheet,
   Text,
   UIManager,
-  View
+  View,
 } from "react-native";
 import MapView, { Region } from "react-native-maps";
 import DriverMap from "../components/maps/DriverMap";
@@ -117,42 +119,59 @@ const DriverHome: React.FC<Props> = ({
     }
 
     const currentRideIds = new Set(incomingRides.map((r) => r.rideId));
-
     const newRides: RideState[] = [];
 
-    incomingRides.forEach((ride) => {
-      if (!lastProcessedRidesRef.current.has(ride.rideId)) {
-        const expiresIn = ride.expiresIn || DEFAULT_EXPIRE_TIME;
+    const processRides = async () => {
+      for (const ride of incomingRides) {
+        if (!lastProcessedRidesRef.current.has(ride.rideId)) {
+          const expiresIn = ride.expiresIn || DEFAULT_EXPIRE_TIME;
 
-        newRides.push({
-          rideId: ride.rideId,
-          broadcastType: ride.broadcastType || "other",
-          expiresAt: Date.now() + expiresIn,
-          data: ride,
+          if (AppState.currentState !== "active") {
+            const pickupDistanceKm = (ride.distanceToPickup / 1000).toFixed(1);
+            const tripDistanceKm = ride.route?.distance?.toFixed(1) ?? "N/A";
+
+            await notifyRideEvent(
+              `Drift - New Ride (${ride.vehicleType})`,
+              `Pickup: ${pickupDistanceKm} km • Trip: ${tripDistanceKm} km • Offer: $${ride.offer}`,
+              {
+                sound: "ride_request.wav",
+                color: theme.colors.standardNotification,
+              },
+            );
+          }
+
+          newRides.push({
+            rideId: ride.rideId,
+            broadcastType: ride.broadcastType || "other",
+            expiresAt: Date.now() + expiresIn,
+            data: ride,
+          });
+
+          lastProcessedRidesRef.current.add(ride.rideId);
+        }
+      }
+
+      // Update rides state AFTER all rides are processed
+      setRides((prev) => {
+        const filtered = prev.filter((r) => currentRideIds.has(r.rideId));
+        const updated = filtered.map((r) => {
+          const data = incomingRides.find((i) => i.rideId === r.rideId);
+          return data ? { ...r, data } : r;
         });
 
-        lastProcessedRidesRef.current.add(ride.rideId);
-      }
-    });
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
-    setRides((prev) => {
-      const filtered = prev.filter((r) => currentRideIds.has(r.rideId));
-
-      const updated = filtered.map((r) => {
-        const data = incomingRides.find((i) => i.rideId === r.rideId);
-        return data ? { ...r, data } : r;
+        return [...updated, ...newRides];
       });
 
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      lastProcessedRidesRef.current.forEach((id) => {
+        if (!currentRideIds.has(id)) {
+          lastProcessedRidesRef.current.delete(id);
+        }
+      });
+    };
 
-      return [...updated, ...newRides];
-    });
-
-    lastProcessedRidesRef.current.forEach((id) => {
-      if (!currentRideIds.has(id)) {
-        lastProcessedRidesRef.current.delete(id);
-      }
-    });
+    processRides();
   }, [incomingRides]);
 
   /* ---------------- Radar Animation ---------------- */

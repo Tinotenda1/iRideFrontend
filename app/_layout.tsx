@@ -12,7 +12,12 @@ import {
 
 import { RideBookingProvider } from "./context/RideBookingContext";
 
+import * as Notifications from "expo-notifications";
 import { initializeAuthToken } from "../utils/api";
+import {
+  clearPersistentNotifications,
+  showPersistentNotification,
+} from "../utils/persistentNotification";
 import {
   connectDriver,
   getDriverSocketStatus,
@@ -34,6 +39,17 @@ function RootContent() {
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const [reconnecting, setReconnecting] = useState(false);
   const [reconnectError, setReconnectError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const requestPermission = async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== "granted") {
+        console.warn("Notifications permission not granted");
+      }
+    };
+
+    requestPermission();
+  }, []);
 
   // Helper: reconnect with timeout
   const reconnectWithTimeout = async (
@@ -66,17 +82,35 @@ function RootContent() {
     });
   };
 
-  // 🔄 Handle app going to background/foreground
+  const lastAppState = useRef<AppStateStatus>(AppState.currentState);
+
   const handleAppStateChange = useCallback(
     async (nextAppState: AppStateStatus) => {
       console.log(
-        `📱 App state changed: ${appState.current} → ${nextAppState}`,
+        `📱 App state changed: ${lastAppState.current} → ${nextAppState}`,
       );
+
+      // 🔹 Only fire when moving from active → background
       if (
-        appState.current.match(/inactive|background/) &&
+        lastAppState.current === "active" &&
+        nextAppState.match(/background|inactive/)
+      ) {
+        console.log(
+          "📴 App moved to background → showing persistent notification",
+        );
+        await showPersistentNotification();
+      }
+
+      // 🔹 Only fire when moving from background/inactive → active
+      if (
+        lastAppState.current.match(/inactive|background/) &&
         nextAppState === "active"
       ) {
-        console.log("🔄 App came to foreground, checking socket status...");
+        console.log(
+          "🔄 App came to foreground, clearing persistent notifications",
+        );
+        await clearPersistentNotifications();
+
         try {
           setReconnecting(true);
           setReconnectError(null);
@@ -108,7 +142,9 @@ function RootContent() {
           setReconnecting(false);
         }
       }
-      appState.current = nextAppState;
+
+      // Update lastAppState after handling
+      lastAppState.current = nextAppState;
     },
     [],
   );

@@ -1,5 +1,4 @@
 // app/context/RideBookingContext.tsx
-
 import React, {
   createContext,
   ReactNode,

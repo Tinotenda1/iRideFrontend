@@ -69,6 +69,23 @@ const DriverMap: React.FC<Props> = ({
   });
 
   useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.5,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, []);
+
+  useEffect(() => {
     const cleanup = watchDriverLocation(
       (location) => {
         // FIXED: Using type assertion (any) to bypass the strict property check
@@ -217,6 +234,10 @@ const DriverMap: React.FC<Props> = ({
     tooltipPositions.pickup &&
     tooltipPositions.dropoff;
 
+  const showRadar = !["matched", "arrived", "on_trip"].includes(
+    rideData?.status || "",
+  );
+
   return (
     <>
       <MapView
@@ -243,7 +264,7 @@ const DriverMap: React.FC<Props> = ({
           <View style={styles.markerContainer}>
             <MaterialCommunityIcons
               name="navigation"
-              size={44}
+              size={30}
               color={theme.colors.primary}
             />
           </View>
@@ -259,22 +280,23 @@ const DriverMap: React.FC<Props> = ({
           )}
       </MapView>
 
-      {!["matched", "arrived", "on_trip"].includes(rideData?.status || "") && (
-        <View
-          style={[styles.radarLayer, { top: 60, bottom: trayPadding }]}
-          pointerEvents="none"
-        >
-          <Animated.View
-            style={[styles.pulseCircle, { transform: [{ scale: pulseAnim }] }]}
-          />
-          <Animated.View
-            style={[
-              styles.pulseCircleOuter,
-              { transform: [{ scale: pulseAnim }] },
-            ]}
-          />
-        </View>
-      )}
+      <View
+        style={[
+          styles.radarLayer,
+          { top: 60, bottom: trayPadding, opacity: showRadar ? 1 : 0 },
+        ]}
+        pointerEvents="none"
+      >
+        <Animated.View
+          style={[styles.pulseCircle, { transform: [{ scale: pulseAnim }] }]}
+        />
+        <Animated.View
+          style={[
+            styles.pulseCircleOuter,
+            { transform: [{ scale: pulseAnim }] },
+          ]}
+        />
+      </View>
 
       {showTooltips && (
         <>
@@ -455,6 +477,12 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   markerContainer: {
+    position: "absolute",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#000",
+    borderRadius: 50,
+    elevation: 4,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,

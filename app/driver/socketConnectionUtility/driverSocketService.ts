@@ -110,8 +110,8 @@ const startLocationUpdates = async () => {
     timeInterval: 3000,
     distanceInterval: 5,
     foregroundService: {
-      notificationTitle: "UnHaggled Online",
-      notificationBody: "Your location is being shared with passengers.",
+      notificationTitle: "Drift",
+      notificationBody: "Tracking your location. Tap to return to Drift",
       notificationColor: "#00FF00",
     },
     pausesUpdatesAutomatically: false,
