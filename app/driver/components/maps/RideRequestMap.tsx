@@ -25,6 +25,7 @@ import MapView, {
 import { theme } from "../../../../constants/theme";
 
 // Types
+import polyline from "@mapbox/polyline";
 import { DriverLocation } from "../../driverLocationUtility/driverLocation";
 
 interface Props {
@@ -78,7 +79,19 @@ const RideRequestMap: React.FC<Props> = ({
     }
   }, [rideData, mapReady]);
 
-  // Replace your existing fitToRoute function with this version:
+  const routeCoords = useMemo(() => {
+    if (!rideData?.route?.polyline) return [];
+
+    try {
+      return polyline.decode(rideData.route.polyline).map(([lat, lng]) => ({
+        latitude: lat,
+        longitude: lng,
+      }));
+    } catch (err) {
+      console.warn("Failed to decode polyline:", err);
+      return [];
+    }
+  }, [rideData?.route?.polyline]);
 
   const fitToRoute = useCallback(() => {
     if (!mapRef.current || !rideData) return;
@@ -87,9 +100,7 @@ const RideRequestMap: React.FC<Props> = ({
       rideData.pickup,
       rideData.destination,
       driverLocation,
-      ...(Array.isArray(rideData.route?.coordinates)
-        ? rideData.route.coordinates
-        : []),
+      ...routeCoords,
     ].filter(Boolean) as LatLng[];
 
     if (pointsToFit.length === 0) return;
@@ -106,13 +117,7 @@ const RideRequestMap: React.FC<Props> = ({
     });
 
     setIsMoved(false);
-  }, [rideData, driverLocation, topPadding, trayHeight]);
-
-  const routeCoords = useMemo(() => {
-    return Array.isArray(rideData?.route?.coordinates)
-      ? rideData.route.coordinates
-      : [];
-  }, [rideData]);
+  }, [rideData, driverLocation, routeCoords, topPadding, trayHeight]);
 
   useEffect(() => {
     if (rideData && mapReady) {

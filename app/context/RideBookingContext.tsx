@@ -38,10 +38,7 @@ export interface RideBookingData {
   arrivedAt?: string;
 
   route?: {
-    coordinates: {
-      latitude: number;
-      longitude: number;
-    }[];
+    polyline: string;
     distance: number; // km (raw)
     duration: number; // minutes (raw)
   };

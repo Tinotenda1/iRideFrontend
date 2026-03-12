@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 
+import polyline from "@mapbox/polyline";
 import MapView, { Polyline, PROVIDER_GOOGLE, Region } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 import { theme } from "../../../../constants/theme";
@@ -218,11 +219,16 @@ const MapContainer: React.FC<MapContainerProps> = ({
           setSnappedPoints({ start, end });
           setRouteCoordinates(result.coordinates);
 
+          // Encode coordinates
+          const encodedPolyline = polyline.encode(
+            result.coordinates.map((c) => [c.latitude, c.longitude]),
+          );
+
           updateRideData({
             distance: distanceText,
             duration: durationText,
             route: {
-              coordinates: result.coordinates,
+              polyline: encodedPolyline,
               distance: result.distance,
               duration: result.duration,
             },
