@@ -11,6 +11,7 @@ import Sidebar from "./components/DriverSideBar";
 import DriverSettingsTray from "./components/trays/DriverSettingsTray";
 import DriverTray from "./components/trays/DriverTray";
 import RideRequestTray from "./components/trays/RideRequestTray";
+import { watchDriverLocation } from "./driverLocationUtility/driverLocation";
 import DriverHome from "./screens/DriverHome";
 
 import {
@@ -31,6 +32,7 @@ const DriverDashboard: React.FC = () => {
   const settingsTrayRef = useRef<any>(null);
   const rideTrayRef = useRef<any>(null);
   const driverTrayRef = useRef<any>(null);
+  const [manualOffline, setManualOffline] = useState(false);
 
   const [driverInfo, setDriverInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +41,8 @@ const DriverDashboard: React.FC = () => {
   const [online, setOnline] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [trayHeight, setTrayHeight] = useState(0); // ✅ Use the restoration hook
+  const { restoreSession } = useSessionRestoration();
+  const locationWatcherRef = useRef<(() => void) | null>(null);
 
   const hasInitialized = useRef(false);
 
@@ -55,6 +59,35 @@ const DriverDashboard: React.FC = () => {
   const [submittedOffers, setSubmittedOffers] = useState<
     Record<string, number>
   >({}); // 1. Unified Initialization Logic
+
+  // Start tracking driver location
+  useEffect(() => {
+    // Start tracking when driver goes online
+    if (online && !locationWatcherRef.current) {
+      console.log("📍 Starting driver GPS tracking");
+
+      locationWatcherRef.current = watchDriverLocation(
+        (location) => {
+          /* // Optional: useful debug
+          console.log(
+            "📡 Driver location update:",
+            location.latitude,
+            location.longitude,
+          );*/
+        },
+        (error) => {
+          console.warn("⚠️ Driver location error:", error);
+        },
+      );
+    }
+
+    // Stop tracking when offline
+    if (!online && locationWatcherRef.current) {
+      console.log("🛑 Stopping driver GPS tracking");
+      locationWatcherRef.current();
+      locationWatcherRef.current = null;
+    }
+  }, [online]);
 
   useEffect(() => {
     const initDriver = async () => {
@@ -78,8 +111,6 @@ const DriverDashboard: React.FC = () => {
 
     initDriver();
   }, []);
-
-  const { restoreSession } = useSessionRestoration();
 
   useEffect(() => {
     // Make sure the driver socket is connected first
@@ -142,8 +173,15 @@ const DriverDashboard: React.FC = () => {
   }, [online, submittedOffers, submissionStates]);
 
   useEffect(() => {
-    return () => disconnectDriver();
-  }, []); // 4. Status Sync
+    return () => {
+      disconnectDriver();
+
+      if (locationWatcherRef.current) {
+        locationWatcherRef.current();
+        locationWatcherRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onStatusChange((s) => {
@@ -222,6 +260,7 @@ const DriverDashboard: React.FC = () => {
             onRideSelect={handleSelect}
             onRideExpire={handleDecline}
             trayPadding={trayHeight}
+            manuallyOffline={manualOffline}
           />
         );
     }
@@ -237,6 +276,7 @@ const DriverDashboard: React.FC = () => {
           if (isOnline !== online) {
             setOnline(isOnline);
             if (isOnline) {
+              setManualOffline(false); // ✅ reset manual offline if they go online
               driverTrayRef.current?.goOnline();
             } else {
               driverTrayRef.current?.goOffline();
@@ -244,6 +284,7 @@ const DriverDashboard: React.FC = () => {
           }
         }}
         setIsConnecting={setIsConnecting}
+        setManualOffline={setManualOffline}
       />
       <View style={styles.content}>{renderScreen()}</View>
       <DriverSettingsTray ref={settingsTrayRef} onClose={() => {}} />
@@ -257,6 +298,7 @@ const DriverDashboard: React.FC = () => {
           setSubmittedOffers({});
           rideTrayRef.current?.close();
         }}
+        isOnline={online}
       />
 
       <RideRequestTray

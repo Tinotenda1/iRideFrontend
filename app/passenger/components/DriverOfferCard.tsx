@@ -1,4 +1,5 @@
 // app/passenger/components/DriverOfferCard.tsx
+import { theme } from "@/constants/theme";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef } from "react";
 import {
@@ -232,6 +233,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#fff",
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.background,
     marginBottom: 10,
     overflow: "hidden",
     elevation: 3,
@@ -290,7 +293,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  priceText: { fontWeight: "800", color: "#10B981", fontSize: 18 },
+  priceText: { fontWeight: "800", color: theme.colors.primary, fontSize: 18 },
   yourFareBadge: {
     backgroundColor: "#DCFCE7",
     paddingHorizontal: 6,
@@ -300,7 +303,7 @@ const styles = StyleSheet.create({
   },
   yourFareText: {
     fontSize: 9,
-    color: "#166534",
+    color: theme.colors.primary,
     fontWeight: "700",
     textTransform: "uppercase",
   },
@@ -340,7 +343,7 @@ const styles = StyleSheet.create({
   etaText: { color: "#64748b", fontSize: 13, fontWeight: "500" },
   actionButtons: { flexDirection: "row", gap: 16, alignItems: "center" },
   acceptBtn: {
-    backgroundColor: "#10B981",
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -348,7 +351,7 @@ const styles = StyleSheet.create({
   acceptBtnText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
   declineBtn: { color: "#EF4444", fontWeight: "600" },
   progressBar: { height: 3, backgroundColor: "#f1f5f9" },
-  progressFill: { height: "100%", backgroundColor: "#10B981" },
+  progressFill: { height: "100%", backgroundColor: theme.colors.primary },
   statusBadgeProcessing: {
     backgroundColor: "#E0F2FE",
     paddingHorizontal: 10,
@@ -357,7 +360,7 @@ const styles = StyleSheet.create({
   },
   waitingText: { color: "#0284c7", fontWeight: "800", fontSize: 11 },
   statusBadgeAccepted: {
-    backgroundColor: "#10B981",
+    backgroundColor: theme.colors.primary,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,

@@ -11,6 +11,7 @@ import React, {
 } from "react";
 import {
   Dimensions,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -18,7 +19,12 @@ import {
 } from "react-native";
 
 import polyline from "@mapbox/polyline";
-import MapView, { Polyline, PROVIDER_GOOGLE, Region } from "react-native-maps";
+import MapView, {
+  Marker,
+  Polyline,
+  PROVIDER_GOOGLE,
+  Region,
+} from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 import { theme } from "../../../../constants/theme";
 import { useRideBooking } from "../../../context/RideBookingContext";
@@ -27,14 +33,32 @@ import { HEIGHTS } from "../tabs/Tray";
 const GOOGLE_MAPS_APIKEY = Constants.expoConfig?.extra?.googleMapsApiKey ?? "";
 const { width, height } = Dimensions.get("window");
 
+// Example car icon (top-down view, rotation-ready)
+const CAR_ICON = require("../../../../assets/icons/car-icon.png"); // replace with your SVG/PNG
+
 interface MapContainerProps {
   trayHeight?: number;
   topPadding?: number;
+  nearbyDrivers?: {
+    phone: string;
+    latitude: number;
+    longitude: number;
+    distance?: string;
+    heading?: number;
+  }[];
+  matchedDriver?: {
+    phone: string;
+    latitude: number;
+    longitude: number;
+    heading?: number;
+  } | null;
 }
 
 const MapContainer: React.FC<MapContainerProps> = ({
   trayHeight = 80,
   topPadding = 80,
+  nearbyDrivers = [],
+  matchedDriver = null,
 }) => {
   const mapRef = useRef<MapView>(null);
   const { rideData, updateRideData, fetchPrices } = useRideBooking();
@@ -76,6 +100,9 @@ const MapContainer: React.FC<MapContainerProps> = ({
     completed: "input",
   };
 
+  // see if any nearby drivers are in the viewport
+  //console.log("🗺️ Nearby drivers passed to map:", nearbyDrivers.length);
+
   // --- Reset on ride change ---
   useEffect(() => {
     setAnimatedCoords([]);
@@ -83,6 +110,16 @@ const MapContainer: React.FC<MapContainerProps> = ({
     setRouteCoordinates([]);
     setPositions({ pickup: null, dropoff: null });
   }, [pickupLocation, destination]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const id = requestAnimationFrame(() => {
+      animateCamera();
+    });
+
+    return () => cancelAnimationFrame(id);
+  }, [status]);
 
   // --- Update tray height based on ride status ---
   useEffect(() => {
@@ -132,35 +169,105 @@ const MapContainer: React.FC<MapContainerProps> = ({
     return () => subscription?.remove();
   }, []);
 
-  // --- Animate map camera to fit all points ---
+  // --- Animate map camera to fit relevant points based on status ---
+  // --- Animate map camera to fit relevant points based on status ---
   const animateCamera = useCallback(() => {
     if (!mapRef.current) return;
 
     const points: { latitude: number; longitude: number }[] = [];
-    if (routeCoordinates.length > 0) {
-      points.push(...routeCoordinates);
-    } else {
-      if (userRegion) points.push(userRegion);
-      if (pickupLocation) points.push(pickupLocation);
-      if (destination) points.push(destination);
-    }
 
-    if (points.length < 2) {
-      if (points.length === 1) {
-        mapRef.current.animateToRegion({
-          ...points[0],
-          latitudeDelta: 0.012,
-          longitudeDelta: 0.012 * (width / height),
-        });
+    // 1. TRACKING: Driver to Pickup
+    if (status === "matched" && matchedDriver && pickupLocation) {
+      points.push(
+        {
+          latitude: Number(matchedDriver.latitude),
+          longitude: Number(matchedDriver.longitude),
+        },
+        {
+          latitude: pickupLocation.latitude,
+          longitude: pickupLocation.longitude,
+        },
+      );
+
+      mapRef.current.fitToCoordinates(points, {
+        edgePadding: {
+          top: 100,
+          bottom: currentTrayHeight + 40,
+          left: 80,
+          right: 80,
+        },
+        animated: true,
+      });
+    }
+    // 2. NAVIGATION VIEW: Driver heading to Destination (ONLY on_trip)
+    else if (status === "on_trip" && matchedDriver && destination) {
+      // For on_trip, we use animateCamera for a "Birds-eye" navigation feel
+      mapRef.current.animateCamera(
+        {
+          center: {
+            latitude: Number(matchedDriver.latitude),
+            longitude: Number(matchedDriver.longitude),
+          },
+          heading: matchedDriver.heading ?? 0, // Follow driver's direction
+          pitch: 45, // Tilt the map for 3D perspective
+          zoom: 17, // Closer zoom for navigation
+        },
+        { duration: 1000 },
+      );
+    }
+    // 3. FALLBACK: Default view (Searching/Idle)
+    else {
+      if (routeCoordinates.length > 0) {
+        points.push(...routeCoordinates);
+      } else {
+        if (userRegion) points.push(userRegion);
+        if (pickupLocation) points.push(pickupLocation);
+        if (destination) points.push(destination);
       }
-      return;
-    }
 
-    mapRef.current.fitToCoordinates(points, {
-      edgePadding: { top: 20, bottom: 40, left: 50, right: 50 },
-      animated: true,
-    });
-  }, [userRegion, pickupLocation, destination, routeCoordinates]);
+      if (points.length < 2) {
+        if (points.length === 1) {
+          mapRef.current.animateToRegion({
+            ...points[0],
+            latitudeDelta: 0.012,
+            longitudeDelta: 0.012 * (width / height),
+          });
+        }
+        return;
+      }
+
+      mapRef.current.fitToCoordinates(points, {
+        edgePadding: { top: 20, bottom: 40, left: 50, right: 50 },
+        animated: true,
+      });
+    }
+  }, [
+    userRegion,
+    pickupLocation,
+    destination,
+    routeCoordinates,
+    status,
+    matchedDriver,
+    currentTrayHeight,
+  ]);
+
+  useEffect(() => {
+    // Only auto-follow if the user hasn't manually moved the map (isMoved)
+    if (
+      (status === "matched" || status === "on_trip") &&
+      matchedDriver &&
+      !isMoved
+    ) {
+      animateCamera();
+    }
+  }, [
+    matchedDriver?.latitude,
+    matchedDriver?.longitude,
+    matchedDriver?.heading, // Added heading to the dependency array
+    status,
+    isMoved,
+    animateCamera,
+  ]);
 
   useEffect(() => {
     const timeout = setTimeout(animateCamera, 150);
@@ -283,9 +390,49 @@ const MapContainer: React.FC<MapContainerProps> = ({
         {animatedCoords.length > 1 && (
           <Polyline
             coordinates={animatedCoords}
-            strokeWidth={4}
-            strokeColor={theme.colors.black}
+            strokeWidth={5}
+            strokeColor={theme.colors.secondary}
           />
+        )}
+        {/* Nearby drivers (only when not matched or on_trip) */}
+        {status !== "matched" &&
+          status !== "on_trip" &&
+          nearbyDrivers.map((driver) => (
+            <Marker
+              key={driver.phone}
+              coordinate={{
+                latitude: Number(driver.latitude),
+                longitude: Number(driver.longitude),
+              }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              flat
+              rotation={driver.heading ?? 0}
+            >
+              <Image
+                source={require("../../../../assets/icons/car-icon.png")}
+                style={{ width: 32, height: 32 }}
+                resizeMode="contain"
+              />
+            </Marker>
+          ))}
+        {/* Matched driver (only if ride is matched or on_trip) */}
+        {(status === "matched" || status === "on_trip") && matchedDriver && (
+          <Marker
+            key={`matched-${matchedDriver.phone}`}
+            coordinate={{
+              latitude: Number(matchedDriver.latitude),
+              longitude: Number(matchedDriver.longitude),
+            }}
+            anchor={{ x: 0.5, y: 0.5 }}
+            flat
+            rotation={matchedDriver.heading ?? 0}
+          >
+            <Image
+              source={require("../../../../assets/icons/car-icon.png")}
+              style={{ width: 36, height: 36 }}
+              resizeMode="contain"
+            />
+          </Marker>
         )}
       </MapView>
 
@@ -326,16 +473,22 @@ const MapContainer: React.FC<MapContainerProps> = ({
                 { left: positions.pickup.x, top: positions.pickup.y },
               ]}
             >
-              <View style={[styles.tooltipHead, { backgroundColor: "#fff" }]}>
-                <Ionicons name="flag" size={18} color="#000" />
-              </View>
-
               <View
                 style={[
-                  styles.tooltipLine,
-                  { backgroundColor: "#000", height: 20 },
+                  styles.tooltipHead,
+                  { backgroundColor: theme.colors.primary },
                 ]}
-              />
+              >
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: "700",
+                    color: "#fff",
+                  }}
+                >
+                  A
+                </Text>
+              </View>
             </View>
           )}
 
@@ -347,9 +500,22 @@ const MapContainer: React.FC<MapContainerProps> = ({
                 { left: positions.dropoff.x, top: positions.dropoff.y },
               ]}
             >
-              <View style={[styles.tooltipHead, { backgroundColor: "#000" }]}>
+              <View
+                style={[
+                  styles.tooltipHead,
+                  { backgroundColor: theme.colors.red },
+                ]}
+              >
                 <View>
-                  <Ionicons name="flag" size={16} color="#ffffff" />
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      fontWeight: "700",
+                      color: "#fff",
+                    }}
+                  >
+                    B
+                  </Text>
                 </View>
                 <Text style={[styles.tooltipValue2, { color: "#fff" }]}>
                   {rideData.route?.duration
@@ -357,13 +523,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
                     : "..."}
                 </Text>
               </View>
-
-              <View
-                style={[
-                  styles.tooltipLine,
-                  { backgroundColor: "#000", height: 20 },
-                ]}
-              />
             </View>
           )}
 
@@ -402,7 +561,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
             animateCamera();
           }}
         >
-          <Ionicons name="navigate" size={28} color={theme.colors.primary} />
+          <Ionicons name="navigate" size={28} color={theme.colors.secondary} />
         </TouchableOpacity>
       )}
     </View>
@@ -420,33 +579,29 @@ const styles = StyleSheet.create({
   },
   recenterButton: {
     position: "absolute",
-    width: 34,
-    height: 34,
-    borderRadius: 1,
-    //backgroundColor: "#ffffff",
     right: 15,
     padding: 3,
     marginBottom: 10,
-    //elevation: 5,
+    elevation: 5,
   },
   dotPickup: {
     position: "absolute",
-    width: 14,
-    height: 14,
+    width: 10,
+    height: 10,
     borderRadius: 50,
     backgroundColor: theme.colors.primary,
-    borderWidth: 2,
-    borderColor: "#000",
+    borderWidth: 1,
+    borderColor: "#ffffff",
     zIndex: 20,
   },
   dotDropoff: {
     position: "absolute",
-    width: 14,
-    height: 14,
+    width: 10,
+    height: 10,
     borderRadius: 50,
-    backgroundColor: theme.colors.error,
-    borderWidth: 2,
-    borderColor: "#000",
+    backgroundColor: theme.colors.red,
+    borderWidth: 1,
+    borderColor: "#ffffff",
     zIndex: 20,
   },
   tooltipAnchor: {
@@ -456,14 +611,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-end", // grows upwards from marker
   },
-  tooltipLine: {
-    width: 2,
-    marginBottom: 4,
-  },
+
   tooltipHead: {
     width: 45,
     height: 45,
     borderWidth: 1,
+    borderColor: "#ffffff",
     borderRadius: 50,
     justifyContent: "center",
     alignItems: "center",
@@ -473,7 +626,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3,
     padding: 4,
-    //marginBottom: 4,
+    marginBottom: 12,
   },
   tooltipValue1: {
     fontSize: 12,

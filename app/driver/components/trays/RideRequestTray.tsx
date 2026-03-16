@@ -22,6 +22,7 @@ import {
 import MapView from "react-native-maps";
 import { IRAvatar } from "../../../../components/IRAvatar";
 import { IRButton } from "../../../../components/IRButton";
+import { theme } from "../../../../constants/theme";
 import {
   DriverLocation,
   watchDriverLocation,
@@ -252,7 +253,11 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
 
     const progressColor = progressAnim.interpolate({
       inputRange: [0, 0.2, 1],
-      outputRange: ["#EF4444", "#F59E0B", "#32D74B"],
+      outputRange: [
+        theme.colors.red,
+        theme.colors.warning,
+        theme.colors.primary,
+      ],
     });
 
     const rating = parseFloat(selectedRideData?.passengerRating || "5");
@@ -324,7 +329,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                             key={index}
                             name="star"
                             size={12}
-                            color="#FFC107"
+                            color={theme.colors.warning}
                           />
                         );
                       }
@@ -335,7 +340,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                             key={index}
                             name="star-half"
                             size={12}
-                            color="#FFC107"
+                            color={theme.colors.warning}
                           />
                         );
                       }
@@ -345,7 +350,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                           key={index}
                           name="star-outline"
                           size={12}
-                          color="#FFC107"
+                          color={theme.colors.warning}
                         />
                       );
                     })}
@@ -389,8 +394,8 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                       {
                         backgroundColor:
                           selectedRideData.offerType === "good"
-                            ? "#E6FBF0"
-                            : "#FFF4E5",
+                            ? theme.colors.background
+                            : theme.colors.background,
                       },
                     ]}
                   >
@@ -400,8 +405,8 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                         {
                           color:
                             selectedRideData.offerType === "good"
-                              ? "#00D26A"
-                              : "#FF9500",
+                              ? theme.colors.primary
+                              : theme.colors.warning,
                         },
                       ]}
                     >
@@ -414,7 +419,12 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
               <View style={styles.addressSection}>
                 <View style={styles.timelineLine} />
                 <View style={styles.addressRow}>
-                  <View style={[styles.dot, { backgroundColor: "#00D26A" }]} />
+                  <View
+                    style={[
+                      styles.dot,
+                      { backgroundColor: theme.colors.primary },
+                    ]}
+                  />
                   <View style={styles.addressTextContainer}>
                     <Text style={styles.addressText} numberOfLines={1}>
                       {selectedRideData.pickup?.address}
@@ -422,7 +432,9 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                   </View>
                 </View>
                 <View style={[styles.addressRow, { marginTop: 12 }]}>
-                  <View style={[styles.dot, { backgroundColor: "#FF4B55" }]} />
+                  <View
+                    style={[styles.dot, { backgroundColor: theme.colors.red }]}
+                  />
                   <View style={styles.addressTextContainer}>
                     <Text style={styles.addressText} numberOfLines={1}>
                       {selectedRideData.destination?.address}
@@ -432,7 +444,11 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
               </View>
 
               <View style={styles.noteContainer}>
-                <Ionicons name="information-circle" size={14} color="#64748B" />
+                <Ionicons
+                  name="information-circle"
+                  size={14}
+                  color={theme.colors.background}
+                />
                 <Text style={styles.noteText}>
                   {selectedRideData.additionalInfo ||
                     "No special instructions provided."}
@@ -446,7 +462,11 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
             (currentStatus as string) === "submitting" ? (
               <View style={styles.successState}>
                 <View style={styles.checkCircle}>
-                  <Ionicons name="checkmark" size={32} color="#00D26A" />
+                  <Ionicons
+                    name="checkmark"
+                    size={32}
+                    color={theme.colors.primary}
+                  />
                 </View>
                 <Text style={styles.successTitle}>Offer Submitted</Text>
                 <Text style={styles.successSub}>
@@ -571,7 +591,7 @@ const styles = StyleSheet.create({
   mainPrice: {
     fontSize: 24,
     fontWeight: "900",
-    color: "#10B981",
+    color: theme.colors.primary,
   },
   offerBadge: {
     paddingHorizontal: 6,

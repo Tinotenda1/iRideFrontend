@@ -127,7 +127,5 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
     fontSize: 16,
     color: theme.colors.text,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
 });

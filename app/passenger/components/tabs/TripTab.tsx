@@ -5,7 +5,9 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Linking,
   Modal,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -17,6 +19,7 @@ import { ActionConfirmationModal } from "../../../../components/ActionConfirmati
 import CancelButton from "../../../../components/CancelButton";
 import { IRAvatar } from "../../../../components/IRAvatar";
 import { IRButton } from "../../../../components/IRButton";
+import { theme } from "../../../../constants/theme";
 import { getUserInfo } from "../../../../utils/storage";
 import { subscribeToRideCancellation } from "../../socketConnectionUtility/passengerSocketService";
 
@@ -50,8 +53,9 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
 
   const isOn_trip =
     rideData.status === "on_trip" || currentRide?.status === "on_trip";
-  // console.log("currentRide - passenger", currentRide);
+  //console.log("currentRide - passenger", currentRide);
   const driver = currentRide?.driver;
+  const passenger = currentRide?.passenger || "Passenger";
   const vehicle = currentRide?.driver?.vehicle;
   const profilePic = driver?.profilePic;
   const totalTrips = driver?.totalTrips;
@@ -172,6 +176,68 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
     }
   }, [isCancelling, onCancel, currentRide, rideData]);
 
+  const handleCallDriver = () => {
+    if (!driver?.phone) {
+      Alert.alert("Error", "Passenger phone number is not available.");
+      return;
+    }
+
+    // Prepend + and keep only digits
+    const phoneNumber = "+" + driver.phone.replace(/\D/g, "");
+    let url = "";
+
+    if (Platform.OS === "android") {
+      url = `tel:${phoneNumber}`;
+    } else {
+      url = `telprompt:${phoneNumber}`;
+    }
+
+    Linking.canOpenURL(url)
+      .then((supported) => {
+        if (supported) {
+          Linking.openURL(url);
+        } else {
+          Alert.alert("Error", "Unable to open dialer.");
+        }
+      })
+      .catch((err) => console.error("Dialer error:", err));
+  };
+
+  const handleWhatsAppDriver = async () => {
+    try {
+      if (!driver?.phone) {
+        Alert.alert("Error", "Driver phone number is not available.");
+        return;
+      }
+
+      // Ensure phone number has only digits and starts with +
+      const phoneNumber = "+" + driver.phone.replace(/\D/g, "");
+
+      // Get passenger info and build full name
+      const userInfo = await getUserInfo();
+      const passengerName = userInfo
+        ? `${userInfo.firstName || ""} ${userInfo.lastName || ""}`.trim()
+        : "Passenger";
+
+      // Predefined message
+      const message = encodeURIComponent(`DRIFT Passenger - ${passengerName}:`);
+
+      const url = `https://wa.me/${phoneNumber}?text=${message}`;
+
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert(
+          "WhatsApp not installed",
+          "Please install WhatsApp to send a message.",
+        );
+      }
+    } catch (err) {
+      console.error("WhatsApp error:", err);
+    }
+  };
+
   const handleCloseRemoteModal = () => {
     setRemoteCancelData(null);
     onCancel();
@@ -243,8 +309,23 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
               </View>
             </View>
           </View>
-          <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
-            <Ionicons name="chatbubble-ellipses" size={22} color="#475569" />
+          {/* Call button */}
+          <TouchableOpacity
+            style={[
+              styles.iconButton,
+              { backgroundColor: theme.colors.secondary },
+            ]}
+            onPress={handleCallDriver}
+          >
+            <Ionicons name="call" size={22} color="#fff" />
+          </TouchableOpacity>
+          {/* WhatsApp button */}
+          <TouchableOpacity
+            style={[styles.iconButton, { backgroundColor: "#25D366" }]} // WhatsApp green
+            activeOpacity={0.7}
+            onPress={handleWhatsAppDriver}
+          >
+            <Ionicons name="logo-whatsapp" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
 

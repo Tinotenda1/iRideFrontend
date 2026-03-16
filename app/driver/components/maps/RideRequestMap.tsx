@@ -177,7 +177,7 @@ const RideRequestMap: React.FC<Props> = ({
                 <MaterialCommunityIcons
                   name="navigation" // Navigation chevron icon
                   size={22}
-                  color="#000000"
+                  color={theme.colors.primary}
                   style={{ transform: [{ translateY: -1 }] }} // Centers the icon visually
                 />
               </View>
@@ -195,21 +195,20 @@ const RideRequestMap: React.FC<Props> = ({
           ]}
         >
           {/* Circle Head */}
-          <View style={[styles.tooltipHead, { backgroundColor: "#fff" }]}>
-            <Text style={[styles.tooltipValue1, { color: "#000" }]}>
+          <View
+            style={[
+              styles.tooltipHead,
+              { backgroundColor: theme.colors.primary },
+            ]}
+          >
+            <Text style={[styles.tooltipValue1, { color: "#ffffff" }]}>
               {(rideData.distanceToPickup / 1000).toFixed(1)} km
             </Text>
-            <Text style={[styles.tooltipValue2, { color: "#000" }]}>
+            <Text style={[styles.tooltipValue2, { color: "#ffffff" }]}>
               {Math.ceil(rideData.etaToPickup / 60)} min
             </Text>
           </View>
           {/* Line Connector */}
-          <View
-            style={[
-              styles.tooltipLine,
-              { backgroundColor: "#000", height: 20 },
-            ]}
-          />
         </View>
       )}
 
@@ -222,7 +221,9 @@ const RideRequestMap: React.FC<Props> = ({
           ]}
         >
           {/* Circle Head */}
-          <View style={[styles.tooltipHead, { backgroundColor: "#000" }]}>
+          <View
+            style={[styles.tooltipHead, { backgroundColor: theme.colors.red }]}
+          >
             <Text style={[styles.tooltipValue1, { color: "#fff" }]}>
               {rideData.route?.duration
                 ? `${rideData.route.distance.toFixed(1)} km`
@@ -235,12 +236,6 @@ const RideRequestMap: React.FC<Props> = ({
             </Text>
           </View>
           {/* Line Connector */}
-          <View
-            style={[
-              styles.tooltipLine,
-              { backgroundColor: "#000", height: 20 },
-            ]}
-          />
         </View>
       )}
 
@@ -274,7 +269,7 @@ const RideRequestMap: React.FC<Props> = ({
           style={[styles.recenterButton, { bottom: trayHeight }]}
           onPress={fitToRoute}
         >
-          <Ionicons name="navigate" size={20} color={theme.colors.primary} />
+          <Ionicons name="navigate" size={20} color={theme.colors.secondary} />
         </TouchableOpacity>
       )}
     </View>
@@ -293,12 +288,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   premiumBadge: {
-    width: 28,
-    height: 28,
+    width: 45,
+    height: 45,
     borderRadius: 18,
     backgroundColor: "white",
     borderWidth: 2,
-    borderColor: "#000000",
+    borderColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
     elevation: 8,
@@ -309,22 +304,22 @@ const styles = StyleSheet.create({
   },
   dotPickup: {
     position: "absolute",
-    width: 14,
-    height: 14,
+    width: 10,
+    height: 10,
     borderRadius: 50,
     backgroundColor: theme.colors.primary,
-    borderWidth: 2,
-    borderColor: "#000",
+    borderWidth: 1,
+    borderColor: "#ffffff",
     zIndex: 20,
   },
   dotDropoff: {
     position: "absolute",
-    width: 14,
-    height: 14,
+    width: 10,
+    height: 10,
     borderRadius: 50,
-    backgroundColor: theme.colors.error,
-    borderWidth: 2,
-    borderColor: "#000",
+    backgroundColor: theme.colors.red,
+    borderWidth: 1,
+    borderColor: "#ffffff",
     zIndex: 20,
   },
   tooltipAnchor: {
@@ -334,15 +329,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-end", // grows upwards from marker
   },
-  tooltipLine: {
-    width: 2,
-    marginBottom: 4,
-  },
+
   tooltipHead: {
-    width: 45,
-    height: 45,
+    width: 60,
+    height: 60,
     borderWidth: 1,
     borderRadius: 50,
+    borderColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
     elevation: 4,
@@ -351,15 +344,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3,
     padding: 4,
-    //marginBottom: 4,
+    marginBottom: 12,
   },
   tooltipValue1: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: "900",
     textAlign: "center",
   },
   tooltipValue2: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "200",
     textAlign: "center",
   },
@@ -372,8 +365,8 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 18,
     backgroundColor: "#ffffff", // Google Blue
-    borderWidth: 3,
-    borderColor: "#000",
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
     alignItems: "center",
     justifyContent: "center",
     // Adding shadow for depth
@@ -385,8 +378,6 @@ const styles = StyleSheet.create({
   },
   recenterButton: {
     position: "absolute",
-    right: 15,
-    padding: 10,
     elevation: 5,
   },
 });

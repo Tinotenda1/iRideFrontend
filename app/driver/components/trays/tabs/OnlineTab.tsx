@@ -4,13 +4,13 @@ import { Animated, StyleSheet, Text, View } from "react-native";
 
 interface OnlineTabProps {
   onGoOffline?: () => void;
+  isOnline: boolean;
 }
 
-const OnlineTab: React.FC<OnlineTabProps> = () => {
+const OnlineTab: React.FC<OnlineTabProps> = ({ isOnline }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Elegant scale pulse animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -27,34 +27,47 @@ const OnlineTab: React.FC<OnlineTabProps> = () => {
     ).start();
   }, []);
 
+  // ✅ Colors and text depending on online status
+  const indicatorColor = isOnline ? "#00D26A" : "#EF4444"; // green online, red offline
+  const statusText = isOnline ? "ONLINE" : "OFFLINE";
+  const mainMessage = isOnline
+    ? "Searching for riders nearby..."
+    : "You are offline";
+  const subMessage = isOnline
+    ? "Stay in this area to increase your chances of getting a request."
+    : "Check your internet connection to go online.";
+
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        {/* Animated Radar Indicator */}
         <View style={styles.statusRow}>
           <View style={styles.dotContainer}>
             <Animated.View
               style={[
                 styles.pulseCircle,
-                { transform: [{ scale: pulseAnim }] },
+                {
+                  transform: [{ scale: pulseAnim }],
+                  backgroundColor: indicatorColor + "33",
+                }, // semi-transparent pulse
               ]}
             />
-            <View style={styles.activeDot} />
+            <View
+              style={[styles.activeDot, { backgroundColor: indicatorColor }]}
+            />
           </View>
-          <Text style={styles.statusText}>ONLINE</Text>
+          <Text style={[styles.statusText, { color: indicatorColor }]}>
+            {statusText}
+          </Text>
         </View>
 
-        <Text style={styles.mainMessage}>Searching for riders nearby...</Text>
-        <Text style={styles.subMessage}>
-          Stay in this area to increase your chances of getting a request.
-        </Text>
+        <Text style={styles.mainMessage}>{mainMessage}</Text>
+        <Text style={styles.subMessage}>{subMessage}</Text>
       </View>
 
-      {/* Signature Footer remains consistent across tabs */}
       <View style={styles.footer}>
         <View style={styles.footerLine} />
-        <Text style={styles.footerBrand}>iRide</Text>
-        <Text style={styles.footerTagline}>YOUR RIDE, YOUR WAY</Text>
+        <Text style={styles.footerBrand}>DRIFT</Text>
+        <Text style={styles.footerTagline}>Your Ride, Reimagined.</Text>
       </View>
     </View>
   );

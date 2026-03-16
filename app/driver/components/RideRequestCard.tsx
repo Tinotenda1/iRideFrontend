@@ -67,11 +67,23 @@ export default function RideRequestCard({
   const getOfferBadge = (type: string) => {
     switch (type?.toLowerCase()) {
       case "good":
-        return { label: "GOOD", color: "#059669", bg: "#d1fae5" };
+        return {
+          label: "GOOD",
+          color: theme.colors.primary,
+          bg: theme.colors.background,
+        };
       case "fair":
-        return { label: "FAIR", color: "#2563eb", bg: "#dbeafe" };
+        return {
+          label: "FAIR",
+          color: theme.colors.secondary,
+          bg: theme.colors.background,
+        };
       case "poor":
-        return { label: "POOR", color: "#dc2626", bg: "#fee2e2" };
+        return {
+          label: "POOR",
+          color: theme.colors.red,
+          bg: theme.colors.background,
+        };
       default:
         return null;
     }
@@ -412,7 +424,11 @@ export default function RideRequestCard({
               <View
                 style={[
                   styles.dot,
-                  { backgroundColor: isSubmitted ? "#cbd5e1" : "#10B981" },
+                  {
+                    backgroundColor: isSubmitted
+                      ? "#cbd5e1"
+                      : theme.colors.primary,
+                  },
                 ]}
               />
               <Text
@@ -429,7 +445,9 @@ export default function RideRequestCard({
               <View
                 style={[
                   styles.dot,
-                  { backgroundColor: isSubmitted ? "#cbd5e1" : "#ef4444" },
+                  {
+                    backgroundColor: isSubmitted ? "#cbd5e1" : theme.colors.red,
+                  },
                 ]}
               />
               <Text
@@ -499,13 +517,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 6,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: theme.colors.background,
   },
   submittedCard: {
     backgroundColor: "#fcfdfe",
     elevation: 0,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: theme.colors.background,
   },
   desaturated: { opacity: 0.5 },
   submittedText: { color: "#94a3b8" },
@@ -564,7 +582,11 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   topLeftInfo: { flexDirection: "row", alignItems: "center", gap: 4 },
-  distanceText: { fontSize: 11, color: "#10B981", fontWeight: "800" },
+  distanceText: {
+    fontSize: 11,
+    color: theme.colors.primary,
+    fontWeight: "800",
+  },
   etaText: { fontSize: 11, color: "#64748b", fontWeight: "600" },
 
   priceContainer: { flexDirection: "row", alignItems: "center", gap: 4 },
@@ -582,7 +604,7 @@ const styles = StyleSheet.create({
   },
   offerBadgeText: { fontSize: 7, fontWeight: "900" },
   priceRow: { flexDirection: "row", alignItems: "center" },
-  priceText: { fontWeight: "900", color: "#10B981", fontSize: 15 },
+  priceText: { fontWeight: "900", color: theme.colors.primary, fontSize: 15 },
 
   addressSection: { gap: 3 },
   addressLine: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -603,7 +625,7 @@ const styles = StyleSheet.create({
   },
   infoPreview: { fontSize: 10, color: "#94a3b8", fontStyle: "italic" },
   progressBar: { height: 3, backgroundColor: "#f8fafc" },
-  progressFill: { height: "100%", backgroundColor: "#10B981" },
+  progressFill: { height: "100%", backgroundColor: theme.colors.primary },
   statusBadgeProcessing: {
     backgroundColor: "#f0f9ff",
     paddingHorizontal: 6,

@@ -119,7 +119,7 @@ export function IRButton({
 const styles = StyleSheet.create({
   base: {
     // ⬛ SHAPE UPDATE: Matches the 12px radius of the CancelButton
-    borderRadius: 12,
+    borderRadius: 200,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

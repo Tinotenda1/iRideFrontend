@@ -28,7 +28,7 @@ const ExternalNavButton: React.FC<ExternalNavButtonProps> = ({
   pickup,
   destination,
   style,
-  size = 35,
+  size = 40,
 }) => {
   const handleOpenNavigation = async () => {
     // 1. Determine target based on status
@@ -76,7 +76,7 @@ const ExternalNavButton: React.FC<ExternalNavButtonProps> = ({
       activeOpacity={0.7}
       style={[
         styles.button,
-        { height: size, borderRadius: size / 2, paddingHorizontal: 16 },
+        { height: size, borderRadius: size / 2, paddingHorizontal: 18 },
         style,
       ]}
       onPress={handleOpenNavigation}
@@ -99,6 +99,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     elevation: 8,
+    borderWidth: 2,
+    borderColor: "#0084FF",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,

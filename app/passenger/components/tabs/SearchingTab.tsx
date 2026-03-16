@@ -135,25 +135,36 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
       pulseAnim.setValue(1);
       return;
     }
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.2,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    animation.start();
-    return () => {
-      animation.stop();
-      pulseAnim.setValue(1);
-    };
+
+    // Wait for layout to settle
+    const timer = setTimeout(() => {
+      pulseAnim.setValue(1.05); // start slightly scaled
+
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1.05,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+
+      animation.start();
+
+      // Cleanup
+      return () => {
+        animation.stop();
+        pulseAnim.setValue(1);
+      };
+    }, 200); // 50ms is usually enough
+
+    return () => clearTimeout(timer);
   }, [pulseAnim, showNoDrivers, isActive]);
 
   const performCancellation = useCallback(
@@ -246,7 +257,6 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
           //console.log("4️⃣ [SearchingTab] Finally block executing");
 
           setIsCancelling(false);
-          updateRideData({ status: "idle" });
 
           if (onClearOffers) {
             // console.log("5️⃣ [SearchingTab] Calling onClearOffers()...");
@@ -255,6 +265,7 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
 
           if (!isAutoCancel) {
             setShowNoDrivers(false);
+            //updateRideData({ status: "idle" });
             onCancel();
           }
         }
@@ -275,7 +286,7 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
       }
     }, NO_DRIVERS_TIMEOUT);
     return () => clearTimeout(timer);
-  }, [hasOffers, showNoDrivers, performCancellation, isActive]);
+  }, [hasOffers, showNoDrivers, isActive]);
 
   return (
     <View style={styles.container}>

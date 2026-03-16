@@ -251,11 +251,11 @@ const styles = createStyles({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.background,
+    borderRadius: 200,
     paddingHorizontal: theme.spacing.md,
     height: 54,
-    ...theme.shadows.md,
+    //...theme.shadows.md,
   },
   leftIcon: {
     marginRight: theme.spacing.sm,
@@ -273,9 +273,6 @@ const styles = createStyles({
     top: 60,
     left: 0,
     right: 0,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    ...theme.shadows.lg,
     maxHeight: 250,
     overflow: "hidden",
   },
@@ -309,10 +306,7 @@ const styles = createStyles({
   noResults: {
     marginTop: 5,
     padding: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
     alignItems: "center",
-    ...theme.shadows.sm,
   },
   noResultsText: {
     ...typedTypography.caption,

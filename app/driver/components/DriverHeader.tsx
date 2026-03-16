@@ -25,6 +25,7 @@ interface DriverHeaderProps {
   onOpenSettings: () => void;
   setOnline?: (value: boolean) => void;
   setIsConnecting?: (value: boolean) => void;
+  setManualOffline?: (value: boolean) => void;
 }
 
 export default function DriverHeader({
@@ -32,11 +33,15 @@ export default function DriverHeader({
   onOpenSettings,
   setOnline,
   setIsConnecting,
+  setManualOffline,
 }: DriverHeaderProps) {
   const [isToggling, setIsToggling] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [status, setStatus] = useState<DriverSocketStatus>("offline");
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Track manual offline state locally
+  const [manualOffline, setManualOfflineState] = useState(false);
 
   useEffect(() => {
     statusPollRef.current = setInterval(() => {
@@ -53,42 +58,77 @@ export default function DriverHeader({
 
   const lastStatus = useRef(online);
 
+  // Sync external state and manualOffline
   useEffect(() => {
     if (lastStatus.current !== online) {
       setOnline?.(online);
+
+      if (online && !isConnecting) {
+        setManualOffline?.(false);
+        setManualOfflineState(false); // reset internal manualOffline
+      }
+
       lastStatus.current = online;
-      // ✅ Automatically stop toggle loading when status matches expected state
       setIsToggling(false);
     }
+
     setIsConnecting?.(isConnecting);
   }, [online, isConnecting]);
+
+  // Determine if the offline state is unintentional
+  const isUnintentionalOffline = !online && !manualOffline && !isConnecting;
 
   const handleTogglePress = () => {
     if (isToggling || isConnecting) return;
 
     if (online) {
+      // Normal online → ask modal to go offline
       setShowOfflineModal(true);
     } else {
-      executeToggle(true);
+      if (isUnintentionalOffline) {
+        // Unintentional offline → force offline first
+        executeToggle(false);
+      } else {
+        // Manual offline → try going online
+        executeToggle(true);
+      }
     }
   };
 
   const executeToggle = async (shouldGoOnline: boolean) => {
     setIsToggling(true);
     setShowOfflineModal(false);
+
     try {
       if (shouldGoOnline) {
         await connectDriver();
       } else {
         disconnectDriver();
-        // Since disconnect is usually instant/local, we reset here
-        setIsToggling(false);
+        setManualOffline?.(true);
+        setManualOfflineState(true);
       }
     } catch (err) {
       console.error("[DriverHeader] Toggle failed:", err);
+    } finally {
       setIsToggling(false);
     }
   };
+
+  // Determine button appearance
+  const buttonStyle = [
+    styles.statusPill,
+    online ? styles.pillOnline : styles.pillOffline,
+    (isToggling || isConnecting) && { opacity: 0.8 },
+  ];
+
+  let buttonText = "GO OFFLINE";
+  if (isToggling || isConnecting) {
+    buttonText = "WAITING...";
+  } else if (!online && manualOffline) {
+    buttonText = "GO ONLINE"; // manual offline → allow going online
+  } else if (!online && isUnintentionalOffline) {
+    buttonText = "GO OFFLINE"; // unintentional offline → show GO OFFLINE
+  }
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe}>
@@ -105,24 +145,14 @@ export default function DriverHeader({
           activeOpacity={0.9}
           onPress={handleTogglePress}
           disabled={isToggling || isConnecting}
-          style={[
-            styles.statusPill,
-            online ? styles.pillOnline : styles.pillOffline,
-            (isToggling || isConnecting) && { opacity: 0.8 },
-          ]}
+          style={buttonStyle}
         >
           {isToggling || isConnecting ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
             <View style={styles.statusDot} />
           )}
-          <Text style={styles.statusLabel}>
-            {isToggling || isConnecting
-              ? "WAITING..."
-              : online
-                ? "GO OFFLINE"
-                : "GO ONLINE"}
-          </Text>
+          <Text style={styles.statusLabel}>{buttonText}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -152,12 +182,11 @@ export default function DriverHeader({
                 onPress={() => setShowOfflineModal(false)}
                 disabled={isToggling}
               />
-
               <IRButton
                 title="Yes, Go Offline"
                 variant="ghost"
                 onPress={() => executeToggle(false)}
-                loading={isToggling} // ✅ Added loading state here
+                loading={isToggling}
               />
             </View>
           </View>

@@ -15,7 +15,6 @@ import {
   UIManager,
   View,
 } from "react-native";
-
 import RatingModal from "../../components/RatingModal";
 import TripStatusModal, { ModalType } from "../../components/TripStatusModal";
 import { submitUserRating } from "../../utils/ratingSubmittion";
@@ -116,6 +115,23 @@ const PassengerScreen: React.FC = () => {
   const [submissionStates, setSubmissionStates] = useState<
     Record<string, "idle" | "submitting" | "accepted">
   >({});
+
+  const [nearbyDrivers, setNearbyDrivers] = useState<
+    {
+      phone: string;
+      latitude: number;
+      longitude: number;
+      distance?: string;
+      heading?: number;
+    }[]
+  >([]);
+
+  const [matchedDriver, setMatchedDriver] = useState<{
+    phone: string;
+    latitude: number;
+    longitude: number;
+    heading?: number;
+  } | null>(null);
 
   const [modalConfig, setModalConfig] = useState({
     visible: false,
@@ -351,6 +367,64 @@ const PassengerScreen: React.FC = () => {
       fetchRecentDestinations();
     };
 
+    const handleNearbyDriverUpdate = (data: any) => {
+      console.log("📡 nearby_driver_update:", data);
+
+      const { driverPhone, latitude, longitude, heading } = data;
+
+      if (!driverPhone || !latitude || !longitude) {
+        console.log("⚠️ Invalid driver update payload");
+        return;
+      }
+
+      setNearbyDrivers((prevDrivers) => {
+        const existingIndex = prevDrivers.findIndex(
+          (d) => d.phone === driverPhone,
+        );
+
+        // Driver already exists → update location
+        if (existingIndex !== -1) {
+          const updated = [...prevDrivers];
+
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            latitude,
+            longitude,
+            heading,
+          };
+
+          return updated;
+        }
+
+        // New driver → add to map
+        console.log("🚗 New nearby driver detected:", driverPhone);
+
+        return [
+          ...prevDrivers,
+          {
+            phone: driverPhone,
+            latitude,
+            longitude,
+            heading,
+          },
+        ];
+      });
+    };
+
+    // This function will be called from your index.tsx socket listener
+    const handleMatchedDriverUpdate = (data: any) => {
+      const { driverPhone, latitude, longitude, heading } = data;
+
+      if (!driverPhone || !latitude || !longitude) return;
+
+      setMatchedDriver({
+        phone: driverPhone,
+        latitude,
+        longitude,
+        heading,
+      });
+    };
+
     const handleDriverResponse = (newOffer: any) => {
       const phone = newOffer.driver?.phone;
 
@@ -484,6 +558,8 @@ const PassengerScreen: React.FC = () => {
     socket.on("ride_cancelled", handleCancelled);
     socket.on("driver:no_longer_available", handleNoDriver);
     socket.on("ride:match_failed", handleBusy);
+    socket.on("nearby_driver_update", handleNearbyDriverUpdate);
+    socket.on("driver:location_update", handleMatchedDriverUpdate);
 
     /* CLEANUP */
 
@@ -496,6 +572,8 @@ const PassengerScreen: React.FC = () => {
       socket.off("ride_cancelled", handleCancelled);
       socket.off("driver:no_longer_available", handleNoDriver);
       socket.off("ride:match_failed", handleBusy);
+      socket.off("nearby_driver_update", handleNearbyDriverUpdate);
+      socket.off("driver:location_update", handleMatchedDriverUpdate);
     };
   }, [
     socket,
@@ -573,7 +651,10 @@ const PassengerScreen: React.FC = () => {
       <View style={styles.container}>
         <View style={styles.contentArea}>
           {/* MAP */}
-          <MapContainer />
+          <MapContainer
+            nearbyDrivers={nearbyDrivers}
+            matchedDriver={matchedDriver}
+          />
 
           <Animated.View
             style={[styles.menuButton, { opacity: menuOpacity }]}

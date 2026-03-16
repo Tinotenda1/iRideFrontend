@@ -46,6 +46,7 @@ interface RideState {
 
 interface Props {
   online: boolean;
+  manuallyOffline?: boolean;
   isConnecting: boolean;
   incomingRides?: any[];
   submittedOffers: { [rideId: string]: number };
@@ -65,6 +66,7 @@ const DEFAULT_EXPIRE_TIME = 10000;
 const DriverHome: React.FC<Props> = ({
   rideTrayRef,
   online,
+  manuallyOffline,
   isConnecting,
   incomingRides = [],
   submittedOffers,
@@ -79,7 +81,6 @@ const DriverHome: React.FC<Props> = ({
   const [userRegion, setUserRegion] = useState<any>(null);
   const [mapLoading, setMapLoading] = useState(true);
   const [showRecenter, setShowRecenter] = useState(false);
-
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   /* ---------------- Load Location ---------------- */
@@ -181,25 +182,29 @@ const DriverHome: React.FC<Props> = ({
   /* Radar animation cleanup */
   useEffect(() => {
     let animation: Animated.CompositeAnimation;
+
     if (online && !isConnecting) {
+      // Larger, faster pulse for fully online
       animation = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.15,
-            duration: 1000,
+            toValue: 1.5, // bigger scale
+            duration: 800, // faster
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
-            duration: 1000,
+            duration: 800,
             useNativeDriver: true,
           }),
         ]),
       );
       animation.start();
-    } else {
+    } else if (isConnecting) {
+      // Offline, reset pulse
       pulseAnim.setValue(1);
     }
+
     return () => animation?.stop();
   }, [online, isConnecting]);
 
@@ -227,7 +232,7 @@ const DriverHome: React.FC<Props> = ({
 
   const handleRecenter = () => {
     if (userRegion && mapRef.current) {
-      mapRef.current.animateToRegion(userRegion, 1000);
+      mapRef.current.animateToRegion(userRegion, 800);
       setShowRecenter(false);
     }
   };
@@ -281,7 +286,7 @@ const DriverHome: React.FC<Props> = ({
 
   /* ---------------- Offline ---------------- */
 
-  if (!online) {
+  if (manuallyOffline) {
     return (
       <View style={styles.offlineContainer}>
         <View style={styles.offlineIcon}>
@@ -319,6 +324,7 @@ const DriverHome: React.FC<Props> = ({
         showRecenter={showRecenter}
         onRecenter={handleRecenter}
         onRegionChangeComplete={onRegionChangeComplete}
+        isOnline={online}
       />
 
       {rides.length > 0 && (
@@ -368,6 +374,7 @@ const styles = StyleSheet.create({
 
   offlineContainer: {
     flex: 1,
+    marginBottom: 50,
     backgroundColor: "#0f172a",
     justifyContent: "center",
     alignItems: "center",

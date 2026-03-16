@@ -48,8 +48,8 @@ const WelcomeTab: React.FC<WelcomeTabProps> = ({ onGoOnline }) => {
       {/* Footer Branding */}
       <View style={styles.footer}>
         <View style={styles.footerLine} />
-        <Text style={styles.footerBrand}>iRide</Text>
-        <Text style={styles.footerTagline}>YOUR RIDE, YOUR WAY</Text>
+        <Text style={styles.footerBrand}>DRIFT</Text>
+        <Text style={styles.footerTagline}>Your Ride, Reimagined.</Text>
       </View>
     </View>
   );

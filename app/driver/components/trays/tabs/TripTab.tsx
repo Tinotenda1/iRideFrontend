@@ -3,8 +3,10 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   Modal,
+  Platform,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -16,6 +18,7 @@ import {
 import { ActionConfirmationModal } from "../../../../../components/ActionConfirmationModal";
 import { IRAvatar } from "../../../../../components/IRAvatar";
 import { IRButton } from "../../../../../components/IRButton";
+import { theme } from "../../../../../constants/theme";
 import { useRideBooking } from "../../../../context/RideBookingContext";
 
 // ... (Interface and PREDEFINED_REASONS remain unchanged)
@@ -64,6 +67,7 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
   const isMounted = useRef(true);
 
   const passenger = rideData.activeTrip?.passenger;
+  const driver = rideData.activeTrip?.driver;
   const rideInfo = rideData.activeTrip?.ride;
   const offer = rideData.activeTrip?.offer;
   const status = rideData.status;
@@ -83,12 +87,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
       setIsStarting(false);
     }
   }, [status]);
-
-  const handleCallPassenger = () => {
-    if (passenger?.phone) {
-      Linking.openURL(`tel:${passenger.phone}`);
-    }
-  };
 
   const handleConfirmArrived = () => {
     setIsArriving(true);
@@ -129,6 +127,59 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
       }
     }
   }, [isCancelling, onCancel, cancelReason]);
+
+  const handleCallPassenger = () => {
+    if (!passenger?.phone) {
+      Alert.alert("Error", "Passenger phone number is not available.");
+      return;
+    }
+
+    // Prepend + and keep only digits
+    const phoneNumber = "+" + passenger.phone.replace(/\D/g, "");
+    let url = "";
+
+    if (Platform.OS === "android") {
+      url = `tel:${phoneNumber}`;
+    } else {
+      url = `telprompt:${phoneNumber}`;
+    }
+
+    Linking.canOpenURL(url)
+      .then((supported) => {
+        if (supported) {
+          Linking.openURL(url);
+        } else {
+          Alert.alert("Error", "Unable to open dialer.");
+        }
+      })
+      .catch((err) => console.error("Dialer error:", err));
+  };
+
+  const handleWhatsAppPassenger = () => {
+    if (!passenger?.phone) {
+      Alert.alert("Error", "Passenger phone number is not available.");
+      return;
+    }
+
+    // Prepend + and remove non-digits
+    const phoneNumber = "+" + passenger.phone.replace(/\D/g, "");
+    const message = encodeURIComponent(`DRIFT Driver - ${driver.name}: `);
+
+    const url = `https://wa.me/${phoneNumber}?text=${message}`;
+
+    Linking.canOpenURL(url)
+      .then((supported) => {
+        if (supported) {
+          Linking.openURL(url);
+        } else {
+          Alert.alert(
+            "WhatsApp not installed",
+            "Please install WhatsApp to send a message.",
+          );
+        }
+      })
+      .catch((err) => console.error("WhatsApp error:", err));
+  };
 
   if (!passenger) {
     return (
@@ -194,12 +245,26 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
               />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity
-              style={styles.callButton}
-              onPress={handleCallPassenger}
-            >
-              <Ionicons name="call" size={22} color="#fff" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              {/* Call button */}
+              <TouchableOpacity
+                style={[
+                  styles.callButton,
+                  { backgroundColor: theme.colors.secondary },
+                ]}
+                onPress={handleCallPassenger}
+              >
+                <Ionicons name="call" size={22} color="#fff" />
+              </TouchableOpacity>
+
+              {/* WhatsApp button */}
+              <TouchableOpacity
+                style={[styles.callButton, { backgroundColor: "#25D366" }]} // WhatsApp green
+                onPress={handleWhatsAppPassenger}
+              >
+                <Ionicons name="logo-whatsapp" size={22} color="#fff" />
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
@@ -207,7 +272,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
           <View style={styles.addressRow}>
             <View style={[styles.dot, { backgroundColor: "#10B981" }]} />
             <View style={styles.addressTextContainer}>
-              <Text style={styles.addressLabel}>PICKUP</Text>
               <Text style={styles.addressText} numberOfLines={1}>
                 {rideInfo?.pickupAddress}
               </Text>
@@ -217,7 +281,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
           <View style={styles.addressRow}>
             <View style={[styles.dot, { backgroundColor: "#ef4444" }]} />
             <View style={styles.addressTextContainer}>
-              <Text style={styles.addressLabel}>DESTINATION</Text>
               <Text style={styles.addressText} numberOfLines={1}>
                 {rideInfo?.destinationAddress}
               </Text>
@@ -227,31 +290,33 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
 
         <View style={styles.divider} />
 
-        <View style={styles.earningsRow}>
-          <View>
-            <Text style={styles.addressLabel}>YOUR EARNINGS</Text>
-            <Text style={styles.earningsText}>
-              ${parseFloat(offer).toFixed(2)}
-            </Text>
-          </View>
+        {isExpanded && (
+          <View style={styles.earningsRow}>
+            <View>
+              <Text style={styles.addressLabel}>YOUR EARNINGS</Text>
+              <Text style={styles.earningsText}>
+                ${parseFloat(offer).toFixed(2)}
+              </Text>
+            </View>
 
-          <View style={styles.paymentBadge}>
-            <Ionicons
-              name={
-                rideInfo?.paymentMethod?.toLowerCase() === "ecocash"
-                  ? "wallet-outline"
-                  : "cash-outline"
-              }
-              size={16}
-              color="#475569"
-            />
-            <Text style={styles.paymentText}>
-              {rideInfo?.paymentMethod?.toLowerCase() === "ecocash"
-                ? "ECOCASH"
-                : "CASH"}
-            </Text>
+            <View style={styles.paymentBadge}>
+              <Ionicons
+                name={
+                  rideInfo?.paymentMethod?.toLowerCase() === "ecocash"
+                    ? "wallet-outline"
+                    : "cash-outline"
+                }
+                size={16}
+                color="#475569"
+              />
+              <Text style={styles.paymentText}>
+                {rideInfo?.paymentMethod?.toLowerCase() === "ecocash"
+                  ? "ECOCASH"
+                  : "CASH"}
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
       </View>
 
       <View style={styles.footer}>

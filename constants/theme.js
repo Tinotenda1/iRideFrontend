@@ -3,10 +3,10 @@
 // theme colors and styles
 export const theme = {
   colors: {
-    primary: "#10B981", // Premium Bolt Emerald
+    primary: "#25D366", // Premium Bolt Emerald
     primaryDark: "#059669",
-    secondary: "#2563EB", // Modern action blue
-    background: "#F8FAFC", // Slate-50 background
+    secondary: "#0084FF", // Modern action blue
+    background: "#EEEEEE", // Slate-50 background
     surface: "#FFFFFF",
     text: "#0F172A", // Deep Slate-900
     textSecondary: "#64748B", // Slate-500
@@ -14,7 +14,8 @@ export const theme = {
     error: "#EF4444",
     success: "#10B981",
     warning: "#F59E0B",
-    black: "#000000",
+    black: "#061E29",
+    red: "#ED3500",
     standardNotification: "#ff00f2",
     successNotification: "#10B981",
     errorNotification: "#ff0000",

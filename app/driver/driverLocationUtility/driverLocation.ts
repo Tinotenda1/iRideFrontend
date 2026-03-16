@@ -1,5 +1,6 @@
 // app/driver/driverLocationUtility/driverLocation.ts
 import * as Location from "expo-location";
+import { getDriverSocket } from "../socketConnectionUtility/driverSocketService";
 
 /**
  * Represents a driver's GPS location with accuracy metadata
@@ -194,45 +195,95 @@ export const getDriverLocation = async (): Promise<LocationResult> => {
 };
 
 /**
- * Helper to watch location changes (for real-time tracking)
- * Returns cleanup function to stop watching
+ * Watch driver location with accuracy filtering and stable heading
  */
 export const watchDriverLocation = (
   callback: (location: DriverLocation) => void,
   errorCallback?: (error: LocationError) => void,
 ): (() => void) => {
   const watchOptions = {
-    accuracy: Location.Accuracy.High,
-    distanceInterval: 10, // update every 10 meters
-    timeInterval: 5000, // update every 5 seconds
+    accuracy: Location.Accuracy.BestForNavigation,
+    distanceInterval: 1, // every 1 meter
+    timeInterval: 500, // every 0.5 second
+    mayShowUserSettingsDialog: true,
   };
 
   let watchId: Location.LocationSubscription | null = null;
+  let lastLocationSentAt = 0;
+  let lastKnownHeading = 0;
+
+  const MIN_ACCURACY = 20; // meters
+  const MIN_SPEED_FOR_HEADING = 0.5; // m/s, below this consider stationary
 
   const startWatching = async () => {
     try {
-      // Check permissions first
-      const hasPermission = await requestLocationPermissions();
-      if (!hasPermission) {
+      // 1. Check permissions
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
         errorCallback?.("PERMISSION_DENIED");
         return;
       }
 
-      watchId = await Location.watchPositionAsync(watchOptions, (location) => {
-        if (validateLocation(location)) {
-          callback(formatDriverLocation(location));
+      // 2. Start watching with high-accuracy navigation options
+      watchId = await Location.watchPositionAsync(watchOptions, (loc) => {
+        const { coords, timestamp } = loc;
+
+        // --- LOGIC GATE: UI vs SERVER ---
+        // We allow a looser accuracy for the UI (e.g., 100m) so the marker doesn't "freeze"
+        // but keep MIN_ACCURACY strict for the backend updates.
+        const UI_ACCURACY_THRESHOLD = 100;
+        if (coords.accuracy == null || coords.accuracy > UI_ACCURACY_THRESHOLD)
+          return;
+
+        // 3. Speed-based heading stabilization
+        if (coords.speed != null && coords.heading != null) {
+          if (coords.speed >= MIN_SPEED_FOR_HEADING) {
+            // INITIAL FIX: If this is our first heading, don't smooth it (prevents slow spinning at start)
+            if (lastKnownHeading === 0) {
+              lastKnownHeading = coords.heading;
+            } else {
+              // Smooth heading change
+              const delta = coords.heading - lastKnownHeading;
+              const normalizedDelta = ((delta + 180) % 360) - 180;
+              lastKnownHeading =
+                (lastKnownHeading + normalizedDelta * 0.3 + 360) % 360;
+            }
+          }
+        }
+
+        const formatted: DriverLocation = {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          heading: lastKnownHeading,
+          accuracy: coords.accuracy,
+          speed: coords.speed ?? 0,
+          timestamp,
+        };
+
+        // 4. UPDATE UI IMMEDIATELY
+        // This ensures the marker moves on the map regardless of status
+        callback(formatted);
+
+        // 5. THROTTLED BACKEND UPDATES
+        const now = Date.now();
+        const isAccurateEnoughForServer = coords.accuracy <= MIN_ACCURACY;
+
+        if (isAccurateEnoughForServer && now - lastLocationSentAt >= 1000) {
+          lastLocationSentAt = now;
+          const socket = getDriverSocket();
+          if (socket?.connected) {
+            socket.emit("driver:location_update", formatted);
+          }
         }
       });
-    } catch (error) {
-      console.error("Failed to watch location:", error);
+    } catch (err) {
+      console.error("Failed to watch location:", err);
       errorCallback?.("UNKNOWN_ERROR");
     }
   };
 
-  // Start watching
   startWatching();
 
-  // Return cleanup function
   return () => {
     if (watchId) {
       watchId.remove();

@@ -1,40 +1,12 @@
 // app/driver/socketConnectionUtility/driverSocketService.ts
-import { getSocket, initializeSocket } from "@/utils/sockets";
+import { initializeSocket } from "@/utils/sockets";
 import { getUserInfo } from "@/utils/storage";
 import * as Location from "expo-location";
 import * as Network from "expo-network";
-import * as TaskManager from "expo-task-manager";
 import { Socket } from "socket.io-client";
 
 const LOCATION_TRACKING_TASK = "background-location-tracking";
 let isConnecting = false;
-
-TaskManager.defineTask(LOCATION_TRACKING_TASK, async ({ data, error }: any) => {
-  if (error) {
-    console.error("❌ Background Location Task Error:", error);
-    return;
-  }
-  if (data) {
-    const { locations } = data;
-    const loc = locations[0];
-    const socketInstance = getSocket();
-
-    if (socketInstance?.connected) {
-      socketInstance.emit("driver:location_update", {
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-        accuracy: loc.coords.accuracy,
-        heading: loc.coords.heading,
-        speed: loc.coords.speed,
-        timestamp: loc.timestamp,
-      });
-    } else {
-      // ⚡ OPTIONAL: If disconnected, we could cache the location
-      // and send it as a "batch" once reconnected.
-      console.log("📡 Offline: Background location update skipped.");
-    }
-  }
-});
 
 export type DriverSocketStatus =
   | "offline"

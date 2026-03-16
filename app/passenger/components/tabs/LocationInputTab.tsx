@@ -1,9 +1,9 @@
 // app/passenger/components/tabs/LocationInputTab.tsx
 
-import * as Location from "expo-location";
 import { Clock, Navigation, Search, Trash2 } from "lucide-react-native";
 import React, { useEffect } from "react";
 import {
+  ActivityIndicator,
   Alert,
   BackHandler,
   ScrollView,
@@ -24,7 +24,7 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 
-import { ActivityIndicator } from "react-native"; // Add this to your imports
+import * as Location from "expo-location";
 import { theme } from "../../../../constants/theme";
 import { createStyles } from "../../../../utils/styles";
 import { useRideBooking } from "../../../context/RideBookingContext";
@@ -186,33 +186,61 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
     return () => subscription.remove();
   }, [armedRowId]);
 
-  // Auto-set Pickup to Current Location on mount
   useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
+    const setPickupToCurrentLocation = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") return;
 
-      const location = await Location.getCurrentPositionAsync({});
-      const reverse = await Location.reverseGeocodeAsync({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      });
+        const location = await Location.getCurrentPositionAsync({});
 
-      const address = reverse[0]
-        ? `${reverse[0].name || ""} ${reverse[0].street || ""}`.trim()
-        : "Current Location";
+        const reverseGeocodeWithTimeout = async (coords: {
+          latitude: number;
+          longitude: number;
+        }): Promise<Location.LocationGeocodedAddress[]> => {
+          return Promise.race([
+            Location.reverseGeocodeAsync(coords),
+            new Promise<Location.LocationGeocodedAddress[]>((_, reject) =>
+              setTimeout(
+                () => reject(new Error("Reverse geocode timeout")),
+                5000,
+              ),
+            ),
+          ]);
+        };
 
-      const currentPlace: Place = {
-        id: "current",
-        name: address || "Current Location",
-        address: address || "Current Location",
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      };
+        let address = "Current Location";
+        try {
+          const reverse: Location.LocationGeocodedAddress[] =
+            await reverseGeocodeWithTimeout({
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+            });
+          if (reverse[0]) {
+            address =
+              `${reverse[0].name || ""} ${reverse[0].street || ""}`.trim() ||
+              "Current Location";
+          }
+        } catch (err) {
+          console.warn("Reverse geocode failed, using fallback:", err);
+        }
 
-      updateRideData({ pickupLocation: currentPlace });
-    })();
-  }, []);
+        const currentPlace: Place = {
+          id: "current",
+          name: address,
+          address: address,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        };
+
+        updateRideData({ pickupLocation: currentPlace });
+      } catch (err) {
+        console.error("Failed to set pickup location:", err);
+      }
+    };
+
+    setPickupToCurrentLocation();
+  }, [updateRideData]);
 
   // Log prices whenever they are updated (optional)
   useEffect(() => {
@@ -390,7 +418,7 @@ const styles = createStyles({
     backgroundColor: theme.colors.border,
     marginVertical: 4,
   },
-  squareDestination: { width: 8, height: 8, backgroundColor: "#d34444ff" },
+  squareDestination: { width: 8, height: 8, backgroundColor: theme.colors.red },
   fieldsWrapper: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -475,7 +503,7 @@ const styles = createStyles({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#FF3B30",
+    backgroundColor: theme.colors.red,
     borderWidth: 2,
     borderColor: theme.colors.surface,
     zIndex: 1,

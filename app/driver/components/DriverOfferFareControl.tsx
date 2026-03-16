@@ -1,4 +1,6 @@
-// app/passenger/components/PassengerOfferFareControl.tsx
+// app/passenger/components/DriverOfferFareControl.tsx
+import { theme } from "@/constants/theme";
+import * as Haptics from "expo-haptics"; // 1. Import Haptics
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -28,9 +30,13 @@ export const OfferFareControl = ({
   }, [offer]);
 
   const decreaseOffer = () => {
+    // Trigger haptic even if at limit
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    if (offer <= minOffer) return; // Prevent state update but feedback given
+
     setOffer((prev) => {
       const nextValue = prev - STEP;
-      // Round the minimum floor to the nearest 0.5 so 2.80 becomes 3.00
       const strictMin = Math.ceil(minOffer * 2) / 2;
       const roundedValue = Math.max(strictMin, Math.round(nextValue * 2) / 2);
       return Number(roundedValue.toFixed(2));
@@ -38,9 +44,13 @@ export const OfferFareControl = ({
   };
 
   const increaseOffer = () => {
+    // Trigger haptic even if at limit
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    if (offer >= maxOffer) return; // Prevent state update but feedback given
+
     setOffer((prev) => {
       const nextValue = prev + STEP;
-      // Round the maximum ceiling to the nearest 0.5 so 5.25 becomes 5.00
       const strictMax = Math.floor(maxOffer * 2) / 2;
       const roundedValue = Math.min(strictMax, Math.round(nextValue * 2) / 2);
       return Number(roundedValue.toFixed(2));
@@ -56,7 +66,7 @@ export const OfferFareControl = ({
             offer <= minOffer && styles.disabledOpacity,
           ]}
           onPress={decreaseOffer}
-          disabled={offer <= minOffer}
+          // disabled={offer <= minOffer} <-- Removed to allow haptics at the limit
           activeOpacity={0.6}
         >
           <Text style={styles.adjustText}>−</Text>
@@ -73,7 +83,7 @@ export const OfferFareControl = ({
             offer >= maxOffer && styles.disabledOpacity,
           ]}
           onPress={increaseOffer}
-          disabled={offer >= maxOffer}
+          // disabled={offer >= maxOffer} <-- Removed to allow haptics at the limit
           activeOpacity={0.6}
         >
           <Text style={styles.adjustText}>+</Text>
@@ -87,13 +97,6 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
   },
-  offerLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#94a3b8", // Slate 400
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
   boltPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -103,9 +106,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   adjustBtn: {
-    width: 48,
+    width: 68,
     height: 48,
-    backgroundColor: "#b6b6b6",
+    backgroundColor: theme.colors.background,
     borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
@@ -113,7 +116,7 @@ const styles = StyleSheet.create({
   adjustText: {
     fontSize: 24,
     fontWeight: "400",
-    color: "#0f172a", // Dark slate
+    color: "#0f172a",
   },
   disabledOpacity: {
     opacity: 0.2,
@@ -128,18 +131,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#0f172a",
     marginRight: 2,
-    marginTop: 2, // Fine-tuning alignment
+    marginTop: 2,
   },
   offerValue: {
     fontSize: 26,
     fontWeight: "700",
     color: "#0f172a",
-    fontVariant: ["tabular-nums"], // Prevents jumping when numbers change
-  },
-  rangeText: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "#64748b",
-    opacity: 0.8,
+    fontVariant: ["tabular-nums"],
   },
 });

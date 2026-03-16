@@ -48,6 +48,7 @@ interface DriverTrayProps {
   onStatusChange?: (status: DriverStatus) => void;
   onHeightChange?: (height: number) => void;
   onMatch?: () => void;
+  isOnline: boolean;
 }
 
 type DriverStatus = "welcome" | "online" | "active";
@@ -57,7 +58,7 @@ const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
 const HEIGHT_WELCOME = windowHeight * 0.35;
 const HEIGHT_ONLINE = windowHeight * 0.3;
 const HEIGHT_ACTIVE_COMPACT = windowHeight * 0.24;
-const HEIGHT_ACTIVE_EXPANDED = windowHeight * 0.35;
+const HEIGHT_ACTIVE_EXPANDED = windowHeight * 0.38;
 
 if (
   Platform.OS === "android" &&
@@ -67,7 +68,7 @@ if (
 }
 
 const DriverTray = forwardRef<any, DriverTrayProps>(
-  ({ onStatusChange, onHeightChange, onMatch }, ref) => {
+  ({ onStatusChange, onHeightChange, onMatch, isOnline }, ref) => {
     const [status, setStatus] = useState<DriverStatus>("welcome");
     const [isTripExpanded, setIsTripExpanded] = useState(false);
 
@@ -605,7 +606,10 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
                     { transform: [{ translateX: onlineTranslateX }] },
                   ]}
                 >
-                  <OnlineTab onGoOffline={() => handleTransition("welcome")} />
+                  <OnlineTab
+                    onGoOffline={() => handleTransition("welcome")}
+                    isOnline={isOnline}
+                  />
                 </Animated.View>
 
                 {/* Active */}
