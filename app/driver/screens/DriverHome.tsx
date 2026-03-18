@@ -1,6 +1,7 @@
 // app/driver/screens/DriverHome.tsx
 import { theme } from "@/constants/theme";
 import { notifyRideEvent } from "@/utils/persistentNotification";
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import React, {
@@ -18,9 +19,8 @@ import {
   LayoutAnimation,
   Platform,
   StyleSheet,
-  Text,
   UIManager,
-  View,
+  View
 } from "react-native";
 import MapView, { Region } from "react-native-maps";
 import DriverMap from "../components/maps/DriverMap";
@@ -47,6 +47,7 @@ interface RideState {
 interface Props {
   online: boolean;
   manuallyOffline?: boolean;
+  setManuallyOffline?: (value: boolean) => void;
   isConnecting: boolean;
   incomingRides?: any[];
   submittedOffers: { [rideId: string]: number };
@@ -59,6 +60,7 @@ interface Props {
   onRideExpire: (ride: any) => void;
   trayPadding: number;
   rideTrayRef: React.RefObject<any>;
+  isOnline: boolean;
 }
 
 const DEFAULT_EXPIRE_TIME = 10000;
@@ -67,12 +69,14 @@ const DriverHome: React.FC<Props> = ({
   rideTrayRef,
   online,
   manuallyOffline,
+  setManuallyOffline,
   isConnecting,
   incomingRides = [],
   submittedOffers,
   onRideSelect,
   onRideExpire,
   trayPadding,
+  isOnline,
 }) => {
   const [rides, setRides] = useState<RideState[]>([]);
   const lastProcessedRidesRef = useRef<Set<string>>(new Set());
@@ -82,6 +86,14 @@ const DriverHome: React.FC<Props> = ({
   const [mapLoading, setMapLoading] = useState(true);
   const [showRecenter, setShowRecenter] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  // Initialize manuallyOffline as true
+
+  // Only clear manuallyOffline once driver is fully connected
+  useEffect(() => {
+    if (online && !isConnecting) {
+      setManuallyOffline?.(false);
+    }
+  }, [online, isConnecting]);
 
   /* ---------------- Load Location ---------------- */
 
@@ -152,7 +164,6 @@ const DriverHome: React.FC<Props> = ({
         }
       }
 
-      // Update rides state AFTER all rides are processed
       setRides((prev) => {
         const filtered = prev.filter((r) => currentRideIds.has(r.rideId));
         const updated = filtered.map((r) => {
@@ -179,17 +190,15 @@ const DriverHome: React.FC<Props> = ({
 
   const reversedRides = useMemo(() => [...rides].reverse(), [rides]);
 
-  /* Radar animation cleanup */
   useEffect(() => {
     let animation: Animated.CompositeAnimation;
 
     if (online && !isConnecting) {
-      // Larger, faster pulse for fully online
       animation = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.5, // bigger scale
-            duration: 800, // faster
+            toValue: 1.5,
+            duration: 800,
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
@@ -201,7 +210,6 @@ const DriverHome: React.FC<Props> = ({
       );
       animation.start();
     } else if (isConnecting) {
-      // Offline, reset pulse
       pulseAnim.setValue(1);
     }
 
@@ -284,20 +292,14 @@ const DriverHome: React.FC<Props> = ({
     return () => unsub();
   }, []);
 
-  /* ---------------- Offline ---------------- */
-
+  /* ---------------- Offline / Network Status ---------------- */
   if (manuallyOffline) {
+    // Only show full offline UI if user intentionally went offline
     return (
-      <View style={styles.offlineContainer}>
+      <View style={[styles.offlineContainer, { marginBottom: trayPadding }]}>
         <View style={styles.offlineIcon}>
-          <Ionicons name="moon-outline" size={60} color="#94a3b8" />
+          <Ionicons name="moon-outline" size={ms(60)} color="#94a3b8" />
         </View>
-
-        <Text style={styles.title}>You are Offline</Text>
-
-        <Text style={styles.subtitle}>
-          Turn online to start receiving ride requests
-        </Text>
       </View>
     );
   }
@@ -332,8 +334,8 @@ const DriverHome: React.FC<Props> = ({
           style={[
             styles.rideStackContainer,
             {
-              top: 10,
-              bottom: 160,
+              top: vs(10),
+              bottom: vs(160),
             },
           ]}
           pointerEvents="box-none"
@@ -354,7 +356,7 @@ const DriverHome: React.FC<Props> = ({
                 />
               </View>
             )}
-            contentContainerStyle={{ paddingHorizontal: 16 }}
+            contentContainerStyle={{ paddingHorizontal: s(16) }}
             showsVerticalScrollIndicator={false}
           />
         </View>
@@ -374,20 +376,20 @@ const styles = StyleSheet.create({
 
   offlineContainer: {
     flex: 1,
-    marginBottom: 50,
+    marginBottom: vs(50),
     backgroundColor: "#0f172a",
     justifyContent: "center",
     alignItems: "center",
   },
 
   offlineIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: s(100),
+    height: s(100),
+    borderRadius: ms(100),
     backgroundColor: "#1e293b",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: vs(20),
   },
 
   radarLayer: {
@@ -400,9 +402,9 @@ const styles = StyleSheet.create({
   },
 
   pulseCircle: {
-    width: 250,
-    height: 250,
-    borderRadius: 125,
+    width: s(250),
+    height: s(250),
+    borderRadius: ms(125),
     backgroundColor: theme.colors.primary + "15",
     borderWidth: 2,
     borderColor: theme.colors.primary + "40",
@@ -410,9 +412,9 @@ const styles = StyleSheet.create({
 
   pulseCircleOuter: {
     position: "absolute",
-    width: 320,
-    height: 320,
-    borderRadius: 160,
+    width: s(320),
+    height: s(320),
+    borderRadius: ms(160),
     backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: theme.colors.primary + "10",
@@ -420,9 +422,9 @@ const styles = StyleSheet.create({
 
   driverDot: {
     position: "absolute",
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: s(20),
+    height: s(20),
+    borderRadius: ms(10),
     backgroundColor: theme.colors.primary,
     borderWidth: 3,
     borderColor: "#fff",
@@ -431,34 +433,34 @@ const styles = StyleSheet.create({
 
   recenterButton: {
     position: "absolute",
-    right: 16,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    right: s(16),
+    width: s(50),
+    height: s(50),
+    borderRadius: ms(25),
     backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: vs(4) },
     shadowOpacity: 0.2,
-    shadowRadius: 5,
+    shadowRadius: ms(5),
     elevation: 8,
     zIndex: 30,
   },
 
   title: {
-    fontSize: 24,
+    fontSize: ms(24),
     fontWeight: "800",
     color: "#fff",
-    marginTop: 10,
+    marginTop: vs(10),
   },
 
   subtitle: {
-    fontSize: 15,
+    fontSize: ms(15),
     color: "#94a3b8",
     textAlign: "center",
-    marginTop: 8,
-    paddingHorizontal: 40,
+    marginTop: vs(8),
+    paddingHorizontal: s(40),
   },
 
   rideStackContainer: {
@@ -469,10 +471,10 @@ const styles = StyleSheet.create({
   },
 
   cardWrapper: {
-    marginBottom: 12,
+    marginBottom: vs(12),
     shadowColor: "#000",
     shadowOpacity: 0.1,
-    shadowRadius: 10,
+    shadowRadius: ms(10),
     elevation: 5,
   },
 });

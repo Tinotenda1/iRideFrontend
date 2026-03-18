@@ -15,13 +15,13 @@ import {
   View,
 } from "react-native";
 
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { ActionConfirmationModal } from "../../../../../components/ActionConfirmationModal";
 import { IRAvatar } from "../../../../../components/IRAvatar";
 import { IRButton } from "../../../../../components/IRButton";
 import { theme } from "../../../../../constants/theme";
 import { useRideBooking } from "../../../../context/RideBookingContext";
 
-// ... (Interface and PREDEFINED_REASONS remain unchanged)
 interface DriverTripTabProps {
   onCancel: (reason: string) => Promise<boolean>;
   onArrived: () => void;
@@ -134,7 +134,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
       return;
     }
 
-    // Prepend + and keep only digits
     const phoneNumber = "+" + passenger.phone.replace(/\D/g, "");
     let url = "";
 
@@ -161,7 +160,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
       return;
     }
 
-    // Prepend + and remove non-digits
     const phoneNumber = "+" + passenger.phone.replace(/\D/g, "");
     const message = encodeURIComponent(`DRIFT Driver - ${driver.name}: `);
 
@@ -184,7 +182,7 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
   if (!passenger) {
     return (
       <SafeAreaView style={[styles.container, styles.center]}>
-        <ActivityIndicator color="#10B981" size="large" />
+        <ActivityIndicator color={theme.colors.primary} size="large" />
         <Text style={styles.loadingText}>Loading trip details...</Text>
       </SafeAreaView>
     );
@@ -200,7 +198,7 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
                 passenger.profilePic ? { uri: passenger.profilePic } : undefined
               }
               name={passenger.name}
-              size={56}
+              size={ms(56)}
             />
             <View>
               <Text style={styles.label}>PASSENGER</Text>
@@ -214,9 +212,9 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
                         ? "star"
                         : "star-outline"
                     }
-                    size={14}
+                    size={ms(14)}
                     color="#FFC107"
-                    style={{ marginRight: 1 }}
+                    style={{ marginRight: s(1) }}
                   />
                 ))}
                 <Text style={styles.ratingText}>
@@ -240,13 +238,12 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
               </View>
               <Ionicons
                 name={isExpanded ? "chevron-down" : "chevron-up"}
-                size={24}
+                size={ms(24)}
                 color="#64748b"
               />
             </TouchableOpacity>
           ) : (
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              {/* Call button */}
+            <View style={{ flexDirection: "row", gap: s(12) }}>
               <TouchableOpacity
                 style={[
                   styles.callButton,
@@ -254,15 +251,17 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
                 ]}
                 onPress={handleCallPassenger}
               >
-                <Ionicons name="call" size={22} color="#fff" />
+                <Ionicons name="call" size={ms(22)} color="#fff" />
               </TouchableOpacity>
 
-              {/* WhatsApp button */}
               <TouchableOpacity
-                style={[styles.callButton, { backgroundColor: "#25D366" }]} // WhatsApp green
+                style={[
+                  styles.callButton,
+                  { backgroundColor: theme.colors.primary },
+                ]}
                 onPress={handleWhatsAppPassenger}
               >
-                <Ionicons name="logo-whatsapp" size={22} color="#fff" />
+                <Ionicons name="logo-whatsapp" size={ms(22)} color="#fff" />
               </TouchableOpacity>
             </View>
           )}
@@ -270,7 +269,9 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
 
         <View style={styles.addressSection}>
           <View style={styles.addressRow}>
-            <View style={[styles.dot, { backgroundColor: "#10B981" }]} />
+            <View
+              style={[styles.dot, { backgroundColor: theme.colors.primary }]}
+            />
             <View style={styles.addressTextContainer}>
               <Text style={styles.addressText} numberOfLines={1}>
                 {rideInfo?.pickupAddress}
@@ -279,7 +280,7 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
           </View>
           <View style={styles.verticalLine} />
           <View style={styles.addressRow}>
-            <View style={[styles.dot, { backgroundColor: "#ef4444" }]} />
+            <View style={[styles.dot, { backgroundColor: theme.colors.red }]} />
             <View style={styles.addressTextContainer}>
               <Text style={styles.addressText} numberOfLines={1}>
                 {rideInfo?.destinationAddress}
@@ -306,7 +307,7 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
                     ? "wallet-outline"
                     : "cash-outline"
                 }
-                size={16}
+                size={ms(16)}
                 color="#475569"
               />
               <Text style={styles.paymentText}>
@@ -323,7 +324,7 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
         {status === "arrived" ? (
           <IRButton
             title="START TRIP"
-            style={{ backgroundColor: "#10B981" }}
+            style={{ backgroundColor: theme.colors.primary }}
             onPress={handleStartTripPress}
             loading={isStarting}
             disabled={isActionLoading}
@@ -359,7 +360,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
         )}
       </View>
 
-      {/* Modals remain inside the SafeAreaView or sibling to it */}
       <Modal
         visible={showCancelModal}
         transparent
@@ -434,7 +434,11 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
             ? "Yes, I've Arrived"
             : "Complete Trip"
         }
-        confirmColor={confirmModal.type === "arrived" ? "#007AFF" : "#10B981"}
+        confirmColor={
+          confirmModal.type === "arrived"
+            ? theme.colors.secondary
+            : theme.colors.primary
+        }
         loading={confirmModal.type === "arrived" ? isArriving : isEnding}
         onConfirm={
           confirmModal.type === "arrived"
@@ -447,168 +451,178 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
   );
 };
 
-// ... (Styles remain unchanged)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    marginBottom: 8,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: s(16),
+    paddingTop: vs(10),
+    marginBottom: vs(8),
   },
   topSection: { flex: 1 },
   center: { justifyContent: "center", alignItems: "center" },
   loadingText: {
-    marginTop: 12,
+    marginTop: vs(12),
     color: "#94a3b8",
-    fontSize: 14,
+    fontSize: ms(14),
     fontWeight: "500",
   },
   passengerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: vs(15),
   },
-  personInfo: { flexDirection: "row", alignItems: "center", gap: 12 },
+  personInfo: { flexDirection: "row", alignItems: "center", gap: s(12) },
   label: {
-    fontSize: 10,
+    fontSize: ms(10),
     fontWeight: "800",
     color: "#94a3b8",
     letterSpacing: 1,
   },
-  passengerName: { fontSize: 20, fontWeight: "700", color: "#1e293b" },
-  ratingRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  passengerName: { fontSize: ms(20), fontWeight: "700", color: "#1e293b" },
+  ratingRow: { flexDirection: "row", alignItems: "center", marginTop: vs(2) },
   ratingText: {
-    fontSize: 14,
+    fontSize: ms(14),
     fontWeight: "700",
-    marginLeft: 4,
+    marginLeft: s(4),
     color: "#1e293b",
   },
-  tripCount: { fontSize: 13, color: "#94a3b8" },
+  tripCount: { fontSize: ms(13), color: "#94a3b8" },
   callButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#10B981",
+    width: s(48),
+    height: s(48),
+    borderRadius: ms(100),
+    backgroundColor: theme.colors.primary,
     justifyContent: "center",
     alignItems: "center",
     elevation: 3,
   },
-  smartToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
+  smartToggle: { flexDirection: "row", alignItems: "center", gap: s(8) },
   onTripBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f1f5f9",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
+    backgroundColor: theme.colors.background,
+    paddingHorizontal: s(10),
+    paddingVertical: vs(6),
+    borderRadius: ms(20),
+    gap: s(6),
   },
   pulseDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#10B981",
+    width: s(8),
+    height: s(8),
+    borderRadius: ms(20),
+    backgroundColor: theme.colors.primary,
   },
   onTripText: {
-    fontSize: 12,
+    fontSize: ms(12),
     fontWeight: "700",
-    color: "#10B981",
+    color: theme.colors.primary,
     textTransform: "uppercase",
   },
-  divider: { height: 1, backgroundColor: "#f1f5f9", marginVertical: 5 },
-  addressSection: { paddingVertical: 2 },
-  addressRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
+  divider: {
+    height: 1,
+    backgroundColor: theme.colors.background,
+    marginVertical: vs(5),
+  },
+  addressSection: { paddingVertical: vs(2) },
+  addressRow: { flexDirection: "row", alignItems: "center", gap: s(12) },
+  dot: { width: s(8), height: s(8), borderRadius: ms(10) },
   verticalLine: {
     width: 1,
-    height: 20,
-    backgroundColor: "#E2E8F0",
-    marginLeft: 3.5,
-    marginVertical: 2,
+    height: vs(20),
+    backgroundColor: theme.colors.background,
+    marginLeft: s(3.5),
+    marginVertical: vs(2),
   },
   addressTextContainer: { flex: 1 },
   addressLabel: {
-    fontSize: 10,
+    fontSize: ms(10),
     fontWeight: "800",
     color: "#94a3b8",
-    marginBottom: 2,
+    marginBottom: vs(2),
   },
-  addressText: { fontSize: 14, color: "#475569", fontWeight: "500" },
+  addressText: { fontSize: ms(14), color: "#475569", fontWeight: "500" },
   earningsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  earningsText: { fontSize: 24, fontWeight: "800", color: "#10B981" },
+  earningsText: {
+    fontSize: ms(24),
+    fontWeight: "800",
+    color: theme.colors.primary,
+  },
   paymentBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: "#f1f5f9",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    gap: s(5),
+    backgroundColor: theme.colors.background,
+    paddingHorizontal: s(10),
+    paddingVertical: vs(5),
+    borderRadius: ms(8),
   },
-  paymentText: { fontSize: 12, fontWeight: "700", color: "#475569" },
-  footer: { paddingBottom: 10, gap: 5 },
+  paymentText: { fontSize: ms(12), fontWeight: "700", color: "#475569" },
+  footer: { paddingBottom: vs(10), gap: vs(5) },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.7)",
     justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 24,
-    paddingBottom: 40,
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: ms(32),
+    borderTopRightRadius: ms(32),
+    padding: s(24),
+    paddingBottom: vs(40),
   },
   modalIndicator: {
-    width: 40,
-    height: 4,
-    backgroundColor: "#e2e8f0",
-    borderRadius: 2,
+    width: s(40),
+    height: vs(4),
+    backgroundColor: theme.colors.background,
+    borderRadius: ms(2),
     alignSelf: "center",
-    marginBottom: 20,
+    marginBottom: vs(20),
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: ms(24),
     fontWeight: "800",
     color: "#1e293b",
-    marginBottom: 4,
+    marginBottom: vs(4),
   },
-  modalSubtitle: { fontSize: 15, color: "#64748b", marginBottom: 20 },
+  modalSubtitle: { fontSize: ms(15), color: "#64748b", marginBottom: vs(20) },
   reasonContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 16,
+    gap: s(8),
+    marginBottom: vs(16),
   },
   reasonChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: "#f1f5f9",
+    paddingHorizontal: s(14),
+    paddingVertical: vs(10),
+    borderRadius: ms(12),
+    backgroundColor: theme.colors.background,
     borderWidth: 1.5,
     borderColor: "transparent",
   },
-  reasonChipActive: { backgroundColor: "#ecfdf5", borderColor: "#10B981" },
-  reasonChipText: { fontSize: 13, fontWeight: "600", color: "#475569" },
-  reasonChipTextActive: { color: "#10B981" },
+  reasonChipActive: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.primary,
+  },
+  reasonChipText: { fontSize: ms(13), fontWeight: "600", color: "#475569" },
+  reasonChipTextActive: { color: theme.colors.primary },
   reasonInput: {
     width: "100%",
-    backgroundColor: "#f8fafc",
+    backgroundColor: theme.colors.background,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 16,
-    padding: 16,
-    minHeight: 80,
+    borderColor: theme.colors.border,
+    borderRadius: ms(16),
+    padding: s(16),
+    minHeight: vs(80),
     textAlignVertical: "top",
-    marginBottom: 24,
+    marginBottom: vs(24),
   },
-  modalActions: { width: "100%", gap: 12 },
+  modalActions: { width: "100%", gap: vs(12) },
 });
 
 export default DriverTripTab;

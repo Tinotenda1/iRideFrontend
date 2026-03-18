@@ -1,5 +1,7 @@
+// app/passenger/components/DriverMap.tsx
 import { useRideBooking } from "@/app/context/RideBookingContext";
 import { theme } from "@/constants/theme";
+import { ms, s, vs } from "@/utils/responsive"; // Using your utility
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import polyline from "@mapbox/polyline";
 import React, {
@@ -37,7 +39,6 @@ interface Props {
   isOnline: boolean;
 }
 
-// Helper to find the index of the coordinate closest to the driver
 const findClosestIndex = (
   coords: { latitude: number; longitude: number }[],
   driverLoc: { latitude: number; longitude: number },
@@ -82,7 +83,6 @@ const DriverMap: React.FC<Props> = ({
   const { rideData } = useRideBooking();
   const hasFitted = useRef(false);
   const lastCameraUpdate = useRef(0);
-  const lastAutoCenter = useRef(0);
   const markerRef = useRef<React.ComponentRef<typeof MarkerAnimated> | null>(
     null,
   );
@@ -103,26 +103,21 @@ const DriverMap: React.FC<Props> = ({
     longitude: userRegion.longitude,
   });
 
-  useEffect(() => {
-    const now = Date.now();
-    if (now - lastAutoCenter.current > 800) {
-      lastAutoCenter.current = now;
-      setTimeout(() => {
-        onRecenter();
-      }, 200);
-    }
-  }, [rideData?.status, trayPadding, onRecenter]);
+  // FIXED: Removed the 800ms auto-center loop that was causing the "jumping"
+  // The camera is now driven solely by the driver location watcher below.
 
   useEffect(() => {
     const cleanup = watchDriverLocation(
       (location) => {
+        // 1. Smoothly animate the marker
         markerRef.current?.animateMarkerToCoordinate(
           {
             latitude: location.latitude,
             longitude: location.longitude,
           },
-          3000,
+          1000,
         );
+
         animatedLocation.setValue({
           latitude: location.latitude,
           longitude: location.longitude,
@@ -137,12 +132,14 @@ const DriverMap: React.FC<Props> = ({
           longitude: location.longitude,
         });
 
-        const speed = location.speed ?? 0;
-        let targetZoom = speed > 20 ? 15 : speed > 10 ? 17 : 18;
-
         const now = Date.now();
-        if (now - lastCameraUpdate.current > 1200) {
+        // 2. FIXED: Smooth Camera Follow logic
+        // We only auto-follow if the user hasn't panned away (showRecenter is false)
+        if (!showRecenter && now - lastCameraUpdate.current > 2500) {
           lastCameraUpdate.current = now;
+
+          const speed = location.speed ?? 0;
+          let targetZoom = speed > 20 ? 15 : speed > 10 ? 17 : 18;
 
           mapRef.current?.animateCamera(
             {
@@ -158,7 +155,7 @@ const DriverMap: React.FC<Props> = ({
                 : 0,
               zoom: targetZoom,
             },
-            { duration: 1500 },
+            { duration: 2000 },
           );
         }
       },
@@ -166,7 +163,7 @@ const DriverMap: React.FC<Props> = ({
     );
 
     return () => cleanup();
-  }, [animatedLocation, rideData?.status]);
+  }, [animatedLocation, rideData?.status, showRecenter]);
 
   const pickupCoord = useMemo(() => {
     if (rideData?.activeTrip?.ride?.pickup) {
@@ -200,7 +197,6 @@ const DriverMap: React.FC<Props> = ({
     return [];
   }, [rideData?.activeTrip?.navigation?.polyline]);
 
-  // 2. TRAVELED PATH LOGIC: Grays out the route behind the driver
   const traveledCoordinates = useMemo(() => {
     if (routeCoordinates.length === 0) return [];
     const index = findClosestIndex(routeCoordinates, driverMetadata);
@@ -247,7 +243,12 @@ const DriverMap: React.FC<Props> = ({
     ) {
       hasFitted.current = true;
       mapRef.current?.fitToCoordinates(routeCoordinates, {
-        edgePadding: { top: 120, right: 60, bottom: 200, left: 60 },
+        edgePadding: {
+          top: vs(120),
+          right: s(60),
+          bottom: vs(250),
+          left: s(60),
+        },
         animated: true,
       });
       setTimeout(syncTooltips, 500);
@@ -282,7 +283,12 @@ const DriverMap: React.FC<Props> = ({
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
-        mapPadding={{ top: 60, right: 0, bottom: trayPadding, left: 0 }}
+        mapPadding={{
+          top: vs(60),
+          right: 0,
+          bottom: trayPadding,
+          left: 0,
+        }}
         initialRegion={userRegion}
         showsUserLocation={false}
         showsMyLocationButton={false}
@@ -293,22 +299,20 @@ const DriverMap: React.FC<Props> = ({
         pitchEnabled={true}
         rotateEnabled={true}
       >
-        {/* Traveled Path (Gray) */}
         {traveledCoordinates.length > 1 && (
           <Polyline
             coordinates={traveledCoordinates}
             strokeColor="#A0A0A0"
-            strokeWidth={8}
+            strokeWidth={s(8)}
             zIndex={2}
           />
         )}
 
-        {/* Remaining Route (Blue) */}
         {["matched", "arrived", "on_trip"].includes(rideData?.status || "") &&
           routeCoordinates.length > 0 && (
             <Polyline
               coordinates={routeCoordinates}
-              strokeWidth={8}
+              strokeWidth={s(8)}
               strokeColor={theme.colors.secondary}
               zIndex={1}
             />
@@ -325,7 +329,7 @@ const DriverMap: React.FC<Props> = ({
           <View style={styles.markerContainer}>
             <MaterialCommunityIcons
               name="navigation"
-              size={25}
+              size={ms(25)}
               color={theme.colors.primary}
             />
           </View>
@@ -335,7 +339,7 @@ const DriverMap: React.FC<Props> = ({
       <View
         style={[
           styles.radarLayer,
-          { top: 60, bottom: trayPadding, opacity: showRadar ? 1 : 0 },
+          { top: vs(60), bottom: trayPadding, opacity: showRadar ? 1 : 0 },
         ]}
         pointerEvents="none"
       >
@@ -356,8 +360,8 @@ const DriverMap: React.FC<Props> = ({
             style={[
               styles.dotPickup,
               {
-                left: tooltipPositions.pickup!.x - 7,
-                top: tooltipPositions.pickup!.y - 7,
+                left: tooltipPositions.pickup!.x - s(7),
+                top: tooltipPositions.pickup!.y - vs(7),
               },
             ]}
           />
@@ -365,8 +369,8 @@ const DriverMap: React.FC<Props> = ({
             style={[
               styles.dotDropoff,
               {
-                left: tooltipPositions.dropoff!.x - 7,
-                top: tooltipPositions.dropoff!.y - 7,
+                left: tooltipPositions.dropoff!.x - s(7),
+                top: tooltipPositions.dropoff!.y - vs(7),
               },
             ]}
           />
@@ -386,15 +390,7 @@ const DriverMap: React.FC<Props> = ({
                 { backgroundColor: theme.colors.primary },
               ]}
             >
-              <Text
-                style={{
-                  fontSize: 18,
-                  fontWeight: "700",
-                  color: "#fff",
-                }}
-              >
-                Pickup
-              </Text>
+              <Text style={styles.tooltipText}>Pickup</Text>
             </View>
           </View>
 
@@ -413,15 +409,7 @@ const DriverMap: React.FC<Props> = ({
                 { backgroundColor: theme.colors.red },
               ]}
             >
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontWeight: "700",
-                  color: "#fff",
-                }}
-              >
-                Dropoff
-              </Text>
+              <Text style={styles.tooltipText}>Dropoff</Text>
             </View>
           </View>
         </>
@@ -433,7 +421,7 @@ const DriverMap: React.FC<Props> = ({
         destination={dropoffCoord}
         style={{
           position: "absolute",
-          bottom: trayPadding + 10,
+          bottom: trayPadding + vs(10),
           alignSelf: "center",
           zIndex: 50,
         }}
@@ -441,10 +429,14 @@ const DriverMap: React.FC<Props> = ({
 
       {showRecenter && (
         <TouchableOpacity
-          style={[styles.recenterButton, { bottom: trayPadding }]}
+          style={[styles.recenterButton, { bottom: trayPadding + vs(10) }]}
           onPress={onRecenter}
         >
-          <Ionicons name="navigate" size={28} color={theme.colors.secondary} />
+          <Ionicons
+            name="navigate"
+            size={ms(28)}
+            color={theme.colors.secondary}
+          />
         </TouchableOpacity>
       )}
     </>
@@ -461,26 +453,27 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   pulseCircle: {
-    width: 250,
-    height: 250,
-    borderRadius: 125,
+    width: s(250),
+    height: s(250),
+    borderRadius: ms(300),
     backgroundColor: theme.colors.primary + "15",
-    borderWidth: 2,
+    borderWidth: s(2),
     borderColor: theme.colors.primary + "40",
   },
   pulseCircleOuter: {
     position: "absolute",
-    width: 320,
-    height: 320,
-    borderRadius: 160,
+    width: s(320),
+    height: s(320),
+    borderRadius: ms(300),
     backgroundColor: "transparent",
-    borderWidth: 1,
+    borderWidth: s(1),
     borderColor: theme.colors.primary + "10",
   },
   recenterButton: {
     position: "absolute",
-    right: 16,
-    marginBottom: 10,
+    right: s(16),
+    width: s(50),
+    height: s(50),
     justifyContent: "center",
     alignItems: "center",
     elevation: 8,
@@ -488,21 +481,21 @@ const styles = StyleSheet.create({
   },
   dotPickup: {
     position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 50,
+    width: s(14),
+    height: s(14),
+    borderRadius: ms(20),
     backgroundColor: theme.colors.primary,
-    borderWidth: 1,
+    borderWidth: s(2),
     borderColor: "#ffffff",
     zIndex: 20,
   },
   dotDropoff: {
     position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 50,
+    width: s(14),
+    height: s(14),
+    borderRadius: ms(20),
     backgroundColor: theme.colors.red,
-    borderWidth: 1,
+    borderWidth: s(2),
     borderColor: "#ffffff",
     zIndex: 20,
   },
@@ -514,10 +507,10 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   tooltipHead: {
-    width: 60,
-    height: 60,
-    borderWidth: 1,
-    borderRadius: 50,
+    width: s(70),
+    height: s(35),
+    borderWidth: s(1.5),
+    borderRadius: ms(20),
     borderColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
@@ -526,22 +519,27 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3,
-    padding: 4,
-    marginBottom: 12,
+    padding: s(4),
+    marginBottom: vs(15),
+  },
+  tooltipText: {
+    fontSize: ms(12),
+    fontWeight: "700",
+    color: "#fff",
   },
   markerContainer: {
     position: "absolute",
     alignItems: "center",
-    borderWidth: 2,
+    borderWidth: s(2),
     borderColor: theme.colors.primary,
-    borderRadius: 50,
+    borderRadius: ms(50),
     backgroundColor: "#fff",
     elevation: 4,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
-    padding: 2,
+    padding: s(2),
   },
 });
 

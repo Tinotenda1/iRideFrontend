@@ -1,6 +1,7 @@
 // app/passenger/components/DriverOfferFareControl.tsx
 import { theme } from "@/constants/theme";
-import * as Haptics from "expo-haptics"; // 1. Import Haptics
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
+import * as Haptics from "expo-haptics";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -30,10 +31,9 @@ export const OfferFareControl = ({
   }, [offer]);
 
   const decreaseOffer = () => {
-    // Trigger haptic even if at limit
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    if (offer <= minOffer) return; // Prevent state update but feedback given
+    if (offer <= minOffer) return;
 
     setOffer((prev) => {
       const nextValue = prev - STEP;
@@ -44,10 +44,9 @@ export const OfferFareControl = ({
   };
 
   const increaseOffer = () => {
-    // Trigger haptic even if at limit
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    if (offer >= maxOffer) return; // Prevent state update but feedback given
+    if (offer >= maxOffer) return;
 
     setOffer((prev) => {
       const nextValue = prev + STEP;
@@ -66,7 +65,6 @@ export const OfferFareControl = ({
             offer <= minOffer && styles.disabledOpacity,
           ]}
           onPress={decreaseOffer}
-          // disabled={offer <= minOffer} <-- Removed to allow haptics at the limit
           activeOpacity={0.6}
         >
           <Text style={styles.adjustText}>−</Text>
@@ -83,7 +81,6 @@ export const OfferFareControl = ({
             offer >= maxOffer && styles.disabledOpacity,
           ]}
           onPress={increaseOffer}
-          // disabled={offer >= maxOffer} <-- Removed to allow haptics at the limit
           activeOpacity={0.6}
         >
           <Text style={styles.adjustText}>+</Text>
@@ -100,21 +97,21 @@ const styles = StyleSheet.create({
   boltPill: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 30,
-    paddingHorizontal: 8,
+    borderRadius: ms(30),
+    paddingHorizontal: s(8),
     width: "80%",
     justifyContent: "space-between",
   },
   adjustBtn: {
-    width: 68,
-    height: 48,
+    width: s(68),
+    height: vs(48),
     backgroundColor: theme.colors.background,
-    borderRadius: 30,
+    borderRadius: ms(30),
     alignItems: "center",
     justifyContent: "center",
   },
   adjustText: {
-    fontSize: 24,
+    fontSize: ms(24),
     fontWeight: "400",
     color: "#0f172a",
   },
@@ -127,14 +124,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   currencySymbol: {
-    fontSize: 18,
+    fontSize: ms(18),
     fontWeight: "600",
     color: "#0f172a",
-    marginRight: 2,
-    marginTop: 2,
+    marginRight: s(2),
+    marginTop: vs(2),
   },
   offerValue: {
-    fontSize: 26,
+    fontSize: ms(26),
     fontWeight: "700",
     color: "#0f172a",
     fontVariant: ["tabular-nums"],

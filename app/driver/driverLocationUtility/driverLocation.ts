@@ -15,6 +15,44 @@ export type DriverLocation = {
   altitude?: number; // Altitude in meters (optional)
 };
 
+// Constants for logic
+const MIN_ACCURACY = 20; // Meters
+const UI_ACCURACY_THRESHOLD = 100; // Looser for UI to prevent freezing
+const MOVEMENT_THRESHOLD = 0.00002; // Approx 2 meters in lat/lng
+
+// Internal tracking variables
+let lastLat: number | null = null;
+let lastLon: number | null = null;
+let lastKnownHeading = 0;
+let lastLocationSentAt = 0;
+let watchId: Location.LocationSubscription | null = null;
+
+const watchOptions: Location.LocationOptions = {
+  accuracy: Location.Accuracy.BestForNavigation,
+  timeInterval: 1000,
+  distanceInterval: 1, // Update every meter
+};
+
+// Bearing formula: calculates angle between two points
+const calculateBearing = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+) => {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const toDeg = (rad: number) => (rad * 180) / Math.PI;
+
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+
+  const brng = toDeg(Math.atan2(y, x));
+  return (brng + 360) % 360;
+};
+
 /**
  * Location request configuration
  */
@@ -199,72 +237,65 @@ export const getDriverLocation = async (): Promise<LocationResult> => {
  */
 export const watchDriverLocation = (
   callback: (location: DriverLocation) => void,
-  errorCallback?: (error: LocationError) => void,
-): (() => void) => {
-  const watchOptions = {
-    accuracy: Location.Accuracy.BestForNavigation,
-    distanceInterval: 1, // every 1 meter
-    timeInterval: 500, // every 0.5 second
-    mayShowUserSettingsDialog: true,
-  };
-
-  let watchId: Location.LocationSubscription | null = null;
-  let lastLocationSentAt = 0;
-  let lastKnownHeading = 0;
-
-  const MIN_ACCURACY = 20; // meters
-  const MIN_SPEED_FOR_HEADING = 0.5; // m/s, below this consider stationary
-
+  errorCallback?: (error: string) => void,
+) => {
   const startWatching = async () => {
     try {
-      // 1. Check permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         errorCallback?.("PERMISSION_DENIED");
         return;
       }
 
-      // 2. Start watching with high-accuracy navigation options
       watchId = await Location.watchPositionAsync(watchOptions, (loc) => {
         const { coords, timestamp } = loc;
 
-        // --- LOGIC GATE: UI vs SERVER ---
-        // We allow a looser accuracy for the UI (e.g., 100m) so the marker doesn't "freeze"
-        // but keep MIN_ACCURACY strict for the backend updates.
-        const UI_ACCURACY_THRESHOLD = 100;
+        // 1. Filter out poor GPS data
         if (coords.accuracy == null || coords.accuracy > UI_ACCURACY_THRESHOLD)
           return;
 
-        // 3. Speed-based heading stabilization
-        if (coords.speed != null && coords.heading != null) {
-          if (coords.speed >= MIN_SPEED_FOR_HEADING) {
-            // INITIAL FIX: If this is our first heading, don't smooth it (prevents slow spinning at start)
-            if (lastKnownHeading === 0) {
-              lastKnownHeading = coords.heading;
-            } else {
-              // Smooth heading change
-              const delta = coords.heading - lastKnownHeading;
-              const normalizedDelta = ((delta + 180) % 360) - 180;
-              lastKnownHeading =
-                (lastKnownHeading + normalizedDelta * 0.3 + 360) % 360;
-            }
+        // 2. Vector-based Heading Logic (Movement only)
+        if (lastLat !== null && lastLon !== null) {
+          const distanceMoved = Math.sqrt(
+            Math.pow(coords.latitude - lastLat, 2) +
+              Math.pow(coords.longitude - lastLon, 2),
+          );
+
+          // Only calculate new heading if the driver has actually moved
+          if (distanceMoved > MOVEMENT_THRESHOLD) {
+            const newBearing = calculateBearing(
+              lastLat,
+              lastLon,
+              coords.latitude,
+              coords.longitude,
+            );
+
+            // Smooth the rotation (LERP)
+            // 0.4 means 40% of the new angle is applied each update
+            const delta = newBearing - lastKnownHeading;
+            const normalizedDelta = ((delta + 180) % 360) - 180;
+            lastKnownHeading =
+              (lastKnownHeading + normalizedDelta * 0.4 + 360) % 360;
           }
         }
+
+        // Update history
+        lastLat = coords.latitude;
+        lastLon = coords.longitude;
 
         const formatted: DriverLocation = {
           latitude: coords.latitude,
           longitude: coords.longitude,
           heading: lastKnownHeading,
           accuracy: coords.accuracy,
-          speed: coords.speed ?? 0,
+          speed: coords.speed,
           timestamp,
         };
 
-        // 4. UPDATE UI IMMEDIATELY
-        // This ensures the marker moves on the map regardless of status
+        // 3. Update UI (Map Marker)
         callback(formatted);
 
-        // 5. THROTTLED BACKEND UPDATES
+        // 4. Update Server (Throttled)
         const now = Date.now();
         const isAccurateEnoughForServer = coords.accuracy <= MIN_ACCURACY;
 
@@ -277,7 +308,7 @@ export const watchDriverLocation = (
         }
       });
     } catch (err) {
-      console.error("Failed to watch location:", err);
+      console.error("Location Watch Error:", err);
       errorCallback?.("UNKNOWN_ERROR");
     }
   };

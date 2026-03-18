@@ -1,13 +1,15 @@
 // app/passenger/components/PassengerOfferFareControl.tsx
 import { theme } from "@/constants/theme";
-import * as Haptics from "expo-haptics"; // 1. Import Haptics
-import { useEffect, useState } from "react";
+import { ms, s, vs } from "@/utils/responsive"; // Imported your utility
+import * as Haptics from "expo-haptics";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface OfferFareControlProps {
   minOffer: number;
   maxOffer: number;
   initialOffer: number;
+  recommendedOffer: number;
   onOfferChange: (offer: number) => void;
 }
 
@@ -17,12 +19,19 @@ export const OfferFareControl = ({
   minOffer,
   maxOffer,
   initialOffer,
+  recommendedOffer,
   onOfferChange,
 }: OfferFareControlProps) => {
   const [offer, setOffer] = useState(initialOffer);
 
+  // Use a ref to capture the very first initialOffer received and keep it static
+  const recommendedFare = useRef(initialOffer);
+
   useEffect(() => {
     setOffer(initialOffer);
+    // This ensures if the component is re-mounted with a new trip,
+    // the recommendation resets once to that specific trip's starting price.
+    recommendedFare.current = initialOffer;
   }, [initialOffer]);
 
   useEffect(() => {
@@ -30,10 +39,8 @@ export const OfferFareControl = ({
   }, [offer]);
 
   const decreaseOffer = () => {
-    // Trigger haptic even if at limit
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    if (offer <= minOffer) return; // Prevent state update but feedback given
+    if (offer <= minOffer) return;
 
     setOffer((prev) => {
       const nextValue = prev - STEP;
@@ -44,10 +51,8 @@ export const OfferFareControl = ({
   };
 
   const increaseOffer = () => {
-    // Trigger haptic even if at limit
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    if (offer >= maxOffer) return; // Prevent state update but feedback given
+    if (offer >= maxOffer) return;
 
     setOffer((prev) => {
       const nextValue = prev + STEP;
@@ -66,15 +71,23 @@ export const OfferFareControl = ({
             offer <= minOffer && styles.disabledOpacity,
           ]}
           onPress={decreaseOffer}
-          // disabled={offer <= minOffer} <-- Removed to allow haptics at the limit
           activeOpacity={0.6}
         >
           <Text style={styles.adjustText}>−</Text>
         </TouchableOpacity>
 
         <View style={styles.offerDisplay}>
-          <Text style={styles.currencySymbol}>$</Text>
-          <Text style={styles.offerValue}>{offer.toFixed(2)}</Text>
+          <View style={{ alignItems: "center" }}>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Text style={styles.currencySymbol}>$</Text>
+              <Text style={styles.offerValue}>{offer.toFixed(2)}</Text>
+            </View>
+
+            {/* Static recommendation display */}
+            <Text style={styles.recommendedText}>
+              Recommended ${recommendedOffer.toFixed(2)}
+            </Text>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -83,7 +96,6 @@ export const OfferFareControl = ({
             offer >= maxOffer && styles.disabledOpacity,
           ]}
           onPress={increaseOffer}
-          // disabled={offer >= maxOffer} <-- Removed to allow haptics at the limit
           activeOpacity={0.6}
         >
           <Text style={styles.adjustText}>+</Text>
@@ -100,21 +112,27 @@ const styles = StyleSheet.create({
   boltPill: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 30,
-    paddingHorizontal: 8,
-    width: "80%",
+    borderRadius: ms(30),
+    paddingHorizontal: s(8),
+    width: "85%", // Percentage is fine for main width
     justifyContent: "space-between",
   },
   adjustBtn: {
-    width: 68,
-    height: 48,
+    width: s(68),
+    height: vs(48),
     backgroundColor: theme.colors.background,
-    borderRadius: 30,
+    borderRadius: ms(30),
     alignItems: "center",
     justifyContent: "center",
+    // Adding a subtle shadow for that premium depth
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   adjustText: {
-    fontSize: 24,
+    fontSize: ms(24),
     fontWeight: "400",
     color: "#0f172a",
   },
@@ -125,18 +143,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    minWidth: s(120), // Ensure it doesn't jump when numbers change
   },
   currencySymbol: {
-    fontSize: 18,
+    fontSize: ms(18),
     fontWeight: "600",
     color: "#0f172a",
-    marginRight: 2,
-    marginTop: 2,
+    marginRight: s(2),
+    marginTop: vs(2),
   },
   offerValue: {
-    fontSize: 26,
+    fontSize: ms(28),
     fontWeight: "700",
     color: "#0f172a",
     fontVariant: ["tabular-nums"],
+  },
+  recommendedText: {
+    fontSize: ms(11),
+    color: "#64748b",
+    marginTop: vs(-2),
+    fontWeight: "500",
   },
 });

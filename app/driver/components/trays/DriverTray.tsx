@@ -35,6 +35,7 @@ import {
 } from "../../socketConnectionUtility/driverSocketService";
 
 import { theme } from "@/constants/theme";
+import { ms, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { getUserInfo } from "@/utils/storage";
 import TripStatusModal, {
   ModalType,
@@ -55,10 +56,11 @@ type DriverStatus = "welcome" | "online" | "active";
 
 const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
 
-const HEIGHT_WELCOME = windowHeight * 0.35;
-const HEIGHT_ONLINE = windowHeight * 0.3;
-const HEIGHT_ACTIVE_COMPACT = windowHeight * 0.24;
-const HEIGHT_ACTIVE_EXPANDED = windowHeight * 0.38;
+// Applied vertical scaling to height constants
+const HEIGHT_WELCOME = vs(windowHeight * 0.35);
+const HEIGHT_ONLINE = vs(windowHeight * 0.3);
+const HEIGHT_ACTIVE_COMPACT = vs(windowHeight * 0.24);
+const HEIGHT_ACTIVE_EXPANDED = vs(windowHeight * 0.38);
 
 if (
   Platform.OS === "android" &&
@@ -75,19 +77,19 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
     const { rideData, updateRideData } = useRideBooking();
 
     const [ratingVisible, setRatingVisible] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false); // ✅ Added loading state
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const heightAnim = useRef(new Animated.Value(0)).current;
     const translateY = useRef(new Animated.Value(windowHeight)).current;
     const transitionAnim = useRef(new Animated.Value(0)).current;
     const [isEndingTrip, setIsEndingTrip] = useState(false);
     const [statusModal, setStatusModal] = useState<{
       visible: boolean;
-      type: ModalType; // Use the specific union type here
+      type: ModalType;
       message: string;
       title: string;
     }>({
       visible: false,
-      type: "cancellation", // Default to a valid ModalType
+      type: "cancellation",
       message: "",
       title: "",
     });
@@ -177,8 +179,6 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
 
     /* ---------------- State Resumption ---------------- */
     useEffect(() => {
-      // Check if we have an active trip but the tray is not in "active" status
-      // This handles the resumption when checkExistingState finishes
       if (
         (rideData.status === "matched" ||
           rideData.status === "arrived" ||
@@ -186,7 +186,6 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         rideData.activeTrip &&
         status !== "active"
       ) {
-        // If it's a fresh resumption, we might want it expanded to show the passenger
         const shouldExpand =
           rideData.status === "matched" || rideData.status === "arrived";
         handleTransition("active", shouldExpand);
@@ -213,25 +212,21 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
             `Drift - Cancelled`,
             `Drift for ${rideData.activeTrip.passengerName || "a passenger"} has been cancelled.`,
             {
-              sound: "ride_cancel.wav", // custom cancel sound
-              color: theme.colors.errorNotification, // red or alert color
+              sound: "ride_cancel.wav",
+              color: theme.colors.errorNotification,
             },
           );
         }
-        // 1. Reset Global Ride Context
         updateRideData({
           status: "idle",
           activeTrip: null,
           requests: [],
         });
 
-        // 2. Clear local tray/dashboard states via the callback
         onMatch?.();
 
-        // 3. Move Tray back to Online radar
         handleTransition("online");
 
-        // 4. Show the Cancellation Modal
         setStatusModal({
           visible: true,
           type: "cancellation",
@@ -246,8 +241,6 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
 
     const handleTripEndedByPassenger = useCallback(
       (data: { message: string }) => {
-        // 1. Move UI back to online/idle state
-        // We keep activeTrip data so the RatingModal can access passenger info
         updateRideData({ status: "on_rating" });
 
         handleTransition("online");
@@ -262,23 +255,12 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
             },
           );
         }
-
-        /*// 2. Show the "Completion" Modal
-        setStatusModal({
-          visible: true,
-          type: "completion",
-          title: "Trip Finished",
-          message:
-            data.message ||
-            "The passenger ended the trip. Please rate your experience.",
-        });*/
       },
       [updateRideData, handleTransition],
     );
 
     /* ---------------- Socket Listeners ---------------- */
     useEffect(() => {
-      // Listen for Completion (Passenger clicked "Drop me here")
       const unsubscribeComplete = onRideCompletedByPassenger((data) => {
         handleTripEndedByPassenger(data);
       });
@@ -295,21 +277,18 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         const rideId = matchedData.rideId;
         const details = matchedData.tripDetails;
 
-        // Update ride state/UI
         updateRideData({
           requests: [],
           activeTrip: { ...details, rideId },
           status: "matched",
         });
 
-        // Trigger optional callback
         onMatch?.();
 
-        // Show notification if app is in background
         if (AppState.currentState !== "active") {
           const ride = details.ride;
           const pickupAddress = ride?.pickupAddress || "Unknown";
-          const tripDistance = ride?.tripDistance?.toFixed(1) ?? "N/A"; // km
+          const tripDistance = ride?.tripDistance?.toFixed(1) ?? "N/A";
           const offerAmount = details.offer?.toFixed(2) || "N/A";
           const passengerName = details.passenger?.name || "a passenger";
 
@@ -320,8 +299,8 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
               `Trip Distance: ${tripDistance} km\n` +
               `Fare: $${offerAmount}`,
             {
-              sound: "ride_matched.wav", // custom match sound
-              color: theme.colors.successNotification, // green
+              sound: "ride_matched.wav",
+              color: theme.colors.successNotification,
             },
           );
         }
@@ -376,7 +355,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
             activeTrip: null,
             requests: [],
           });
-          onMatch?.(); // Clear dashboard states
+          onMatch?.();
           handleTransition("online");
         }
         return data.success;
@@ -424,13 +403,8 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
 
       try {
         setIsEndingTrip(true);
-
-        // Small delay for smooth UX
         await new Promise((r) => setTimeout(r, 300));
 
-        /* ============================
-        Retry Loop
-    ============================ */
         while (attempt < MAX_RETRIES && !success) {
           attempt++;
 
@@ -458,9 +432,6 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
               throw new Error("Server rejected request");
             }
 
-            /* ============================
-            Success
-        ============================ */
             console.log("✅ Trip ended by driver");
 
             updateRideData({ status: "on_rating" });
@@ -473,15 +444,11 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
             console.error(`❌ End trip failed (Attempt ${attempt})`, err);
 
             if (attempt < MAX_RETRIES) {
-              // Small pause before retry
               await new Promise((r) => setTimeout(r, 700));
             }
           }
         }
 
-        /* ============================
-        Final Failure (No Auto Retry)
-    ============================ */
         Alert.alert(
           "Connection Problem",
           "We could not end the trip. Please check your internet connection and try again, or ask the passenger to end the trip from their app.",
@@ -503,7 +470,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         return;
       }
 
-      setIsSubmitting(true); // ✅ Implementation of loading state
+      setIsSubmitting(true);
 
       try {
         const success = await submitUserRating(
@@ -515,17 +482,14 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         );
 
         if (!success) {
-          // ✅ SAFEGUARD: Alert user and STOP execution
           Alert.alert(
             "Rating Failed",
             "We couldn't submit your rating for the passenger. Please try again.",
             [{ text: "OK" }],
           );
-          // We don't clear the activeTrip or close modal, allowing a retry
           return;
         }
 
-        // ✅ Success: Cleanup and reset
         updateRideData({
           activeTrip: null,
           status: "idle",
@@ -666,9 +630,9 @@ const styles = createStyles({
     zIndex: 100,
     backgroundColor: "#FFFFFF",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: { width: 0, height: vs(-4) },
     shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowRadius: ms(12),
     elevation: 24,
     overflow: "hidden",
   },

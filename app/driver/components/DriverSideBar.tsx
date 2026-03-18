@@ -1,4 +1,5 @@
 // app/driver/components/DriverSideBar.tsx
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
@@ -25,11 +26,13 @@ interface SidebarProps {
   userImage?: string;
 }
 
+const SIDEBAR_WIDTH = s(300); // Responsive width
+
 export default React.forwardRef(function Sidebar(
   { userType, userName, userRating = 4.8, userImage }: SidebarProps,
   ref,
 ) {
-  const slideAnim = React.useRef(new Animated.Value(-300)).current;
+  const slideAnim = React.useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const overlayOpacity = React.useRef(new Animated.Value(0)).current;
   const [isOpen, setIsOpen] = React.useState(false);
   const router = useRouter();
@@ -57,7 +60,7 @@ export default React.forwardRef(function Sidebar(
     } else {
       Animated.parallel([
         Animated.spring(slideAnim, {
-          toValue: -300,
+          toValue: -SIDEBAR_WIDTH,
           useNativeDriver: true,
           tension: 60,
           friction: 10,
@@ -88,10 +91,6 @@ export default React.forwardRef(function Sidebar(
     { label: "Settings", screen: "/settings", icon: "settings" as const },
   ];
 
-  /**
-   * Ensure driver socket is fully disconnected
-   * before role switching or logout
-   */
   const safelyDisconnectDriver = () => {
     console.log("🔌 Sidebar: disconnecting driver socket");
     disconnectDriver();
@@ -135,7 +134,7 @@ export default React.forwardRef(function Sidebar(
               >
                 <Ionicons
                   name="chevron-back"
-                  size={24}
+                  size={ms(24)}
                   color={theme.colors.textSecondary}
                 />
               </TouchableOpacity>
@@ -157,14 +156,14 @@ export default React.forwardRef(function Sidebar(
               >
                 <Ionicons
                   name={item.icon}
-                  size={20}
+                  size={ms(20)}
                   color={theme.colors.textSecondary}
                   style={styles.menuIcon}
                 />
                 <Text style={styles.menuText}>{item.label}</Text>
                 <Ionicons
                   name="chevron-forward"
-                  size={16}
+                  size={ms(16)}
                   color={theme.colors.border}
                 />
               </TouchableOpacity>
@@ -194,13 +193,15 @@ export default React.forwardRef(function Sidebar(
                 } as never);
               }}
             />
-            <TouchableOpacity
-              onPress={() => {
-                safelyDisconnectDriver();
-              }}
-            >
-              <LogoutButton />
-            </TouchableOpacity>
+            <View style={{ marginTop: vs(12) }}>
+              <TouchableOpacity
+                onPress={() => {
+                  safelyDisconnectDriver();
+                }}
+              >
+                <LogoutButton />
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.appInfo}>
               <Text style={styles.versionText}>iRide v1.0.0</Text>
@@ -229,19 +230,22 @@ const styles = createStyles({
     position: "absolute",
     top: 0,
     left: 0,
-    width: 300,
+    width: SIDEBAR_WIDTH,
     height: "100%",
     backgroundColor: theme.colors.background,
     zIndex: 99999,
-    elevation: 99999, // only one elevation now
+    elevation: 99999,
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
-    shadowRadius: 10,
+    shadowRadius: ms(10),
     borderTopRightRadius: theme.borderRadius.xl,
     borderBottomRightRadius: theme.borderRadius.xl,
   },
   safeArea: { flex: 1 },
-  header: { padding: theme.spacing.lg, backgroundColor: theme.colors.surface },
+  header: {
+    padding: ms(theme.spacing.lg),
+    backgroundColor: theme.colors.surface,
+  },
   headerContent: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -249,36 +253,39 @@ const styles = createStyles({
   },
   userInfo: { flexDirection: "row", alignItems: "center", flex: 1 },
   closeButton: {
-    padding: theme.spacing.xs,
-    marginLeft: theme.spacing.sm,
+    padding: ms(theme.spacing.xs),
+    marginLeft: s(theme.spacing.sm),
     borderRadius: theme.borderRadius.sm,
   },
   menuScroll: { flex: 1, backgroundColor: theme.colors.surface },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    paddingHorizontal: s(theme.spacing.lg),
+    paddingVertical: vs(theme.spacing.md),
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
-  menuIcon: { marginRight: theme.spacing.md, width: 24 },
+  menuIcon: { marginRight: s(theme.spacing.md), width: s(24) },
   menuText: {
     ...typedTypography.body,
+    fontSize: ms(16),
     color: theme.colors.text,
     flex: 1,
     fontWeight: "500",
   },
-  footerContent: { padding: theme.spacing.lg },
-  appInfo: { alignItems: "center", marginTop: theme.spacing.lg },
+  footerContent: { padding: ms(theme.spacing.lg) },
+  appInfo: { alignItems: "center", marginTop: vs(theme.spacing.lg) },
   versionText: {
     ...typedTypography.caption,
+    fontSize: ms(12),
     color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.xs,
+    marginBottom: vs(theme.spacing.xs),
     fontWeight: "500",
   },
   websiteText: {
     ...typedTypography.caption,
+    fontSize: ms(12),
     color: theme.colors.textSecondary,
     fontWeight: "500",
   },

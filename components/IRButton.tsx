@@ -1,4 +1,5 @@
 // components/IRButton.tsx
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import React from "react";
 import {
   ActivityIndicator,
@@ -23,7 +24,7 @@ interface IRButtonProps {
   style?: ViewStyle;
   textStyle?: TextStyle;
   loadingColor?: string;
-  borderColor?: string; // ✅ Added to match custom outlines
+  borderColor?: string;
 }
 
 export function IRButton({
@@ -67,10 +68,9 @@ export function IRButton({
     }
   };
 
-  // Content Color Logic
   const getDefaultContentColor = () => {
     if (variant === "outline") return theme.colors.primary;
-    if (variant === "ghost") return "#FF3B30"; // Matches the Red text in your CancelButton
+    if (variant === "ghost") return "#FF3B30";
     if (variant === "danger") return "#fff";
     return "#fff";
   };
@@ -102,8 +102,8 @@ export function IRButton({
               { color: contentColor },
               textStyle,
               {
-                marginLeft: leftIcon ? 8 : 0,
-                marginRight: rightIcon ? 8 : 0,
+                marginLeft: leftIcon ? s(8) : 0,
+                marginRight: rightIcon ? s(8) : 0,
               },
             ]}
           >
@@ -118,24 +118,22 @@ export function IRButton({
 
 const styles = StyleSheet.create({
   base: {
-    // ⬛ SHAPE UPDATE: Matches the 12px radius of the CancelButton
-    borderRadius: 200,
+    borderRadius: ms(200), // Scaled border radius
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
   },
   small: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: vs(10),
+    paddingHorizontal: s(16),
   },
   medium: {
-    // 📏 HEIGHT UPDATE: 14px padding matches the height of the CancelButton perfectly
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+    paddingVertical: vs(14),
+    paddingHorizontal: s(24),
   },
   large: {
-    paddingVertical: 18,
-    paddingHorizontal: 32,
+    paddingVertical: vs(18),
+    paddingHorizontal: s(32),
   },
   primary: {
     backgroundColor: theme.colors.primary,
@@ -144,7 +142,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.secondary,
   },
   outline: {
-    borderWidth: 1.5,
+    borderWidth: ms(1.5),
     borderColor: theme.colors.primary,
     backgroundColor: "transparent",
   },
@@ -152,15 +150,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.error,
   },
   ghost: {
-    // 👻 MATCHING: Uses the exact light grey background from the CancelButton
     backgroundColor: "#F2F2F2",
   },
   disabled: {
     opacity: 0.5,
   },
   text: {
-    fontSize: 16,
+    fontSize: ms(16), // Responsive font size
     fontWeight: "600",
-    letterSpacing: -0.3, // Makes the text look tighter and more modern
+    letterSpacing: -0.3,
   },
 });

@@ -252,6 +252,7 @@ const RideTab: React.FC<TabProps> = ({
               minOffer={selectedVehiclePrice * 0.8}
               maxOffer={selectedVehiclePrice * 1.5}
               initialOffer={rideData.offer || selectedVehiclePrice}
+              recommendedOffer={selectedVehiclePrice}
               onOfferChange={(newOffer) => {
                 let type: "poor" | "fair" | "good" = "fair";
                 if (newOffer < selectedVehiclePrice) type = "poor";
@@ -266,7 +267,7 @@ const RideTab: React.FC<TabProps> = ({
             title={
               isBooking
                 ? ""
-                : `Find ${rideTypes.find((t) => t.id === rideData.vehicleType)?.label || "Ride"}`
+                : `Find ${rideTypes.find((t) => t.id === rideData.vehicleType)?.label || "Ride"} Ride`
             }
             onPress={handleFindRides}
             loading={isBooking}

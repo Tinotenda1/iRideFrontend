@@ -15,7 +15,6 @@ import { watchDriverLocation } from "./driverLocationUtility/driverLocation";
 import DriverHome from "./screens/DriverHome";
 
 import {
-  connectDriver,
   disconnectDriver,
   handleDriverResponse,
   onNewRideRequest,
@@ -32,7 +31,7 @@ const DriverDashboard: React.FC = () => {
   const settingsTrayRef = useRef<any>(null);
   const rideTrayRef = useRef<any>(null);
   const driverTrayRef = useRef<any>(null);
-  const [manualOffline, setManualOffline] = useState(false);
+  const [manualOffline, setManualOffline] = useState(true);
 
   const [driverInfo, setDriverInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -114,29 +113,27 @@ const DriverDashboard: React.FC = () => {
 
   useEffect(() => {
     // Make sure the driver socket is connected first
-    connectDriver().then(() => {
-      const unsubscribe = onReconnectState((data) => {
-        console.log("🔔 onReconnectState callback triggered");
-        if (data) {
-          console.log("🔄 Reconnect Data Received:", data);
-          console.log("➡️ Restoring session...");
-          restoreSession(data);
+    const unsubscribe = onReconnectState((data) => {
+      console.log("🔔 onReconnectState callback triggered");
+      if (data) {
+        console.log("🔄 Reconnect Data Received:", data);
+        console.log("➡️ Restoring session...");
+        restoreSession(data);
 
-          if (data.activeTrip) {
-            console.log("⚠️ Active trip detected, clearing local ride states");
-            setIncomingRides([]);
-            setSubmissionStates({});
-            setSubmittedOffers({});
-          } else {
-            console.log("ℹ️ No active trip, skipping ride state reset");
-          }
+        if (data.activeTrip) {
+          console.log("⚠️ Active trip detected, clearing local ride states");
+          setIncomingRides([]);
+          setSubmissionStates({});
+          setSubmittedOffers({});
         } else {
-          console.log("❌ No data received on reconnect");
+          console.log("ℹ️ No active trip, skipping ride state reset");
         }
-      });
-
-      return () => unsubscribe();
+      } else {
+        console.log("❌ No data received on reconnect");
+      }
     });
+
+    return () => unsubscribe();
   }, [restoreSession]);
 
   const handleCloseModal = () => {
@@ -261,6 +258,8 @@ const DriverDashboard: React.FC = () => {
             onRideExpire={handleDecline}
             trayPadding={trayHeight}
             manuallyOffline={manualOffline}
+            setManuallyOffline={setManualOffline}
+            isOnline={online}
           />
         );
     }

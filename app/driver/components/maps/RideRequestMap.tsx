@@ -25,6 +25,7 @@ import MapView, {
 import { theme } from "../../../../constants/theme";
 
 // Types
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import polyline from "@mapbox/polyline";
 import { DriverLocation } from "../../driverLocationUtility/driverLocation";
 
@@ -107,11 +108,11 @@ const RideRequestMap: React.FC<Props> = ({
 
     mapRef.current.fitToCoordinates(pointsToFit, {
       edgePadding: {
-        // Increased top padding to ensure the 65px Tooltip Head fits
-        top: topPadding + 45,
-        bottom: trayHeight + 20,
-        left: 30,
-        right: 30,
+        // Responsively calculated padding
+        top: topPadding + vs(45),
+        bottom: trayHeight + vs(20),
+        left: s(30),
+        right: s(30),
       },
       animated: true,
     });
@@ -133,7 +134,7 @@ const RideRequestMap: React.FC<Props> = ({
         <Text
           style={[
             theme.typography.caption as TextStyle,
-            { color: theme.colors.textSecondary, marginTop: 10 },
+            { color: theme.colors.textSecondary, marginTop: vs(10) },
           ]}
         >
           Initializing route...
@@ -159,7 +160,7 @@ const RideRequestMap: React.FC<Props> = ({
           <Polyline
             coordinates={routeCoords}
             strokeColor={"#000"}
-            strokeWidth={5}
+            strokeWidth={ms(5)}
             lineJoin="round"
           />
         )}
@@ -168,17 +169,17 @@ const RideRequestMap: React.FC<Props> = ({
         {driverLocation && (
           <Marker
             coordinate={driverLocation}
-            flat // Makes the marker lay flat on the map for perspective
-            anchor={{ x: 0.5, y: 0.5 }} // Rotates around the exact center
-            rotation={driverLocation.heading || 0} // Uses heading for direction
+            flat
+            anchor={{ x: 0.5, y: 0.5 }}
+            rotation={driverLocation.heading || 0}
           >
             <View style={styles.navMarkerContainer}>
               <View style={styles.navMarkerCircle}>
                 <MaterialCommunityIcons
-                  name="navigation" // Navigation chevron icon
-                  size={22}
+                  name="navigation"
+                  size={ms(22)}
                   color={theme.colors.primary}
-                  style={{ transform: [{ translateY: -1 }] }} // Centers the icon visually
+                  style={{ transform: [{ translateY: vs(-1) }] }}
                 />
               </View>
             </View>
@@ -194,7 +195,6 @@ const RideRequestMap: React.FC<Props> = ({
             { left: positions.pickup.x, top: positions.pickup.y },
           ]}
         >
-          {/* Circle Head */}
           <View
             style={[
               styles.tooltipHead,
@@ -208,7 +208,6 @@ const RideRequestMap: React.FC<Props> = ({
               {Math.ceil(rideData.etaToPickup / 60)} min
             </Text>
           </View>
-          {/* Line Connector */}
         </View>
       )}
 
@@ -220,7 +219,6 @@ const RideRequestMap: React.FC<Props> = ({
             { left: positions.dropoff.x, top: positions.dropoff.y },
           ]}
         >
-          {/* Circle Head */}
           <View
             style={[styles.tooltipHead, { backgroundColor: theme.colors.red }]}
           >
@@ -235,7 +233,6 @@ const RideRequestMap: React.FC<Props> = ({
                 : "..."}
             </Text>
           </View>
-          {/* Line Connector */}
         </View>
       )}
 
@@ -245,8 +242,8 @@ const RideRequestMap: React.FC<Props> = ({
           style={[
             styles.dotPickup,
             {
-              left: positions.pickup.x - 7,
-              top: positions.pickup.y - 7,
+              left: positions.pickup.x - s(7),
+              top: positions.pickup.y - s(7),
             },
           ]}
         />
@@ -257,8 +254,8 @@ const RideRequestMap: React.FC<Props> = ({
           style={[
             styles.dotDropoff,
             {
-              left: positions.dropoff.x - 7,
-              top: positions.dropoff.y - 7,
+              left: positions.dropoff.x - s(7),
+              top: positions.dropoff.y - s(7),
             },
           ]}
         />
@@ -266,10 +263,17 @@ const RideRequestMap: React.FC<Props> = ({
 
       {isMoved && (
         <TouchableOpacity
-          style={[styles.recenterButton, { bottom: trayHeight }]}
+          style={[
+            styles.recenterButton,
+            { bottom: trayHeight + vs(20), right: s(20) },
+          ]}
           onPress={fitToRoute}
         >
-          <Ionicons name="navigate" size={20} color={theme.colors.secondary} />
+          <Ionicons
+            name="navigate"
+            size={ms(20)}
+            color={theme.colors.secondary}
+          />
         </TouchableOpacity>
       )}
     </View>
@@ -288,9 +292,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   premiumBadge: {
-    width: 45,
-    height: 45,
-    borderRadius: 18,
+    width: s(45),
+    height: s(45),
+    borderRadius: ms(18),
     backgroundColor: "white",
     borderWidth: 2,
     borderColor: "#ffffff",
@@ -304,21 +308,21 @@ const styles = StyleSheet.create({
   },
   dotPickup: {
     position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 50,
+    width: s(14),
+    height: s(14),
+    borderRadius: ms(14),
     backgroundColor: theme.colors.primary,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: "#ffffff",
     zIndex: 20,
   },
   dotDropoff: {
     position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 50,
+    width: s(14),
+    height: s(14),
+    borderRadius: ms(14),
     backgroundColor: theme.colors.red,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: "#ffffff",
     zIndex: 20,
   },
@@ -327,14 +331,13 @@ const styles = StyleSheet.create({
     width: 0,
     height: 0,
     alignItems: "center",
-    justifyContent: "flex-end", // grows upwards from marker
+    justifyContent: "flex-end",
   },
-
   tooltipHead: {
-    width: 60,
-    height: 60,
-    borderWidth: 1,
-    borderRadius: 50,
+    width: s(64),
+    height: s(64),
+    borderWidth: 1.5,
+    borderRadius: ms(50),
     borderColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
@@ -343,17 +346,17 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3,
-    padding: 4,
-    marginBottom: 12,
+    padding: s(4),
+    marginBottom: vs(12),
   },
   tooltipValue1: {
-    fontSize: 16,
+    fontSize: ms(15),
     fontWeight: "900",
     textAlign: "center",
   },
   tooltipValue2: {
-    fontSize: 12,
-    fontWeight: "200",
+    fontSize: ms(11),
+    fontWeight: "600",
     textAlign: "center",
   },
   navMarkerContainer: {
@@ -361,15 +364,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   navMarkerCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 18,
-    backgroundColor: "#ffffff", // Google Blue
+    width: s(32),
+    height: s(32),
+    borderRadius: ms(30),
+    backgroundColor: "#ffffff",
     borderWidth: 2,
     borderColor: theme.colors.primary,
     alignItems: "center",
     justifyContent: "center",
-    // Adding shadow for depth
     elevation: 5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -378,7 +380,14 @@ const styles = StyleSheet.create({
   },
   recenterButton: {
     position: "absolute",
+    backgroundColor: "#fff",
+    padding: s(12),
+    borderRadius: ms(30),
     elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
 });
 

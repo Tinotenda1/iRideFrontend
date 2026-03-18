@@ -1,4 +1,5 @@
 // app/driver/components/ExternalNavButton.tsx
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import {
@@ -28,7 +29,7 @@ const ExternalNavButton: React.FC<ExternalNavButtonProps> = ({
   pickup,
   destination,
   style,
-  size = 40,
+  size = s(40), // Made default size responsive
 }) => {
   const handleOpenNavigation = async () => {
     // 1. Determine target based on status
@@ -76,7 +77,7 @@ const ExternalNavButton: React.FC<ExternalNavButtonProps> = ({
       activeOpacity={0.7}
       style={[
         styles.button,
-        { height: size, borderRadius: size / 2, paddingHorizontal: 18 },
+        { height: size, borderRadius: size / 2, paddingHorizontal: s(18) },
         style,
       ]}
       onPress={handleOpenNavigation}
@@ -102,13 +103,13 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#0084FF",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: vs(2) },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
   text: {
-    marginLeft: 8,
-    fontSize: 16,
+    marginLeft: s(8),
+    fontSize: ms(16),
     fontWeight: "600",
     color: "#333",
   },

@@ -68,7 +68,7 @@ const TripLocationCard: React.FC<TripLocationCardProps> = ({
               ]}
               numberOfLines={1}
             >
-              {currentRide?.pickup?.address || rideData.pickupLocation?.name}
+              {currentRide?.pickup?.name || rideData.pickupLocation?.name}
             </Text>
           </View>
           <View style={styles.divider} />
@@ -82,8 +82,8 @@ const TripLocationCard: React.FC<TripLocationCardProps> = ({
           >
             {
               // Prefer restored address → then name → then fallback
-              currentRide?.destination?.address ||
-                currentRide?.destination?.name ||
+              currentRide?.destination?.name ||
+                currentRide?.destination?.address ||
                 rideData.destination?.address ||
                 rideData.destination?.name ||
                 "Select destination"
@@ -125,7 +125,7 @@ const styles = createStyles({
 
     // ✅ Black border
     borderWidth: 1,
-    borderColor: "#000",
+    borderColor: theme.colors.secondary,
   },
   lineDecorator: {
     alignItems: "center",
@@ -145,7 +145,7 @@ const styles = createStyles({
     backgroundColor: theme.colors.border,
     marginVertical: 2,
   },
-  squareDestination: { width: 6, height: 6, backgroundColor: "#d34444ff" },
+  squareDestination: { width: 6, height: 6, backgroundColor: theme.colors.red },
   locationsWrapper: { flex: 1, justifyContent: "center" },
   locationRow: { height: 22, justifyContent: "center" },
   locationText: {
@@ -157,7 +157,7 @@ const styles = createStyles({
   disabledText: { color: "#506055ff", fontWeight: "500" },
   divider: {
     height: 1,
-    backgroundColor: theme.colors.border,
+    backgroundColor: theme.colors.background,
     opacity: 0.3,
     marginVertical: 4,
   },

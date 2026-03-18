@@ -1,5 +1,6 @@
 // components/Logout.tsx - Safe Version
-import { Ionicons } from "@expo/vector-icons"; // add at the top with other imports
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
@@ -50,7 +51,6 @@ export const LogoutButton: React.FC = () => {
     }
   };
 
-  // Return minimal, safe JSX
   if (isLoading) {
     return (
       <View style={styles.container}>
@@ -69,9 +69,9 @@ export const LogoutButton: React.FC = () => {
         <View style={styles.content}>
           <Ionicons
             name="log-out-outline"
-            size={18}
+            size={ms(18)} // Responsive icon size
             color="#666"
-            style={{ marginRight: 8 }}
+            style={{ marginRight: s(8) }} // Responsive margin
           />
           <Text style={styles.text}>Logout</Text>
         </View>
@@ -80,29 +80,28 @@ export const LogoutButton: React.FC = () => {
   );
 };
 
-// Use very basic styles
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 16,
+    paddingVertical: vs(16), // Responsive vertical padding
   },
   touchable: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: s(16), // Responsive horizontal padding
+    paddingVertical: vs(12),
   },
   content: {
     flexDirection: "row",
     alignItems: "center",
   },
   text: {
-    fontSize: 16,
+    fontSize: ms(16), // Responsive font size
     fontWeight: "600",
     color: "#666",
   },
   iconPlaceholder: {
-    marginLeft: 8,
+    marginLeft: s(8),
   },
   arrow: {
-    fontSize: 18,
+    fontSize: ms(18),
     color: "#666",
   },
 });

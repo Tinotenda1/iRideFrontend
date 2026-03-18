@@ -1,4 +1,5 @@
 // app/driver/components/trays/RideRequestTray.tsx
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { Ionicons } from "@expo/vector-icons";
 import {
   forwardRef,
@@ -33,8 +34,8 @@ import { OfferFareControl } from "../DriverOfferFareControl";
 import RideRequestMap from "../maps/RideRequestMap";
 
 const { height: windowHeight } = Dimensions.get("window");
-const OPEN_HEIGHT = windowHeight * 0.9;
-const MAP_MIN_HEIGHT = OPEN_HEIGHT * 0.4;
+const OPEN_HEIGHT = vs(windowHeight * 0.8);
+const MAP_MIN_HEIGHT = vs(windowHeight * 0.35); // Adjusted slightly for better responsive flow
 
 export interface RideRequestTrayRef {
   open: (
@@ -77,13 +78,8 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     const minOffer = selectedRideData?.priceRange?.min ?? baseOffer;
     const maxOffer = selectedRideData?.priceRange?.max ?? baseOffer;
 
-    const priorityWindow =
-      expiresAt && isPriority ? Math.floor((expiresAt - Date.now()) * 0.1) : 0;
-
     const [currentDriverLocation, setCurrentDriverLocation] =
       useState<DriverLocation | null>(null);
-
-    const animationStartedFor = useRef<string | null>(null);
 
     const clearTimers = () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -98,9 +94,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     };
 
     const vehicleType = selectedRideData?.vehicleType;
-
     const vehicleLabel = vehicleTypeLabels[vehicleType] || "STANDARD";
-
     const baseHeaderText = `NEW REQUEST - ${vehicleLabel}`;
 
     const headerText =
@@ -119,7 +113,6 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     }, []);
 
     const handleClose = useCallback(() => {
-      // Emit tray closed event
       try {
         const socket = getDriverSocket();
         socket?.emit("driver:ride_tray_status", {
@@ -137,12 +130,11 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
       setExpiresAt(null);
       setCurrentStatus("idle");
       onClose?.();
-    }, [onClose, progressAnim]);
+    }, [onClose, progressAnim, rideId]);
 
     useImperativeHandle(
       ref,
       () => ({
-        // Inside useImperativeHandle
         open: (
           rideId,
           priorityDurationMs,
@@ -156,17 +148,10 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
           setExpiresAt(Date.now() + Math.max(0, remainingMs));
           setCurrentStatus(status);
           setCurrentOffer(existingOffer ?? rideData.offer);
-
-          // Set ref so useEffect can read it
           priorityDurationRef.current = priorityDurationMs;
-
-          // Sync progress animation
           progressAnim.setValue(remainingMs / priorityDurationMs);
-
-          // Sync timer
           setSecondsLeft(Math.ceil(Math.max(0, remainingMs) / 1000));
 
-          // Emit tray opened event
           try {
             const socket = getDriverSocket();
             socket?.emit("driver:ride_tray_status", {
@@ -180,7 +165,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
         },
         close: handleClose,
       }),
-      [handleClose],
+      [handleClose, progressAnim],
     );
 
     useEffect(() => {
@@ -220,7 +205,14 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
         clearTimers();
         progressAnim.stopAnimation();
       };
-    }, [isOpen, rideId, expiresAt, selectedRideData, currentStatus]);
+    }, [
+      isOpen,
+      rideId,
+      expiresAt,
+      selectedRideData,
+      currentStatus,
+      progressAnim,
+    ]);
 
     const submitOffer = () => {
       if (!rideId || !selectedRideData || (currentStatus as string) !== "idle")
@@ -261,7 +253,6 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     });
 
     const rating = parseFloat(selectedRideData?.passengerRating || "5");
-
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating - fullStars >= 0.5;
 
@@ -293,7 +284,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
             <View
               style={{
                 minHeight: MAP_MIN_HEIGHT,
-                borderRadius: 16,
+                borderRadius: ms(16),
                 overflow: "hidden",
               }}
             >
@@ -313,7 +304,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                       : undefined
                   }
                   name={selectedRideData.passengerName}
-                  size={54}
+                  size={ms(54)}
                 />
 
                 <View style={styles.profileInfo}>
@@ -321,48 +312,42 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                     {selectedRideData.passengerName || "Passenger"}
                   </Text>
                   <View style={styles.ratingRow}>
-                    {/* Stars */}
                     {Array.from({ length: 5 }).map((_, index) => {
                       if (index < fullStars) {
                         return (
                           <Ionicons
                             key={index}
                             name="star"
-                            size={12}
+                            size={ms(12)}
                             color={theme.colors.warning}
                           />
                         );
                       }
-
                       if (index === fullStars && hasHalfStar) {
                         return (
                           <Ionicons
                             key={index}
                             name="star-half"
-                            size={12}
+                            size={ms(12)}
                             color={theme.colors.warning}
                           />
                         );
                       }
-
                       return (
                         <Ionicons
                           key={index}
                           name="star-outline"
-                          size={12}
+                          size={ms(12)}
                           color={theme.colors.warning}
                         />
                       );
                     })}
-
-                    {/* Rating Number */}
-                    <Text style={[styles.ratingValueText, { marginLeft: 4 }]}>
+                    <Text
+                      style={[styles.ratingValueText, { marginLeft: s(4) }]}
+                    >
                       {rating.toFixed(2)}
                     </Text>
-
                     <View style={styles.dotSeparator} />
-
-                    {/* Trips */}
                     <Text style={styles.tripCountText}>
                       {selectedRideData.passengerTrips || "0"} trips
                     </Text>
@@ -370,33 +355,22 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                 </View>
 
                 <View style={styles.priceContainer}>
-                  {/* Price + Payment */}
                   <View style={{ flexDirection: "row", alignItems: "center" }}>
                     <Text style={styles.mainPrice}>
                       ${baseOffer?.toFixed(2)}
                     </Text>
-
-                    {/* Separator */}
-                    <Text style={{ marginHorizontal: 6, color: "#999" }}>
+                    <Text style={{ marginHorizontal: s(6), color: "#999" }}>
                       •
                     </Text>
-
-                    {/* Payment Method */}
                     <Text style={styles.paymentMethodText}>
                       {(selectedRideData.paymentMethod || "CASH").toUpperCase()}
                     </Text>
                   </View>
 
-                  {/* Offer Badge */}
                   <View
                     style={[
                       styles.offerBadge,
-                      {
-                        backgroundColor:
-                          selectedRideData.offerType === "good"
-                            ? theme.colors.background
-                            : theme.colors.background,
-                      },
+                      { backgroundColor: theme.colors.background },
                     ]}
                   >
                     <Text
@@ -431,7 +405,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                     </Text>
                   </View>
                 </View>
-                <View style={[styles.addressRow, { marginTop: 12 }]}>
+                <View style={[styles.addressRow, { marginTop: vs(12) }]}>
                   <View
                     style={[styles.dot, { backgroundColor: theme.colors.red }]}
                   />
@@ -446,7 +420,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
               <View style={styles.noteContainer}>
                 <Ionicons
                   name="information-circle"
-                  size={14}
+                  size={ms(14)}
                   color={theme.colors.background}
                 />
                 <Text style={styles.noteText}>
@@ -464,7 +438,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                 <View style={styles.checkCircle}>
                   <Ionicons
                     name="checkmark"
-                    size={32}
+                    size={ms(32)}
                     color={theme.colors.primary}
                   />
                 </View>
@@ -508,34 +482,27 @@ const styles = StyleSheet.create({
     width: "100%",
     height: OPEN_HEIGHT,
     backgroundColor: "#FFF",
-    paddingHorizontal: 20,
-    paddingBottom: 24,
+    paddingHorizontal: s(20),
+    paddingBottom: vs(24),
     zIndex: 9999,
     elevation: 9999,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: ms(24),
+    borderTopRightRadius: ms(24),
     overflow: "hidden",
   },
   topProgressBar: {
     position: "absolute",
     top: 0,
     left: 0,
-    height: 4,
+    height: vs(4),
     zIndex: 10,
   },
   headerArea: {
     alignItems: "center",
-    paddingVertical: 12,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    backgroundColor: "#E2E8F0",
-    borderRadius: 2,
-    marginBottom: 8,
+    paddingVertical: vs(12),
   },
   timerDigits: {
-    fontSize: 12,
+    fontSize: ms(12),
     fontWeight: "800",
     color: "#64748B",
     letterSpacing: 0.5,
@@ -545,7 +512,7 @@ const styles = StyleSheet.create({
   },
   middleSection: {
     flex: 1,
-    paddingTop: 15,
+    paddingTop: vs(15),
   },
   profileRow: {
     flexDirection: "row",
@@ -553,70 +520,70 @@ const styles = StyleSheet.create({
   },
   profileInfo: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: s(12),
     justifyContent: "center",
   },
   passengerName: {
-    fontSize: 18,
+    fontSize: ms(18),
     fontWeight: "800",
     color: "#0F172A",
-    marginBottom: 2,
+    marginBottom: vs(2),
   },
   ratingRow: {
     flexDirection: "row",
     alignItems: "center",
   },
   ratingValueText: {
-    fontSize: 11,
+    fontSize: ms(11),
     fontWeight: "700",
     color: "#64748b",
-    marginLeft: 4,
+    marginLeft: s(4),
   },
   tripCountText: {
-    fontSize: 11,
+    fontSize: ms(11),
     color: "#94a3b8",
     fontWeight: "600",
   },
   dotSeparator: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
+    width: s(3),
+    height: s(3),
+    borderRadius: ms(1.5),
     backgroundColor: "#cbd5e1",
-    marginHorizontal: 6,
+    marginHorizontal: s(6),
   },
   priceContainer: {
     alignItems: "flex-end",
     justifyContent: "center",
   },
   mainPrice: {
-    fontSize: 24,
+    fontSize: ms(24),
     fontWeight: "900",
     color: theme.colors.primary,
   },
   offerBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: s(6),
+    paddingVertical: vs(2),
+    borderRadius: ms(4),
   },
   badgeText: {
-    fontSize: 9,
+    fontSize: ms(9),
     fontWeight: "900",
   },
   paymentMethodText: {
-    fontSize: 13,
+    fontSize: ms(13),
     fontWeight: "600",
     color: "#555",
   },
   addressSection: {
-    paddingLeft: 8,
-    marginVertical: 10,
+    paddingLeft: s(8),
+    marginVertical: vs(10),
     position: "relative",
   },
   timelineLine: {
     position: "absolute",
-    left: 11.5,
-    top: 20,
-    bottom: 20,
+    left: s(11.5),
+    top: vs(20),
+    bottom: vs(20),
     width: 1.5,
     backgroundColor: "#E2E8F0",
     borderStyle: "dashed",
@@ -624,72 +591,65 @@ const styles = StyleSheet.create({
   addressRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
+    gap: s(10),
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 8,
+    width: s(8),
+    height: s(8),
+    borderRadius: ms(4),
+    marginTop: vs(8),
   },
   addressTextContainer: {
     flex: 1,
-    paddingVertical: 4,
-  },
-  addressLabelSmall: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#94A3B8",
-    marginBottom: 2,
-    letterSpacing: 0.5,
+    paddingVertical: vs(4),
   },
   addressText: {
-    fontSize: 14,
+    fontSize: ms(14),
     fontWeight: "600",
     color: "#334155",
-    lineHeight: 18,
+    lineHeight: ms(18),
   },
   noteContainer: {
     flexDirection: "row",
-    gap: 5,
+    gap: s(5),
     backgroundColor: "#F1F5F9",
-    padding: 10,
-    borderRadius: 10,
+    padding: s(10),
+    borderRadius: ms(10),
     alignItems: "flex-start",
   },
   noteText: {
-    fontSize: 12,
+    fontSize: ms(12),
     color: "#64748B",
     fontStyle: "italic",
     flex: 1,
-    lineHeight: 16,
+    lineHeight: ms(16),
   },
   bottomSection: {
-    gap: 10,
-    paddingTop: 10,
+    gap: vs(10),
+    paddingTop: vs(10),
   },
   successState: {
     alignItems: "center",
-    paddingVertical: 15,
+    paddingVertical: vs(15),
   },
   checkCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: s(56),
+    height: s(56),
+    borderRadius: ms(28),
     backgroundColor: "#E6FBF0",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: vs(10),
   },
   successTitle: {
-    fontSize: 18,
+    fontSize: ms(18),
     fontWeight: "800",
     color: "#0F172A",
   },
   successSub: {
-    fontSize: 14,
+    fontSize: ms(14),
     color: "#64748B",
-    marginTop: 2,
+    marginTop: vs(2),
     textAlign: "center",
   },
 });

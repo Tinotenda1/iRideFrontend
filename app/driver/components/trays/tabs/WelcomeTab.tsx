@@ -1,10 +1,11 @@
 // app/driver/components/trays/tabs/WelcomeTab.tsx
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { getUserInfo, UserInfo } from "../../../../../utils/storage";
 
 interface WelcomeTabProps {
-  onGoOnline?: () => void; // Added this to fix the TS error
+  onGoOnline?: () => void;
 }
 
 const WelcomeTab: React.FC<WelcomeTabProps> = ({ onGoOnline }) => {
@@ -60,50 +61,50 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FFFFFF",
     justifyContent: "space-between",
-    paddingHorizontal: 28,
-    paddingTop: 48,
-    paddingBottom: 24,
+    paddingHorizontal: s(28),
+    paddingTop: vs(48),
+    paddingBottom: vs(24),
   },
   content: {
     flex: 1,
   },
   greeting: {
-    fontSize: 32,
+    fontSize: ms(32),
     fontWeight: "800",
     color: "#0F172A",
     letterSpacing: -0.8,
-    marginBottom: 12,
+    marginBottom: vs(12),
   },
   subGreeting: {
-    fontSize: 16,
+    fontSize: ms(16),
     color: "#64748B",
-    lineHeight: 24,
+    lineHeight: ms(24),
     fontWeight: "500",
     maxWidth: "90%",
   },
   footer: {
     alignItems: "center",
-    marginTop: 20,
+    marginTop: vs(20),
   },
   footerLine: {
-    width: 30,
-    height: 1,
+    width: s(30),
+    height: vs(1),
     backgroundColor: "#E2E8F0",
-    marginBottom: 12,
+    marginBottom: vs(12),
   },
   footerBrand: {
-    fontSize: 14,
+    fontSize: ms(14),
     fontWeight: "900",
     color: "#0F172A",
     letterSpacing: 1,
     textTransform: "uppercase",
   },
   footerTagline: {
-    fontSize: 9,
+    fontSize: ms(9),
     fontWeight: "700",
     color: "#94A3B8",
     letterSpacing: 2,
-    marginTop: 2,
+    marginTop: vs(2),
     textTransform: "uppercase",
   },
 });

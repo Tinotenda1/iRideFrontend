@@ -1,4 +1,5 @@
 // app/driver/components/trays/OnlineTab.tsx
+import { ms, s, vs } from "@/utils/responsive"; // Imported your utility
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 
@@ -28,7 +29,7 @@ const OnlineTab: React.FC<OnlineTabProps> = ({ isOnline }) => {
   }, []);
 
   // ✅ Colors and text depending on online status
-  const indicatorColor = isOnline ? "#00D26A" : "#EF4444"; // green online, red offline
+  const indicatorColor = isOnline ? "#00D26A" : "#EF4444";
   const statusText = isOnline ? "ONLINE" : "OFFLINE";
   const mainMessage = isOnline
     ? "Searching for riders nearby..."
@@ -48,7 +49,7 @@ const OnlineTab: React.FC<OnlineTabProps> = ({ isOnline }) => {
                 {
                   transform: [{ scale: pulseAnim }],
                   backgroundColor: indicatorColor + "33",
-                }, // semi-transparent pulse
+                },
               ]}
             />
             <View
@@ -78,9 +79,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FFFFFF",
     justifyContent: "space-between",
-    paddingHorizontal: 28,
-    paddingTop: 40,
-    paddingBottom: 24,
+    paddingHorizontal: s(28),
+    paddingTop: vs(40),
+    paddingBottom: vs(24),
   },
   content: {
     flex: 1,
@@ -88,69 +89,66 @@ const styles = StyleSheet.create({
   statusRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: vs(20),
   },
   dotContainer: {
-    width: 20,
-    height: 20,
+    width: s(20),
+    height: s(20),
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 10,
+    marginRight: s(10),
   },
   activeDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#00D26A", // Bolt Green
+    width: s(10),
+    height: s(10),
+    borderRadius: ms(10),
     position: "absolute",
   },
   pulseCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "rgba(0, 210, 106, 0.2)",
+    width: s(20),
+    height: s(20),
+    borderRadius: ms(20),
   },
   statusText: {
-    fontSize: 12,
+    fontSize: ms(12),
     fontWeight: "800",
-    color: "#00D26A",
     letterSpacing: 1.5,
   },
   mainMessage: {
-    fontSize: 26,
+    fontSize: ms(26),
     fontWeight: "800",
     color: "#0F172A",
     letterSpacing: -0.5,
-    marginBottom: 8,
+    marginBottom: vs(8),
   },
   subMessage: {
-    fontSize: 15,
+    fontSize: ms(15),
     color: "#64748B",
-    lineHeight: 22,
+    lineHeight: ms(22),
     fontWeight: "500",
   },
   footer: {
     alignItems: "center",
   },
   footerLine: {
-    width: 30,
-    height: 1,
+    width: s(30),
+    height: vs(1),
     backgroundColor: "#E2E8F0",
-    marginBottom: 12,
+    marginBottom: vs(12),
   },
   footerBrand: {
-    fontSize: 14,
+    fontSize: ms(14),
     fontWeight: "900",
     color: "#0F172A",
     letterSpacing: 1,
     textTransform: "uppercase",
   },
   footerTagline: {
-    fontSize: 9,
+    fontSize: ms(9),
     fontWeight: "700",
     color: "#94A3B8",
     letterSpacing: 2,
-    marginTop: 2,
+    marginTop: vs(2),
     textTransform: "uppercase",
   },
 });

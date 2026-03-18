@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ms, s, vs } from "@/utils/responsive";
 import { IRButton } from "../../../components/IRButton";
 import { theme } from "../../../constants/theme";
 import {
@@ -40,72 +41,75 @@ export default function DriverHeader({
   const [status, setStatus] = useState<DriverSocketStatus>("offline");
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Track manual offline state locally
-  const [manualOffline, setManualOfflineState] = useState(false);
+  const [manualOffline, setManualOfflineState] = useState(true); // start offline intentionally
+  const userInitiatedRef = useRef(false); // track user-triggered toggle
 
+  // Poll socket status
   useEffect(() => {
     statusPollRef.current = setInterval(() => {
       setStatus(getDriverSocketStatus());
-    }, 500);
+    }, 300);
 
     return () => {
       statusPollRef.current && clearInterval(statusPollRef.current);
     };
   }, []);
 
-  const online = status === "connected";
+  const socketConnected = status === "connected"; // true if socket is up
   const isConnecting = status === "connecting" || status === "reconnecting";
+  const isAvailable = !manualOffline; // true if driver is manually online
 
-  const lastStatus = useRef(online);
+  const lastStatus = useRef(socketConnected);
 
-  // Sync external state and manualOffline
+  // Sync state only for user-initiated actions
   useEffect(() => {
-    if (lastStatus.current !== online) {
-      setOnline?.(online);
+    if (lastStatus.current !== socketConnected) {
+      if (userInitiatedRef.current) {
+        setOnline?.(socketConnected);
 
-      if (online && !isConnecting) {
-        setManualOffline?.(false);
-        setManualOfflineState(false); // reset internal manualOffline
+        // ✅ Only update manualOffline when connection fully completes
+        if (socketConnected && !isConnecting) {
+          setManualOffline?.(false);
+          setManualOfflineState(false);
+        }
+
+        userInitiatedRef.current = false;
       }
 
-      lastStatus.current = online;
+      lastStatus.current = socketConnected;
       setIsToggling(false);
     }
 
     setIsConnecting?.(isConnecting);
-  }, [online, isConnecting]);
+  }, [socketConnected, isConnecting]);
 
-  // Determine if the offline state is unintentional
-  const isUnintentionalOffline = !online && !manualOffline && !isConnecting;
-
+  // Toggle button handler
   const handleTogglePress = () => {
     if (isToggling || isConnecting) return;
 
-    if (online) {
-      // Normal online → ask modal to go offline
+    if (!manualOffline) {
+      // user wants to go offline manually
       setShowOfflineModal(true);
     } else {
-      if (isUnintentionalOffline) {
-        // Unintentional offline → force offline first
-        executeToggle(false);
-      } else {
-        // Manual offline → try going online
-        executeToggle(true);
-      }
+      // user wants to go online
+      executeToggle(true);
     }
   };
 
+  // Execute toggle
   const executeToggle = async (shouldGoOnline: boolean) => {
+    userInitiatedRef.current = true;
     setIsToggling(true);
     setShowOfflineModal(false);
 
     try {
       if (shouldGoOnline) {
-        await connectDriver();
+        await connectDriver(); // attempt connection
+        // DON'T set manualOffline false here!
+        // Wait until socket is fully connected (DriverHome useEffect handles it)
       } else {
         disconnectDriver();
-        setManualOffline?.(true);
-        setManualOfflineState(true);
+        setManualOffline?.(true); // keep offline immediately
       }
     } catch (err) {
       console.error("[DriverHeader] Toggle failed:", err);
@@ -114,21 +118,23 @@ export default function DriverHeader({
     }
   };
 
-  // Determine button appearance
-  const buttonStyle = [
-    styles.statusPill,
-    online ? styles.pillOnline : styles.pillOffline,
-    (isToggling || isConnecting) && { opacity: 0.8 },
-  ];
-
-  let buttonText = "GO OFFLINE";
+  // Button UI logic
+  let buttonText = "GO ONLINE";
   if (isToggling || isConnecting) {
     buttonText = "WAITING...";
-  } else if (!online && manualOffline) {
-    buttonText = "GO ONLINE"; // manual offline → allow going online
-  } else if (!online && isUnintentionalOffline) {
-    buttonText = "GO OFFLINE"; // unintentional offline → show GO OFFLINE
+  } else if (isAvailable) {
+    buttonText = "GO OFFLINE";
   }
+
+  const buttonStyle = [
+    styles.statusPill,
+    isAvailable
+      ? socketConnected
+        ? styles.pillOnline // 🟢 fully online
+        : styles.pillOffline // 🔴 socket issue
+      : styles.pillOffline, // ⚫ manually offline
+    (isToggling || isConnecting) && { opacity: 0.8 },
+  ];
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe}>
@@ -138,7 +144,7 @@ export default function DriverHeader({
           style={styles.sideButton}
           activeOpacity={0.7}
         >
-          <Ionicons name="menu-outline" size={28} color="#1e293b" />
+          <Ionicons name="menu-outline" size={ms(28)} color="#1e293b" />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -148,7 +154,7 @@ export default function DriverHeader({
           style={buttonStyle}
         >
           {isToggling || isConnecting ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={theme.colors.surface} />
           ) : (
             <View style={styles.statusDot} />
           )}
@@ -160,21 +166,28 @@ export default function DriverHeader({
           style={styles.sideButton}
           activeOpacity={0.7}
         >
-          <Ionicons name="settings-outline" size={24} color="#1e293b" />
+          <Ionicons name="settings-outline" size={ms(24)} color="#1e293b" />
         </TouchableOpacity>
       </View>
 
+      {/* Offline Confirmation Modal */}
       <Modal visible={showOfflineModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.warningCircle}>
-              <Ionicons name="power-outline" size={32} color="#ef4444" />
+              <Ionicons
+                name="power-outline"
+                size={ms(32)}
+                color={theme.colors.red}
+              />
             </View>
+
             <Text style={styles.modalTitle}>Go offline?</Text>
             <Text style={styles.modalSubtitle}>
               You will not receive any new ride requests until you go back
               online.
             </Text>
+
             <View style={styles.modalActions}>
               <IRButton
                 title="Stay Online"
@@ -198,51 +211,51 @@ export default function DriverHeader({
 
 const styles = StyleSheet.create({
   safe: {
-    backgroundColor: "#fff",
+    backgroundColor: theme.colors.background,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: vs(2) },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowRadius: ms(8),
     elevation: 5,
     zIndex: 10,
   },
   header: {
-    height: 70,
-    paddingHorizontal: 20,
-    backgroundColor: "#fff",
+    height: vs(70),
+    paddingHorizontal: s(20),
+    backgroundColor: theme.colors.surface,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   sideButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#f8fafc",
+    width: s(44),
+    height: s(44),
+    borderRadius: ms(50),
+    backgroundColor: theme.colors.background,
     justifyContent: "center",
     alignItems: "center",
   },
   statusPill: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 30,
-    minWidth: 150,
+    paddingHorizontal: s(16),
+    paddingVertical: vs(10),
+    borderRadius: ms(50),
+    minWidth: s(150),
     justifyContent: "center",
-    gap: 10,
+    gap: s(10),
   },
   pillOnline: { backgroundColor: theme.colors.primary },
   pillOffline: { backgroundColor: theme.colors.error },
   statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#fff",
+    width: s(10),
+    height: s(10),
+    borderRadius: ms(5),
+    backgroundColor: theme.colors.surface,
   },
   statusLabel: {
-    color: "#fff",
-    fontSize: 14,
+    color: theme.colors.surface,
+    fontSize: ms(14),
     fontWeight: "800",
     letterSpacing: 0.5,
   },
@@ -252,34 +265,34 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 24,
-    paddingBottom: 40,
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: ms(32),
+    borderTopRightRadius: ms(32),
+    padding: s(24),
+    paddingBottom: vs(40),
     alignItems: "center",
   },
   warningCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#fef2f2",
+    width: s(64),
+    height: s(64),
+    borderRadius: ms(32),
+    backgroundColor: theme.colors.background,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: vs(16),
   },
   modalTitle: {
-    fontSize: 22,
+    fontSize: ms(22),
     fontWeight: "800",
     color: "#1e293b",
-    marginBottom: 8,
+    marginBottom: vs(8),
   },
   modalSubtitle: {
-    fontSize: 15,
+    fontSize: ms(15),
     color: "#64748b",
     textAlign: "center",
-    lineHeight: 22,
-    marginBottom: 32,
+    lineHeight: vs(22),
+    marginBottom: vs(32),
   },
-  modalActions: { width: "100%", gap: 12 },
+  modalActions: { width: "100%", gap: vs(12) },
 });

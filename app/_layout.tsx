@@ -19,8 +19,7 @@ import {
   showPersistentNotification,
 } from "../utils/persistentNotification";
 import {
-  connectDriver,
-  getDriverSocketStatus,
+  getDriverSocketStatus
 } from "./driver/socketConnectionUtility/driverSocketService";
 import {
   connectPassenger,
@@ -121,12 +120,7 @@ function RootContent() {
           if (!userData) return;
 
           if (userData.userType === "driver") {
-            const status = getDriverSocketStatus();
-            console.log(`🔌 Driver socket status on resume: ${status}`);
-            if (status === "offline" || status === "error") {
-              await reconnectWithTimeout(connectDriver);
-              console.log("✅ Driver socket reconnected!");
-            }
+            console.log("🛑 Skipping auto-connect for driver (manual control)");
           } else if (userData.userType === "passenger") {
             const status = getPassengerSocketStatus();
             console.log(`🔌 Passenger socket status on resume: ${status}`);
@@ -170,10 +164,8 @@ function RootContent() {
       if (userData.userType === "driver") {
         const status = getDriverSocketStatus();
         console.log(`🔌 Current driver socket status: ${status}`);
-        if (status === "offline" || status === "error") {
-          console.log("⏳ Connecting driver socket...");
-          await reconnectWithTimeout(connectDriver);
-          console.log("✅ Driver socket connected!");
+        if (userData.userType === "driver") {
+          console.log("🛑 Driver reconnect skipped (manual control)");
         }
       } else if (userData.userType === "passenger") {
         const status = getPassengerSocketStatus();

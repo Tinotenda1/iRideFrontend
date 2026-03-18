@@ -1,5 +1,6 @@
 // app/driver/components/RideRequestCard.tsx
 import { theme } from "@/constants/theme";
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef } from "react";
 import {
@@ -17,7 +18,7 @@ import {
   onRideCancelled,
 } from "../socketConnectionUtility/driverSocketService";
 
-const RESPONDED_RIDE_CARD_AUTO_REMOVE_DELAY = 60000; // 35 seconds - can be configured via .env and app.config.js
+const RESPONDED_RIDE_CARD_AUTO_REMOVE_DELAY = 60000;
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SLIDE_DURATION = 400;
@@ -63,7 +64,6 @@ export default function RideRequestCard({
     ? Number(rideData.priorityDurationMs) || 0
     : 0;
 
-  // Badge configuration based on offerType with distinct colors
   const getOfferBadge = (type: string) => {
     switch (type?.toLowerCase()) {
       case "good":
@@ -140,56 +140,40 @@ export default function RideRequestCard({
     const remainingMs = isPriority
       ? Math.round(progressValue.current * priorityDurationMs)
       : 0;
-
     onSelect?.(rideId, rideData, priorityDurationMs, remainingMs);
   };
 
-  // Auto-expire after if responded to
   useEffect(() => {
     if (!isSubmitted) return;
-
     const timer = setTimeout(() => {
       slideOut(() => {
-        // ✅ Close tray directly
         rideTrayRef?.current?.close();
-
-        // Optional: keep old logic
         onExpire?.(rideId);
       });
-    }, RESPONDED_RIDE_CARD_AUTO_REMOVE_DELAY); // seconds
-
+    }, RESPONDED_RIDE_CARD_AUTO_REMOVE_DELAY);
     return () => clearTimeout(timer);
   }, [isSubmitted, slideOut, onExpire, rideId]);
 
-  // Socket Listeners to remove expired/declined rides
   useEffect(() => {
     const unsubscribe = onRemoveRideRequest((rideId) => {
       slideOut(() => {
-        // ✅ Close tray directly
         rideTrayRef?.current?.close();
-
-        // Optional: keep old logic
         onExpire?.(rideId);
       });
     });
     return () => unsubscribe();
   }, []);
 
-  // Socket Listeners to remove expired/declined rides
   useEffect(() => {
     const unsubscribe = onRideCancelled((rideId) => {
       slideOut(() => {
-        // ✅ Close tray directly
         rideTrayRef?.current?.close();
-
-        // Optional: keep old logic
         onExpire?.(rideId);
       });
     });
     return () => unsubscribe();
   }, []);
 
-  // Animation and timer management
   useEffect(() => {
     const listenerId = progressAnim.addListener(({ value }) => {
       progressValue.current = value;
@@ -202,7 +186,6 @@ export default function RideRequestCard({
     }
 
     const remainingMs = expiresAt - Date.now();
-
     const activeTimerMs = isPriority
       ? Math.max(0, Math.min(priorityDurationMs, remainingMs))
       : 0;
@@ -236,17 +219,14 @@ export default function RideRequestCard({
     }
 
     if (isPriority) {
-      progressAnim.setValue(1); // reset to full
-
+      progressAnim.setValue(1);
       Animated.timing(progressAnim, {
         toValue: 0,
         duration: activeTimerMs,
         easing: Easing.linear,
         useNativeDriver: false,
       }).start();
-    }
 
-    if (isPriority) {
       timerRef.current = setTimeout(() => {
         progressAnim.setValue(0);
       }, activeTimerMs);
@@ -283,7 +263,7 @@ export default function RideRequestCard({
       <Ionicons
         key={i}
         name={i <= Math.round(rating) ? "star" : "star-outline"}
-        size={7}
+        size={ms(7)}
         color={
           isSubmitted
             ? "#cbd5e1"
@@ -320,7 +300,6 @@ export default function RideRequestCard({
         onPress={handleSelectCard}
         style={styles.content}
       >
-        {/* LEFT COLUMN: Avatar, Name, Rating */}
         <View style={[styles.leftCol, isSubmitted && styles.desaturated]}>
           <IRAvatar
             source={
@@ -356,9 +335,7 @@ export default function RideRequestCard({
           </Text>
         </View>
 
-        {/* RIGHT COLUMN */}
         <View style={styles.rightCol}>
-          {/* TOP ROW: Distance/ETA left, Badge/Price/Payment right */}
           <View style={styles.headerRow}>
             <View style={styles.topLeftInfo}>
               <Text
@@ -418,7 +395,6 @@ export default function RideRequestCard({
             </View>
           </View>
 
-          {/* ADDRESS SECTION */}
           <View style={styles.addressSection}>
             <View style={styles.addressLine}>
               <View
@@ -462,7 +438,6 @@ export default function RideRequestCard({
             </View>
           </View>
 
-          {/* TRIP DISTANCE: Below Addresses */}
           <Text
             style={[
               styles.tripDistanceMeta,
@@ -472,7 +447,6 @@ export default function RideRequestCard({
             Trip distance: {(rideData.route?.distance || 0)?.toFixed(2)} km
           </Text>
 
-          {/* FOOTER: Additional Info */}
           {(rideData.additionalInfo || isSubmitted) && (
             <View style={styles.footerRow}>
               <View style={{ flex: 1 }}>
@@ -515,7 +489,7 @@ const styles = StyleSheet.create({
     elevation: 4,
     shadowColor: "#000",
     shadowOpacity: 0.1,
-    shadowRadius: 6,
+    shadowRadius: ms(6),
     borderWidth: 1,
     borderColor: theme.colors.background,
   },
@@ -528,109 +502,111 @@ const styles = StyleSheet.create({
   desaturated: { opacity: 0.5 },
   submittedText: { color: "#94a3b8" },
   submittedPrice: { color: "#94a3b8" },
-  card: { borderRadius: 12, marginBottom: 8, overflow: "hidden" },
+  card: { borderRadius: ms(12), marginBottom: vs(8), overflow: "hidden" },
   cardTitleHeader: {
     backgroundColor: "#f8fafc",
-    paddingVertical: 4,
-    paddingHorizontal: 12,
+    paddingVertical: vs(4),
+    paddingHorizontal: s(12),
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
   },
   cardTitleText: {
-    fontSize: 13,
+    fontSize: ms(13),
     fontWeight: "800",
     color: theme.colors.primary,
     letterSpacing: 0.5,
   },
-  content: { flexDirection: "row", padding: 10 },
-
-  // Left Column Styles
-  leftCol: { alignItems: "center", width: 75 },
+  content: { flexDirection: "row", padding: s(10) },
+  leftCol: { alignItems: "center", width: s(75) },
   nameUnderAvatar: {
-    fontSize: 10,
+    fontSize: ms(10),
     fontWeight: "700",
     color: "#1e293b",
     textAlign: "center",
-    marginTop: 4,
+    marginTop: vs(4),
     width: "100%",
   },
   ratingRow: {
     flexDirection: "row",
-    marginTop: 2,
-    gap: 1,
+    marginTop: vs(2),
+    gap: s(1),
     alignItems: "center",
   },
   ratingValueText: {
-    fontSize: 8,
+    fontSize: ms(8),
     fontWeight: "700",
     color: "#64748b",
-    marginLeft: 2,
+    marginLeft: s(2),
   },
   tripCountText: {
-    fontSize: 8,
+    fontSize: ms(8),
     color: "#94a3b8",
     fontWeight: "600",
-    marginTop: 1,
+    marginTop: vs(1),
   },
-
-  // Right Column Styles
-  rightCol: { flex: 1, marginLeft: 12 },
+  rightCol: { flex: 1, marginLeft: s(12) },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 6,
+    marginBottom: vs(6),
   },
-  topLeftInfo: { flexDirection: "row", alignItems: "center", gap: 4 },
+  topLeftInfo: { flexDirection: "row", alignItems: "center", gap: s(4) },
   distanceText: {
-    fontSize: 11,
+    fontSize: ms(11),
     color: theme.colors.primary,
     fontWeight: "800",
   },
-  etaText: { fontSize: 11, color: "#64748b", fontWeight: "600" },
-
-  priceContainer: { flexDirection: "row", alignItems: "center", gap: 4 },
+  etaText: { fontSize: ms(11), color: "#64748b", fontWeight: "600" },
+  priceContainer: { flexDirection: "row", alignItems: "center", gap: s(4) },
   paymentLabel: {
-    fontSize: 9,
+    fontSize: ms(9),
     fontWeight: "800",
     color: "#64748b",
-    marginLeft: 2,
+    marginLeft: s(2),
   },
   offerBadge: {
     borderWidth: 1,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 4,
+    paddingHorizontal: s(4),
+    paddingVertical: vs(1),
+    borderRadius: ms(4),
   },
-  offerBadgeText: { fontSize: 7, fontWeight: "900" },
+  offerBadgeText: { fontSize: ms(7), fontWeight: "900" },
   priceRow: { flexDirection: "row", alignItems: "center" },
-  priceText: { fontWeight: "900", color: theme.colors.primary, fontSize: 15 },
-
-  addressSection: { gap: 3 },
-  addressLine: { flexDirection: "row", alignItems: "center", gap: 6 },
-  dot: { width: 5, height: 5, borderRadius: 2.5 },
-  addressText: { fontSize: 12, color: "#475569", fontWeight: "500", flex: 1 },
+  priceText: {
+    fontWeight: "900",
+    color: theme.colors.primary,
+    fontSize: ms(15),
+  },
+  addressSection: { gap: vs(3) },
+  addressLine: { flexDirection: "row", alignItems: "center", gap: s(6) },
+  dot: { width: s(5), height: s(5), borderRadius: ms(2.5) },
+  addressText: {
+    fontSize: ms(12),
+    color: "#475569",
+    fontWeight: "500",
+    flex: 1,
+  },
   tripDistanceMeta: {
-    fontSize: 10,
+    fontSize: ms(10),
     color: "#64748b",
     fontWeight: "600",
-    marginTop: 4,
+    marginTop: vs(4),
   },
-
   footerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 4,
+    marginTop: vs(4),
     alignItems: "center",
   },
-  infoPreview: { fontSize: 10, color: "#94a3b8", fontStyle: "italic" },
-  progressBar: { height: 3, backgroundColor: "#f8fafc" },
+  infoPreview: { fontSize: ms(10), color: "#94a3b8", fontStyle: "italic" },
+  progressBar: { height: vs(3), backgroundColor: "#f8fafc" },
   progressFill: { height: "100%", backgroundColor: theme.colors.primary },
   statusBadgeProcessing: {
     backgroundColor: "#f0f9ff",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: s(6),
+    paddingVertical: vs(2),
+    borderRadius: ms(4),
   },
-  waitingText: { color: "#0369a1", fontWeight: "800", fontSize: 8 },
+  waitingText: { color: "#0369a1", fontWeight: "800", fontSize: ms(8) },
 });
