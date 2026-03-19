@@ -39,11 +39,13 @@ export default function GetStarted() {
       });
 
       router.push(
-        `/onboarding/verify?phone=${encodeURIComponent(cleanPhone)}&method=${method}`
+        `/onboarding/verify?phone=${encodeURIComponent(cleanPhone)}&method=${method}`,
       );
     } catch (error: any) {
       const message =
-        error.response?.data?.message || error.message || "Failed to send verification code.";
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to send verification code.";
       Alert.alert("Error", message);
     } finally {
       setLoading(null);
@@ -62,7 +64,7 @@ export default function GetStarted() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Text style={styles.title}>Get started with iRide</Text>
+            <Text style={styles.title}>Get started with Drift</Text>
             <Text style={styles.subtitle}>
               Enter your phone number to continue
             </Text>
@@ -85,7 +87,13 @@ export default function GetStarted() {
             variant="primary"
             loading={loading === "whatsapp"}
             disabled={!!loading}
-            leftIcon={<Ionicons name="logo-whatsapp" size={22} color={theme.colors.surface} />}
+            leftIcon={
+              <Ionicons
+                name="logo-whatsapp"
+                size={22}
+                color={theme.colors.surface}
+              />
+            }
             fullWidth
           />
           <View style={{ height: theme.spacing.md }} />
@@ -95,14 +103,20 @@ export default function GetStarted() {
             variant="secondary"
             loading={loading === "sms"}
             disabled={!!loading}
-            leftIcon={<Ionicons name="paper-plane" size={22} color={theme.colors.surface} />}
+            leftIcon={
+              <Ionicons
+                name="paper-plane"
+                size={22}
+                color={theme.colors.surface}
+              />
+            }
             fullWidth
           />
         </View>
 
         <View style={styles.disclaimerContainer}>
           <Text style={styles.disclaimerText}>
-            By continuing, you agree to iRide{"'"}s{" "}
+            By continuing, you agree to Drift{"'"}s{" "}
             <Text style={styles.disclaimerLink}>Privacy Policy</Text> and{" "}
             <Text style={styles.disclaimerLink}>Terms & Conditions</Text>.
           </Text>
@@ -114,12 +128,34 @@ export default function GetStarted() {
 
 const styles = createStyles({
   container: { flex: 1, backgroundColor: theme.colors.background },
-  scrollContent: { flexGrow: 1, padding: theme.spacing.lg, paddingTop: theme.spacing.xxl },
+  scrollContent: {
+    flexGrow: 1,
+    padding: theme.spacing.lg,
+    paddingTop: theme.spacing.xxl,
+  },
   header: { marginBottom: theme.spacing.xl, alignItems: "center" },
-  title: { ...typedTypography.h1, color: theme.colors.text, marginBottom: theme.spacing.sm, textAlign: "center" },
-  subtitle: { ...typedTypography.body, color: theme.colors.textSecondary, textAlign: "center" },
+  title: {
+    ...typedTypography.h1,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
+    textAlign: "center",
+  },
+  subtitle: {
+    ...typedTypography.body,
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+  },
   inputContainer: { marginBottom: theme.spacing.xl },
-  disclaimerContainer: { marginTop: "auto", paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.lg },
-  disclaimerText: { ...typedTypography.caption, color: theme.colors.textSecondary, textAlign: "center", lineHeight: 18 },
+  disclaimerContainer: {
+    marginTop: "auto",
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.lg,
+  },
+  disclaimerText: {
+    ...typedTypography.caption,
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 18,
+  },
   disclaimerLink: { color: theme.colors.primary, fontWeight: "700" },
 });

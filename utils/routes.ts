@@ -12,5 +12,6 @@ export const ROUTES = {
     VERIFY: "/onboarding/verify" as const,
     USER_TYPE: "/onboarding/user-type-selection" as const,
     PROFILE_IMAGE: "/onboarding/update-profile-image" as const,
+    DRIVER_ONBOARDING: "/onboarding/driver/driver-onboarding" as const,
   },
 };

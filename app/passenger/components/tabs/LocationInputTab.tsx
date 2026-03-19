@@ -334,7 +334,6 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
           {loading && recentDestinations.length === 0 ? (
             <View style={styles.loaderContainer} />
           ) : recentDestinations.length > 0 ? (
-            // Removed the extra { } here. Just go straight to the map.
             recentDestinations.map((item: Place, index: number) => {
               const stableKey =
                 item.id || `${item.latitude}-${item.longitude}-${index}`;
@@ -349,26 +348,45 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
                   setArmedRowId={setArmedRowId}
                   onPress={() => handleSelect("destination", item)}
                   onDelete={async () => {
-                    // Changed to async
                     if (item.id) {
                       try {
                         await hideRecentDestination(item.id);
                       } catch (err) {
-                        // Trigger the Alert on failure
                         Alert.alert(
                           "Deletion Failed",
-                          "We couldn't remove this destination. Please check your network connection and try again.",
+                          "We couldn't remove this destination. Please try again.",
                           [{ text: "OK" }],
                         );
-                        throw err; // Re-throw so the item can reset its 'isDeleting' state
+                        throw err;
                       }
                     }
                   }}
                 />
               );
             })
+          ) : !loading ? (
+            /* Premium Drift Welcome State */
+            <View style={styles.driftWelcomeContainer}>
+              <Text style={styles.driftTitle}>Ready to drift somewhere?</Text>
+
+              <Text style={styles.driftSubtext}>
+                Your most recent destinations will appear here for a quicker
+                start.
+              </Text>
+
+              <View style={styles.instructionBox}>
+                <View style={styles.instructionRow}>
+                  <View style={styles.miniIcon}>
+                    <Trash2 size={14} color={theme.colors.red} />
+                  </View>
+                  <Text style={styles.instructionText}>
+                    Swipe left and tap the trash icon to remove a destination.
+                  </Text>
+                </View>
+              </View>
+            </View>
           ) : (
-            /* Premium offline / empty state */
+            /* Fallback/Error state - can be kept for actual network failures */
             <View style={styles.errorContainer}>
               <View style={styles.errorIconCircle}>
                 <View style={styles.statusDot} />
@@ -377,9 +395,7 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
                   color={theme.colors.textSecondary + "80"}
                 />
               </View>
-              <Text style={styles.errorText}>
-                Network connection unavailable
-              </Text>
+              <Text style={styles.errorText}>No destinations found</Text>
               <Text style={styles.errorSubtext}>
                 Check your settings to see recent places
               </Text>
@@ -519,6 +535,98 @@ const styles = createStyles({
     color: theme.colors.textSecondary,
     marginTop: 4,
     fontWeight: "400",
+  },
+
+  welcomeContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  welcomeIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: theme.colors.primary + "10",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  welcomeText: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  welcomeSubtext: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+    fontWeight: "400",
+  },
+  driftWelcomeContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 50,
+    paddingHorizontal: theme.spacing.xl,
+  },
+  driftIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: theme.colors.primary + "08", // Very subtle tint
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: theme.colors.primary + "15",
+  },
+  driftTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: theme.colors.text,
+    marginBottom: 10,
+    textAlign: "center",
+    letterSpacing: -0.5,
+  },
+  driftSubtext: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+    marginBottom: 32,
+    paddingHorizontal: 10,
+  },
+  instructionBox: {
+    backgroundColor: theme.colors.background,
+    padding: theme.spacing.md,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border + "40",
+    width: "100%",
+  },
+  instructionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  miniIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: theme.colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    ...theme.shadows.sm,
+  },
+  instructionText: {
+    flex: 1,
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    fontWeight: "500",
+    lineHeight: 16,
   },
 });
 

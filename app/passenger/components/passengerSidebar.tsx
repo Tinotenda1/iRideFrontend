@@ -187,8 +187,8 @@ export default React.forwardRef(function Sidebar(
             </TouchableOpacity>
 
             <View style={styles.appInfo}>
-              <Text style={styles.versionText}>iRide v1.0.0</Text>
-              <Text style={styles.websiteText}>www.iride.app</Text>
+              <Text style={styles.versionText}>Drift v1.0.0</Text>
+              <Text style={styles.websiteText}>www.drift.app</Text>
             </View>
           </View>
         </SafeAreaView>
@@ -221,8 +221,8 @@ const styles = createStyles({
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
     shadowRadius: ms(10),
-    borderTopRightRadius: ms(theme.borderRadius.xl),
-    borderBottomRightRadius: ms(theme.borderRadius.xl),
+    //borderTopRightRadius: ms(theme.borderRadius.xl),
+    //borderBottomRightRadius: ms(theme.borderRadius.xl),
   },
   safeArea: { flex: 1 },
   header: {

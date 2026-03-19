@@ -1,21 +1,36 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { IRButton } from "../../components/IRButton";
 import { IRHeader } from "../../components/IRHeader";
 import OTPInput from "../../components/OTPInput";
 import { theme } from "../../constants/theme";
 import { api } from "../../utils/api";
 import { ROUTES } from "../../utils/routes";
-import { createUserInfoFromResponse, getOrCreateDeviceId, storeAuthToken, storeUserInfo } from "../../utils/storage";
+import {
+  createUserInfoFromResponse,
+  getOrCreateDeviceId,
+  storeAuthToken,
+  storeUserInfo,
+} from "../../utils/storage";
 import { createStyles, typedTypography } from "../../utils/styles";
 
 export default function Verify() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const phone = Array.isArray(params.phone) ? params.phone[0] : params.phone;
-  const method = Array.isArray(params.method) ? params.method[0] : params.method;
+  const method = Array.isArray(params.method)
+    ? params.method[0]
+    : params.method;
 
   const [timeLeft, setTimeLeft] = useState(60);
   const [canResend, setCanResend] = useState(false);
@@ -47,7 +62,11 @@ export default function Verify() {
     try {
       const deviceId = await getOrCreateDeviceId();
 
-      const { data } = await api.post("/auth/verify", { phone, code, deviceId });
+      const { data } = await api.post("/auth/verify", {
+        phone,
+        code,
+        deviceId,
+      });
       const { token, user, nextStep } = data;
 
       if (!token) throw new Error("No authentication token received");
@@ -64,16 +83,22 @@ export default function Verify() {
       });
 
       // Navigate to next step
+      /*
       if (nextStep === "dashboard" || user?.profileCompleted) {
         const userType = user?.userType || userInfo.userType;
         router.replace(userType === "driver" ? ROUTES.DRIVER.HOME : ROUTES.PASSENGER.HOME);
       } else {
         router.replace(ROUTES.ONBOARDING.WELCOME);
       }
+      */
+      router.replace(ROUTES.ONBOARDING.WELCOME);
     } catch (error: any) {
-      const message = error?.response?.data?.message || error?.message || "Invalid verification code";
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Invalid verification code";
       Alert.alert("Verification Failed", message);
-      setOtpResetKey(prev => prev + 1); // reset OTP input
+      setOtpResetKey((prev) => prev + 1); // reset OTP input
     } finally {
       setIsVerifying(false);
     }
@@ -87,35 +112,56 @@ export default function Verify() {
       await api.post("/auth/request-code", { phone, method });
       setTimeLeft(60);
       setCanResend(false);
-      setOtpResetKey(prev => prev + 1);
+      setOtpResetKey((prev) => prev + 1);
       Alert.alert("Success", "Verification code has been resent.");
     } catch (error: any) {
-      const message = error?.response?.data?.message || error?.message || "Failed to resend code.";
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to resend code.";
       Alert.alert("Error", message);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">     
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
           <IRHeader
             title="Verify your number"
             subtitle={`Enter the 6 digit code sent to ${phone || "your phone"} via ${method || "SMS"}`}
           />
 
-          <OTPInput key={otpResetKey} length={6} onComplete={verifyOTP} autoFocus resetKey={otpResetKey} />
+          <OTPInput
+            key={otpResetKey}
+            length={6}
+            onComplete={verifyOTP}
+            autoFocus
+            resetKey={otpResetKey}
+          />
 
           {isVerifying && (
-            <View style={{ alignItems: "center", marginVertical: theme.spacing.lg }}>
+            <View
+              style={{ alignItems: "center", marginVertical: theme.spacing.lg }}
+            >
               <ActivityIndicator size="large" color={theme.colors.primary} />
-              <Text style={{ marginTop: 8, color: theme.colors.textSecondary }}>Verifying...</Text>
+              <Text style={{ marginTop: 8, color: theme.colors.textSecondary }}>
+                Verifying...
+              </Text>
             </View>
           )}
 
           <View style={styles.timerContainer}>
             {!canResend ? (
-              <Text style={styles.timerText}>Resend code in {formatTime(timeLeft)}</Text>
+              <Text style={styles.timerText}>
+                Resend code in {formatTime(timeLeft)}
+              </Text>
             ) : (
               <IRButton
                 title="Send another code"
@@ -134,7 +180,11 @@ export default function Verify() {
 
 const styles = createStyles({
   container: { flex: 1, backgroundColor: theme.colors.background },
-  scrollContent: { flexGrow: 1, padding: theme.spacing.lg, paddingTop: theme.spacing.xxl },
+  scrollContent: {
+    flexGrow: 1,
+    padding: theme.spacing.lg,
+    paddingTop: theme.spacing.xxl,
+  },
   timerContainer: { alignItems: "center", marginTop: theme.spacing.lg },
   timerText: { ...typedTypography.body, color: theme.colors.textSecondary },
 });
