@@ -1,16 +1,11 @@
 // app/passenger/components/DriverOfferCard.tsx
 import { theme } from "@/constants/theme";
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef } from "react";
-import {
-  Animated,
-  Easing,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Animated, Easing, Text, TouchableOpacity, View } from "react-native";
 import { IRAvatar } from "../../../components/IRAvatar";
+import { createStyles } from "../../../utils/styles";
 
 const SLIDE_DURATION = 300;
 
@@ -29,7 +24,7 @@ export const DriverOfferCard: React.FC<Props> = ({
   onDecline,
   onExpire,
 }) => {
-  const slideAnim = useRef(new Animated.Value(-400)).current;
+  const slideAnim = useRef(new Animated.Value(s(-400))).current;
   const progressAnim = useRef(new Animated.Value(1)).current;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animationStartedRef = useRef(false);
@@ -38,13 +33,12 @@ export const DriverOfferCard: React.FC<Props> = ({
   const isAccepted = status === "accepted";
   const isLocked = isProcessing || isAccepted;
 
-  // Logic for "Your Fare" badge
   const isYourFare = offer.type === "accept";
 
   const slideOut = useCallback(
     (cb?: () => void) => {
       Animated.timing(slideAnim, {
-        toValue: -500,
+        toValue: s(-500),
         duration: SLIDE_DURATION,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
@@ -54,7 +48,6 @@ export const DriverOfferCard: React.FC<Props> = ({
   );
 
   useEffect(() => {
-    // Stop timers if we are submitting or have accepted
     if (isLocked) {
       progressAnim.stopAnimation();
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -67,7 +60,6 @@ export const DriverOfferCard: React.FC<Props> = ({
       return;
     }
 
-    // Slide In Animation
     if (!animationStartedRef.current) {
       Animated.timing(slideAnim, {
         toValue: 0,
@@ -78,7 +70,6 @@ export const DriverOfferCard: React.FC<Props> = ({
       animationStartedRef.current = true;
     }
 
-    // Progress bar fallback animation
     Animated.timing(progressAnim, {
       toValue: 0,
       duration: remainingMs,
@@ -95,7 +86,6 @@ export const DriverOfferCard: React.FC<Props> = ({
     };
   }, [offer.expiresAt, isLocked, slideOut, onExpire, offer.driver.phone]);
 
-  // High-precision sync
   useEffect(() => {
     if (isLocked) return;
     const interval = setInterval(() => {
@@ -103,7 +93,7 @@ export const DriverOfferCard: React.FC<Props> = ({
       const totalDuration = offer.expiresIn || 30000;
       const progress = Math.max(0, Math.min(1, remainingMs / totalDuration));
       progressAnim.setValue(progress);
-    }, 16); // ~60fps sync
+    }, 16);
     return () => clearInterval(interval);
   }, [offer.expiresAt, isLocked, offer.expiresIn]);
 
@@ -117,7 +107,6 @@ export const DriverOfferCard: React.FC<Props> = ({
       style={[styles.card, { transform: [{ translateX: slideAnim }] }]}
     >
       <View style={[styles.content, isLocked && styles.lockedContent]}>
-        {/* LEFT COLUMN: Avatar, Rating, Ride Count */}
         <View style={styles.leftCol}>
           <IRAvatar
             source={{ uri: offer.driver.profilePic }}
@@ -127,18 +116,16 @@ export const DriverOfferCard: React.FC<Props> = ({
           <View style={styles.ratingBadge}>
             {Array.from({ length: 5 }).map((_, i) => {
               const rating = Number(offer.driver.rating) || 0;
-
               return (
                 <Ionicons
                   key={i}
                   name="star"
-                  size={8}
-                  color={i < Math.round(rating) ? "#FFC107" : "#E5E7EB"} // gold vs gray
-                  style={{ marginRight: 1 }}
+                  size={ms(8)}
+                  color={i < Math.round(rating) ? "#FFC107" : "#E5E7EB"}
+                  style={{ marginRight: s(1) }}
                 />
               );
             })}
-
             <Text style={styles.ratingText}>({offer.driver.rating})</Text>
           </View>
           <Text style={styles.ridesText}>
@@ -146,11 +133,9 @@ export const DriverOfferCard: React.FC<Props> = ({
           </Text>
         </View>
 
-        {/* RIGHT COLUMN: Details & Actions */}
         <View style={styles.rightCol}>
           <View style={styles.headerRow}>
             <Text style={styles.driverName}>{offer.driver.name}</Text>
-
             <View style={styles.priceContainer}>
               {isYourFare && (
                 <View style={styles.yourFareBadge}>
@@ -166,7 +151,6 @@ export const DriverOfferCard: React.FC<Props> = ({
             </View>
           </View>
 
-          {/* Vehicle Info Row */}
           <View style={styles.vehicleRow}>
             <Text style={styles.vehicleText}>
               {offer.driver.vehicle.color} {offer.driver.vehicle.model}
@@ -182,7 +166,7 @@ export const DriverOfferCard: React.FC<Props> = ({
           <View style={styles.footerRow}>
             <View style={styles.etaContainer}>
               <Text style={styles.etaText}>
-                <Ionicons name="time-outline" size={14} />
+                <Ionicons name="time-outline" size={ms(14)} />
               </Text>
               <Text style={styles.distanceText}>
                 {offer.duration ? ` ${offer.duration} min` : ""}
@@ -192,7 +176,7 @@ export const DriverOfferCard: React.FC<Props> = ({
 
             {isAccepted ? (
               <View style={styles.statusBadgeAccepted}>
-                <Ionicons name="checkmark-circle" size={16} color="#fff" />
+                <Ionicons name="checkmark-circle" size={ms(16)} color="#fff" />
                 <Text style={styles.acceptedText}>MATCHED!</Text>
               </View>
             ) : isProcessing ? (
@@ -229,32 +213,30 @@ export const DriverOfferCard: React.FC<Props> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const styles = createStyles({
   card: {
     backgroundColor: "#fff",
-    borderRadius: 16,
+    borderRadius: ms(16),
     borderWidth: 1,
     borderColor: theme.colors.background,
-    marginBottom: 10,
+    marginBottom: vs(10),
     overflow: "hidden",
     elevation: 3,
     shadowColor: "#000",
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: ms(4),
     shadowOffset: { width: 0, height: 2 },
   },
   lockedContent: { opacity: 0.7 },
-  content: { flexDirection: "row", padding: 12 },
-
-  // Left Column
-  leftCol: { alignItems: "center", width: 60 },
+  content: { flexDirection: "row", padding: s(12) },
+  leftCol: { alignItems: "center", width: s(60) },
   ratingBadge: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F8FAFC",
-    paddingHorizontal: 6,
-    borderRadius: 10,
-    marginTop: 4,
+    paddingHorizontal: s(6),
+    borderRadius: ms(10),
+    marginTop: vs(4),
   },
   etaContainer: {
     flexDirection: "row",
@@ -262,111 +244,107 @@ const styles = StyleSheet.create({
   },
   distanceText: {
     color: "#64748b",
-    fontSize: 13,
+    fontSize: ms(13),
     fontWeight: "600",
   },
-  ratingText: { fontSize: 10, fontWeight: "bold", marginLeft: 2 },
+  ratingText: { fontSize: ms(10), fontWeight: "bold", marginLeft: s(2) },
   ridesText: {
-    fontSize: 10,
+    fontSize: ms(10),
     color: "#94a3b8",
-    marginTop: 3,
+    marginTop: vs(3),
     fontWeight: "500",
-  }, // Added style for rides
-
-  // Right Column
-  rightCol: { flex: 1, marginLeft: 12 },
+  },
+  rightCol: { flex: 1, marginLeft: s(12) },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-  }, // Changed to flex-start for badge alignment
+  },
   driverName: {
     fontWeight: "700",
-    fontSize: 16,
+    fontSize: ms(16),
     color: "#1e293b",
-    marginTop: 2,
+    marginTop: vs(2),
   },
-
-  // Price & Badges
   priceContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: s(6),
   },
-  priceText: { fontWeight: "800", color: theme.colors.primary, fontSize: 18 },
+  priceText: {
+    fontWeight: "800",
+    color: theme.colors.primary,
+    fontSize: ms(18),
+  },
   yourFareBadge: {
     backgroundColor: "#DCFCE7",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginBottom: 2,
+    paddingHorizontal: s(6),
+    paddingVertical: vs(2),
+    borderRadius: ms(4),
+    marginBottom: vs(2),
   },
   yourFareText: {
-    fontSize: 9,
+    fontSize: ms(9),
     color: theme.colors.primary,
     fontWeight: "700",
     textTransform: "uppercase",
   },
-
-  // Vehicle Details
-  vehicleRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
-  vehicleText: { color: "#64748b", fontSize: 13, fontWeight: "500" },
+  vehicleRow: { flexDirection: "row", alignItems: "center", marginTop: vs(4) },
+  vehicleText: { color: "#64748b", fontSize: ms(13), fontWeight: "500" },
   dotSeparator: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
+    width: ms(3),
+    height: ms(3),
+    borderRadius: ms(1.5),
     backgroundColor: "#cbd5e1",
-    marginHorizontal: 6,
+    marginHorizontal: s(6),
   },
   plateBadge: {
     backgroundColor: "#f1f5f9",
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 4,
+    paddingHorizontal: s(4),
+    paddingVertical: vs(1),
+    borderRadius: ms(4),
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
   plateText: {
-    fontSize: 10,
+    fontSize: ms(10),
     color: "#475569",
     fontWeight: "600",
     textTransform: "uppercase",
   },
-
-  // Footer & Actions
   footerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 10,
+    marginTop: vs(10),
     alignItems: "center",
   },
-  etaText: { color: "#64748b", fontSize: 13, fontWeight: "500" },
-  actionButtons: { flexDirection: "row", gap: 16, alignItems: "center" },
+  etaText: { color: "#64748b", fontSize: ms(13), fontWeight: "500" },
+  actionButtons: { flexDirection: "row", gap: s(16), alignItems: "center" },
   acceptBtn: {
     backgroundColor: theme.colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: s(16),
+    paddingVertical: vs(8),
+    borderRadius: ms(8),
   },
-  acceptBtnText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
-  declineBtn: { color: "#EF4444", fontWeight: "600" },
-  progressBar: { height: 3, backgroundColor: "#f1f5f9" },
+  acceptBtnText: { color: "#fff", fontWeight: "bold", fontSize: ms(14) },
+  declineBtn: { color: "#EF4444", fontWeight: "600", fontSize: ms(14) },
+  progressBar: { height: vs(3), backgroundColor: "#f1f5f9" },
   progressFill: { height: "100%", backgroundColor: theme.colors.primary },
   statusBadgeProcessing: {
     backgroundColor: "#E0F2FE",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: s(10),
+    paddingVertical: vs(6),
+    borderRadius: ms(8),
   },
-  waitingText: { color: "#0284c7", fontWeight: "800", fontSize: 11 },
+  waitingText: { color: "#0284c7", fontWeight: "800", fontSize: ms(11) },
   statusBadgeAccepted: {
     backgroundColor: theme.colors.primary,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    gap: s(4),
+    paddingHorizontal: s(10),
+    paddingVertical: vs(6),
+    borderRadius: ms(8),
   },
-  acceptedText: { color: "#fff", fontWeight: "800", fontSize: 11 },
+  acceptedText: { color: "#fff", fontWeight: "800", fontSize: ms(11) },
 });

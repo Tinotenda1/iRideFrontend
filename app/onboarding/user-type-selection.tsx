@@ -1,8 +1,17 @@
 // app/onboarding/user-type-selection.tsx
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics"; // Added for premium feel
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Animated, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Pressable,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { IRHeader } from "../../components/IRHeader";
 import { theme } from "../../constants/theme";
@@ -21,18 +30,32 @@ export default function UserTypeSelection() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [selectedType, setSelectedType] = useState<UserType | null>(null);
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  // Scale animations for cards
+  const passengerScale = useRef(new Animated.Value(1)).current;
+  const driverScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 400,
+      duration: 600,
       useNativeDriver: true,
     }).start();
   }, [fadeAnim]);
 
+  const animatePress = (type: UserType, toValue: number) => {
+    Animated.spring(type === "passenger" ? passengerScale : driverScale, {
+      toValue,
+      useNativeDriver: true,
+      friction: 4,
+      tension: 40,
+    }).start();
+  };
+
   const handleUserTypeSelect = useCallback(
     async (type: UserType) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setLoading(true);
       setSelectedType(type);
 
@@ -49,15 +72,12 @@ export default function UserTypeSelection() {
           profileCompleted: true,
         };
 
-        // API call
         const response = await api.post("/auth/complete-profile", payload);
         console.log("Profile completion response:", response.data);
 
-        // Update local storage
         await updateUserInfo({ ...userInfo, ...payload });
         await completeOnboarding({ userType: type });
 
-        // Navigate to dashboard
         router.replace(
           type === "driver" ? ROUTES.DRIVER.HOME : ROUTES.PASSENGER.HOME,
         );
@@ -82,83 +102,96 @@ export default function UserTypeSelection() {
           style={styles.backButton}
           disabled={loading}
         >
-          <Ionicons
-            name="arrow-back"
-            size={24}
-            color={loading ? theme.colors.textSecondary : theme.colors.text}
-          />
+          <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </TouchableOpacity>
       </View>
 
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        <IRHeader
-          title="Choose your role"
-          subtitle="How would you like to use iRide?"
-        />
+        <View style={styles.textWrapper}>
+          <IRHeader
+            title="Choose your role"
+            subtitle="Select how you want to use the platform today"
+          />
+        </View>
 
         <View style={styles.selectionContainer}>
-          {["passenger", "driver"].map((type) => (
-            <TouchableOpacity
-              key={type}
-              style={[
-                styles.selectionCard,
-                selectedType === type && styles.selectedCard,
-                loading && styles.disabledCard,
-              ]}
-              onPress={() => handleUserTypeSelect(type as UserType)}
-              disabled={loading}
-            >
-              <View
-                style={[
-                  styles.cardIcon,
-                  type === "driver" && {
-                    backgroundColor: theme.colors.secondary + "20",
-                  },
-                ]}
+          {(["passenger", "driver"] as const).map((type) => {
+            const isSelected = selectedType === type;
+            const scaleValue =
+              type === "passenger" ? passengerScale : driverScale;
+
+            return (
+              <Pressable
+                key={type}
+                disabled={loading}
+                onPressIn={() => animatePress(type, 0.96)}
+                onPressOut={() => animatePress(type, 1)}
+                onPress={() => handleUserTypeSelect(type)}
               >
-                <Ionicons
-                  name={type === "driver" ? "car" : "person"}
-                  size={32}
-                  color={
-                    type === "driver"
-                      ? theme.colors.secondary
-                      : theme.colors.primary
-                  }
-                />
-              </View>
-              <Text style={styles.cardTitle}>
-                {type.charAt(0).toUpperCase() + type.slice(1)}
-              </Text>
-              <Text style={styles.cardDescription}>
-                {type === "driver"
-                  ? "Earn money by driving"
-                  : "Book rides and travel safely"}
-              </Text>
-              {selectedType === type && !loading && (
-                <View
+                <Animated.View
                   style={[
-                    styles.selectionIndicator,
-                    type === "driver" && {
-                      backgroundColor: theme.colors.secondary,
-                    },
+                    styles.selectionCard,
+                    isSelected && styles.selectedCard,
+                    loading && styles.disabledCard,
+                    { transform: [{ scale: scaleValue }] },
                   ]}
                 >
-                  <Ionicons name="checkmark" size={20} color="#fff" />
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
+                  <View style={styles.cardContentHorizontal}>
+                    <View
+                      style={[
+                        styles.cardIcon,
+                        type === "driver"
+                          ? { backgroundColor: theme.colors.secondary + "15" }
+                          : { backgroundColor: theme.colors.primary + "15" },
+                      ]}
+                    >
+                      <Ionicons
+                        name={
+                          type === "driver" ? "car-outline" : "person-outline"
+                        }
+                        size={28}
+                        color={
+                          type === "driver"
+                            ? theme.colors.secondary
+                            : theme.colors.primary
+                        }
+                      />
+                    </View>
+
+                    <View style={styles.cardTextContent}>
+                      <Text style={styles.cardTitle}>
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </Text>
+                      <Text style={styles.cardDescription}>
+                        {type === "driver"
+                          ? "Earn money on your schedule"
+                          : "Get a reliable ride in minutes"}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.radioCircle,
+                        isSelected &&
+                          (type === "driver"
+                            ? styles.radioSelectedDriver
+                            : styles.radioSelectedPassenger),
+                      ]}
+                    >
+                      {isSelected && <View style={styles.radioInner} />}
+                    </View>
+                  </View>
+                </Animated.View>
+              </Pressable>
+            );
+          })}
         </View>
 
         {loading && (
-          <View style={styles.loadingContainer}>
-            <View style={styles.loadingContent}>
-              <Text style={styles.loadingText}>Completing your profile...</Text>
-              <Text style={styles.loadingSubtext}>
-                Please wait while your account is being set up.
-              </Text>
-            </View>
-          </View>
+          <Animated.View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.loadingText}>Setting up your workspace...</Text>
+          </Animated.View>
         )}
       </Animated.View>
     </SafeAreaView>
@@ -170,12 +203,11 @@ const styles = createStyles({
   header: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: theme.colors.surface,
@@ -184,72 +216,77 @@ const styles = createStyles({
   content: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    paddingTop: theme.spacing.xl,
   },
-  selectionContainer: { marginTop: theme.spacing.xl, gap: theme.spacing.lg },
+  textWrapper: {
+    marginBottom: theme.spacing.xl,
+  },
+  selectionContainer: { gap: theme.spacing.md },
   selectionCard: {
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.xl,
-    borderWidth: 2,
+    borderRadius: 20,
+    padding: theme.spacing.lg,
+    borderWidth: 1.5,
     borderColor: "transparent",
-    alignItems: "center",
-    ...theme.shadows.md,
-    position: "relative",
+    ...theme.shadows.sm,
   },
-  selectedCard: { borderColor: theme.colors.primary },
-  disabledCard: { opacity: 0.7 },
+  selectedCard: {
+    borderColor: theme.colors.primary + "40",
+    backgroundColor: theme.colors.surface,
+    ...theme.shadows.md,
+  },
+  cardContentHorizontal: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   cardIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: theme.colors.primary + "20",
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: theme.spacing.md,
+  },
+  cardTextContent: {
+    flex: 1,
+    marginLeft: theme.spacing.md,
   },
   cardTitle: {
     ...typedTypography.h2,
     color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
-    textAlign: "center",
+    fontWeight: "700",
   },
   cardDescription: {
-    ...typedTypography.body,
+    ...typedTypography.caption,
     color: theme.colors.textSecondary,
-    textAlign: "center",
+    marginTop: 2,
   },
-  selectionIndicator: {
-    position: "absolute",
-    top: theme.spacing.md,
-    right: theme.spacing.md,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: theme.colors.primary,
+  radioCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
     justifyContent: "center",
     alignItems: "center",
+    marginLeft: theme.spacing.sm,
   },
-  loadingContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "center",
+  radioSelectedPassenger: { borderColor: theme.colors.primary },
+  radioSelectedDriver: { borderColor: theme.colors.secondary },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: theme.colors.primary, // You can dynamic this if needed
+  },
+  disabledCard: { opacity: 0.6 },
+  loadingOverlay: {
+    marginTop: theme.spacing.xl * 2,
     alignItems: "center",
+    gap: theme.spacing.md,
   },
-  loadingContent: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.xl,
-    alignItems: "center",
-    ...theme.shadows.md,
-  },
-  loadingText: { ...typedTypography.h2, color: theme.colors.text },
-  loadingSubtext: {
+  loadingText: {
     ...typedTypography.body,
     color: theme.colors.textSecondary,
-    textAlign: "center",
+    fontWeight: "500",
   },
 });

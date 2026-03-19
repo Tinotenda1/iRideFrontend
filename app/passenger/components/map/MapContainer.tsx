@@ -18,6 +18,7 @@ import {
   View,
 } from "react-native";
 
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import polyline from "@mapbox/polyline";
 import MapView, {
   Marker,
@@ -33,8 +34,7 @@ import { HEIGHTS } from "../tabs/Tray";
 const GOOGLE_MAPS_APIKEY = Constants.expoConfig?.extra?.googleMapsApiKey ?? "";
 const { width, height } = Dimensions.get("window");
 
-// Example car icon (top-down view, rotation-ready)
-const CAR_ICON = require("../../../../assets/icons/car-icon.png"); // replace with your SVG/PNG
+const CAR_ICON = require("../../../../assets/icons/car-icon.png");
 
 interface MapContainerProps {
   trayHeight?: number;
@@ -100,10 +100,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
     completed: "input",
   };
 
-  // see if any nearby drivers are in the viewport
-  //console.log("🗺️ Nearby drivers passed to map:", nearbyDrivers.length);
-
-  // --- Reset on ride change ---
   useEffect(() => {
     setAnimatedCoords([]);
     setSnappedPoints(null);
@@ -121,7 +117,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
     return () => cancelAnimationFrame(id);
   }, [status]);
 
-  // --- Update tray height based on ride status ---
   useEffect(() => {
     if (!status) return;
     const key = STATUS_TO_TRAY_HEIGHT[status];
@@ -130,7 +125,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
     if (newHeight !== currentTrayHeight) setCurrentTrayHeight(newHeight);
   }, [status, currentTrayHeight]);
 
-  // --- Map padding to avoid overlays ---
   const getMapPadding = useCallback(
     () => ({
       top: TOP_LIMIT,
@@ -141,7 +135,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
     [currentTrayHeight],
   );
 
-  // --- Track user location ---
   useEffect(() => {
     let subscription: Location.LocationSubscription | null = null;
     const startTracking = async () => {
@@ -169,14 +162,11 @@ const MapContainer: React.FC<MapContainerProps> = ({
     return () => subscription?.remove();
   }, []);
 
-  // --- Animate map camera to fit relevant points based on status ---
-  // --- Animate map camera to fit relevant points based on status ---
   const animateCamera = useCallback(() => {
     if (!mapRef.current) return;
 
     const points: { latitude: number; longitude: number }[] = [];
 
-    // 1. TRACKING: Driver to Pickup
     if (status === "matched" && matchedDriver && pickupLocation) {
       points.push(
         {
@@ -191,32 +181,27 @@ const MapContainer: React.FC<MapContainerProps> = ({
 
       mapRef.current.fitToCoordinates(points, {
         edgePadding: {
-          top: 100,
-          bottom: currentTrayHeight + 40,
-          left: 80,
-          right: 80,
+          top: vs(100),
+          bottom: currentTrayHeight + vs(40),
+          left: s(80),
+          right: s(80),
         },
         animated: true,
       });
-    }
-    // 2. NAVIGATION VIEW: Driver heading to Destination (ONLY on_trip)
-    else if (status === "on_trip" && matchedDriver && destination) {
-      // For on_trip, we use animateCamera for a "Birds-eye" navigation feel
+    } else if (status === "on_trip" && matchedDriver && destination) {
       mapRef.current.animateCamera(
         {
           center: {
             latitude: Number(matchedDriver.latitude),
             longitude: Number(matchedDriver.longitude),
           },
-          heading: matchedDriver.heading ?? 0, // Follow driver's direction
-          pitch: 45, // Tilt the map for 3D perspective
-          zoom: 17, // Closer zoom for navigation
+          heading: matchedDriver.heading ?? 0,
+          pitch: 45,
+          zoom: 17,
         },
         { duration: 1000 },
       );
-    }
-    // 3. FALLBACK: Default view (Searching/Idle)
-    else {
+    } else {
       if (routeCoordinates.length > 0) {
         points.push(...routeCoordinates);
       } else {
@@ -237,7 +222,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
       }
 
       mapRef.current.fitToCoordinates(points, {
-        edgePadding: { top: 20, bottom: 40, left: 50, right: 50 },
+        edgePadding: { top: vs(20), bottom: vs(40), left: s(50), right: s(50) },
         animated: true,
       });
     }
@@ -252,7 +237,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
   ]);
 
   useEffect(() => {
-    // Only auto-follow if the user hasn't manually moved the map (isMoved)
     if (
       (status === "matched" || status === "on_trip") &&
       matchedDriver &&
@@ -263,7 +247,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
   }, [
     matchedDriver?.latitude,
     matchedDriver?.longitude,
-    matchedDriver?.heading, // Added heading to the dependency array
+    matchedDriver?.heading,
     status,
     isMoved,
     animateCamera,
@@ -278,7 +262,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
     if (status && status !== "idle") animateCamera();
   }, [status, animateCamera]);
 
-  // --- Convert coordinates to screen points for tooltips ---
   const syncTooltips = useCallback(async () => {
     if (!mapRef.current || !snappedPoints) return;
 
@@ -292,7 +275,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
     setPositions(newPositions);
   }, [snappedPoints]);
 
-  // --- Animate route polyline ---
   const startRouteAnimation = useCallback((coords: any[]) => {
     const duration = 1200;
     const startTime = Date.now();
@@ -306,7 +288,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
     requestAnimationFrame(animate);
   }, []);
 
-  // --- Directions component. Fetch and render the route ---
   const directions = useMemo(() => {
     if (!pickupLocation || !destination || !GOOGLE_MAPS_APIKEY) return null;
 
@@ -326,7 +307,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
           setSnappedPoints({ start, end });
           setRouteCoordinates(result.coordinates);
 
-          // Encode coordinates
           const encodedPolyline = polyline.encode(
             result.coordinates.map((c) => [c.latitude, c.longitude]),
           );
@@ -350,7 +330,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
     );
   }, [pickupLocation, destination, syncTooltips, startRouteAnimation]);
 
-  // --- Check if markers and tooltips are ready ---
   const isRouteUIReady =
     !!snappedPoints &&
     !!positions.pickup &&
@@ -359,11 +338,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
     !!destination;
 
   if (loading || !userRegion) {
-    return /*(
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    )*/;
+    return null;
   }
 
   return (
@@ -386,15 +361,13 @@ const MapContainer: React.FC<MapContainerProps> = ({
       >
         {directions}
 
-        {/* Animated polyline */}
         {animatedCoords.length > 1 && (
           <Polyline
             coordinates={animatedCoords}
-            strokeWidth={5}
+            strokeWidth={ms(5)}
             strokeColor={theme.colors.secondary}
           />
         )}
-        {/* Nearby drivers (only when not matched or on_trip) */}
         {status !== "matched" &&
           status !== "on_trip" &&
           nearbyDrivers.map((driver) => (
@@ -410,12 +383,11 @@ const MapContainer: React.FC<MapContainerProps> = ({
             >
               <Image
                 source={require("../../../../assets/icons/car-icon.png")}
-                style={{ width: 32, height: 32 }}
+                style={{ width: ms(32), height: ms(32) }}
                 resizeMode="contain"
               />
             </Marker>
           ))}
-        {/* Matched driver (only if ride is matched or on_trip) */}
         {(status === "matched" || status === "on_trip") && matchedDriver && (
           <Marker
             key={`matched-${matchedDriver.phone}`}
@@ -429,43 +401,39 @@ const MapContainer: React.FC<MapContainerProps> = ({
           >
             <Image
               source={require("../../../../assets/icons/car-icon.png")}
-              style={{ width: 36, height: 36 }}
+              style={{ width: ms(36), height: ms(36) }}
               resizeMode="contain"
             />
           </Marker>
         )}
       </MapView>
 
-      {/* Pickup dot */}
       {isRouteUIReady && (
         <View
           style={[
             styles.dotPickup,
             {
-              left: positions.pickup!.x - 7,
-              top: positions.pickup!.y - 7,
+              left: positions.pickup!.x - ms(7),
+              top: positions.pickup!.y - ms(7),
             },
           ]}
         />
       )}
 
-      {/* Dropoff dot */}
       {isRouteUIReady && (
         <View
           style={[
             styles.dotDropoff,
             {
-              left: positions.dropoff!.x - 7,
-              top: positions.dropoff!.y - 7,
+              left: positions.dropoff!.x - ms(7),
+              top: positions.dropoff!.y - ms(7),
             },
           ]}
         />
       )}
 
-      {/* TOOLTIP: Pickup */}
       {isRouteUIReady && (
         <>
-          {/* --- PICKUP TOOLTIP --- */}
           {positions.pickup && (
             <View
               style={[
@@ -481,7 +449,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
               >
                 <Text
                   style={{
-                    fontSize: 16,
+                    fontSize: ms(16),
                     fontWeight: "700",
                     color: "#fff",
                   }}
@@ -492,7 +460,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
             </View>
           )}
 
-          {/* --- DROPOFF TOOLTIP --- */}
           {positions.dropoff && (
             <View
               style={[
@@ -509,7 +476,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
                 <View>
                   <Text
                     style={{
-                      fontSize: 16,
+                      fontSize: ms(16),
                       fontWeight: "700",
                       color: "#fff",
                     }}
@@ -525,34 +492,9 @@ const MapContainer: React.FC<MapContainerProps> = ({
               </View>
             </View>
           )}
-
-          {/* Pickup & Dropoff Dots */}
-          {positions.pickup && (
-            <View
-              style={[
-                styles.dotPickup,
-                {
-                  left: positions.pickup.x - 7,
-                  top: positions.pickup.y - 7,
-                },
-              ]}
-            />
-          )}
-
-          {positions.dropoff && (
-            <View
-              style={[
-                styles.dotDropoff,
-                {
-                  left: positions.dropoff.x - 7,
-                  top: positions.dropoff.y - 7,
-                },
-              ]}
-            />
-          )}
         </>
       )}
-      {/* RECENTER BUTTON */}
+
       {isMoved && !isAnimating && (
         <TouchableOpacity
           style={[styles.recenterButton, { bottom: currentTrayHeight }]}
@@ -561,7 +503,11 @@ const MapContainer: React.FC<MapContainerProps> = ({
             animateCamera();
           }}
         >
-          <Ionicons name="navigate" size={28} color={theme.colors.secondary} />
+          <Ionicons
+            name="navigate"
+            size={ms(28)}
+            color={theme.colors.secondary}
+          />
         </TouchableOpacity>
       )}
     </View>
@@ -579,16 +525,16 @@ const styles = StyleSheet.create({
   },
   recenterButton: {
     position: "absolute",
-    right: 15,
-    padding: 3,
-    marginBottom: 10,
+    right: s(15),
+    padding: ms(3),
+    marginBottom: vs(10),
     elevation: 5,
   },
   dotPickup: {
     position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 50,
+    width: ms(14),
+    height: ms(14),
+    borderRadius: ms(7),
     backgroundColor: theme.colors.primary,
     borderWidth: 1,
     borderColor: "#ffffff",
@@ -596,9 +542,9 @@ const styles = StyleSheet.create({
   },
   dotDropoff: {
     position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 50,
+    width: ms(14),
+    height: ms(14),
+    borderRadius: ms(7),
     backgroundColor: theme.colors.red,
     borderWidth: 1,
     borderColor: "#ffffff",
@@ -609,32 +555,31 @@ const styles = StyleSheet.create({
     width: 0,
     height: 0,
     alignItems: "center",
-    justifyContent: "flex-end", // grows upwards from marker
+    justifyContent: "flex-end",
   },
-
   tooltipHead: {
-    width: 45,
-    height: 45,
+    width: ms(45),
+    height: ms(45),
     borderWidth: 1,
     borderColor: "#ffffff",
-    borderRadius: 50,
+    borderRadius: ms(25),
     justifyContent: "center",
     alignItems: "center",
     elevation: 4,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
-    shadowRadius: 3,
-    padding: 4,
-    marginBottom: 12,
+    shadowRadius: ms(3),
+    padding: ms(4),
+    marginBottom: vs(12),
   },
   tooltipValue1: {
-    fontSize: 12,
+    fontSize: ms(12),
     fontWeight: "600",
     textAlign: "center",
   },
   tooltipValue2: {
-    fontSize: 10,
+    fontSize: ms(10),
     fontWeight: "400",
     textAlign: "center",
   },

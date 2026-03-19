@@ -6,7 +6,7 @@ import React, {
   useImperativeHandle,
   useState,
 } from "react";
-import { BackHandler, Dimensions, StyleSheet, View } from "react-native";
+import { BackHandler, StyleSheet, View } from "react-native";
 import Animated, {
   Extrapolation,
   interpolate,
@@ -20,6 +20,8 @@ import Animated, {
 import { useRideBooking } from "../../../../app/context/RideBookingContext";
 import { theme } from "../../../../constants/theme";
 import { createStyles } from "../../../../utils/styles";
+// Use your established responsive utility
+import { hp, SCREEN_WIDTH, vs } from "@/utils/responsive";
 
 import LocationInputTab from "./LocationInputTab";
 import RideTab from "./RideTab";
@@ -28,36 +30,33 @@ import TripTab from "./TripTab";
 
 /* -------------------------------- Constants -------------------------------- */
 
-const { width, height: screenHeight } = Dimensions.get("window");
-
 export const HEIGHTS = {
-  input: screenHeight * 0.5,
-  ride: screenHeight * 0.4,
-  searching: screenHeight * 0.3,
-  matched: screenHeight * 0.25,
-  on_trip: screenHeight * 0.32,
-  expanded: screenHeight * 0.4,
+  input: hp(50), // Exactly 50% of any screen
+  ride: hp(45), // Exactly 40% of any screen
+  searching: hp(35), // Exactly 30% of any screen
+  matched: hp(25), // Exactly 25% of any screen
+  on_trip: hp(32), // Exactly 32% of any screen
+  expanded: hp(40), // Exactly 40% of any screen
 };
 
-const CLOSED_HEIGHT = 140;
+const CLOSED_HEIGHT = vs(140);
 
 const TAB_INDEX = {
   input: 0,
   ride: 1,
   searching: 2,
   matched: 3,
-  on_trip: 3, // Same index as matched since they use the same TripTab component
+  on_trip: 3,
 } as const;
 
 type TabType = keyof typeof TAB_INDEX;
 
 const SPRING_CONFIG = {
-  damping: 20, // Increased slightly to prevent "bouncing" at high speeds
-  stiffness: 250, // Doubled from 120 -> 250 for a much faster launch
-  mass: 0.8, // Dropped from 1 -> 0.8 to make the tray feel lighter
+  damping: 20,
+  stiffness: 250,
+  mass: 0.8,
 };
 
-// Add a separate shared value for expanded state
 const EXPANDED_SPRING_CONFIG = {
   damping: 20,
   stiffness: 150,
@@ -65,7 +64,7 @@ const EXPANDED_SPRING_CONFIG = {
 };
 
 /* -------------------------------------------------------------------------- */
-/* TAB SLIDE COMPONENT                                      */
+/* TAB SLIDE COMPONENT                                                        */
 /* -------------------------------------------------------------------------- */
 
 interface TabSlideProps {
@@ -80,10 +79,10 @@ const TabSlide = ({ index, transitionIndex, children }: TabSlideProps) => {
       transitionIndex.value,
       [0, 1, 2, 3],
       [
-        width * index,
-        width * (index - 1),
-        width * (index - 2),
-        width * (index - 3),
+        SCREEN_WIDTH * index,
+        SCREEN_WIDTH * (index - 1),
+        SCREEN_WIDTH * (index - 2),
+        SCREEN_WIDTH * (index - 3),
       ],
       Extrapolation.CLAMP,
     );
@@ -129,7 +128,7 @@ const Tray = forwardRef<any, any>((props, ref) => {
 
   const transitionIndex = useSharedValue(0);
   const translateY = useSharedValue(0);
-  const expandedProgress = useSharedValue(0); // 0 = collapsed, 1 = expanded
+  const expandedProgress = useSharedValue(0);
   const animatedHeight = useSharedValue(HEIGHTS.input);
 
   const notifyTrayFinished = (h: number, isOpen: boolean) => {
@@ -141,17 +140,14 @@ const Tray = forwardRef<any, any>((props, ref) => {
   const animateTo = useCallback(
     (tab: TabType, expand = false) => {
       const index = TAB_INDEX[tab];
-
-      // Determine the target height for this specific transition
       let targetHeight = HEIGHTS[tab];
+
       if ((tab === "on_trip" || tab === "matched") && expand) {
         targetHeight = HEIGHTS.expanded;
       }
 
-      // SMOOTHING MAGIC: Animate the height value independently
       animatedHeight.value = withSpring(targetHeight, SPRING_CONFIG);
 
-      // Existing logic for expanded state
       if (tab === "on_trip" || tab === "matched") {
         setIsExpanded(expand);
         expandedProgress.value = withSpring(
@@ -177,6 +173,7 @@ const Tray = forwardRef<any, any>((props, ref) => {
     },
     [transitionIndex, updateRideData, expandedProgress, animatedHeight],
   );
+
   const openTray = useCallback(() => {
     translateY.value = withSpring(0, SPRING_CONFIG, (finished) => {
       if (finished) {
@@ -208,13 +205,10 @@ const Tray = forwardRef<any, any>((props, ref) => {
 
   const containerStyle = useAnimatedStyle(() => {
     return {
-      // Use the value that is already being spring-animated in animateTo
       height: animatedHeight.value,
       transform: [{ translateY: translateY.value }],
     };
   });
-
-  /* -------------------------- Lifecycle Sync ----------------------------- */
 
   useEffect(() => {
     if (!rideData.destination) {
@@ -270,7 +264,6 @@ const Tray = forwardRef<any, any>((props, ref) => {
         colors={["#FFFFFF", theme.colors.surface]}
         style={styles.background}
       />
-
       <View style={styles.contentContainer}>
         <View style={styles.tabsWrapper}>
           <TabSlide index={0} transitionIndex={transitionIndex}>
@@ -326,7 +319,7 @@ const styles = createStyles({
     zIndex: 20,
     backgroundColor: "#FFFFFF",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: { width: 0, height: vs(-4) },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 20,
@@ -334,15 +327,6 @@ const styles = createStyles({
   },
   background: {
     ...StyleSheet.absoluteFillObject,
-  },
-  handle: {
-    width: 40,
-    height: 5,
-    backgroundColor: theme.colors.border,
-    alignSelf: "center",
-    marginTop: 8,
-    marginBottom: 4,
-    opacity: 0.5,
   },
   contentContainer: {
     flex: 1,

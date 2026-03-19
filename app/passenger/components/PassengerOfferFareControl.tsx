@@ -1,6 +1,6 @@
 // app/passenger/components/PassengerOfferFareControl.tsx
 import { theme } from "@/constants/theme";
-import { ms, s, vs } from "@/utils/responsive"; // Imported your utility
+import { ms, s, vs } from "@/utils/responsive";
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -24,13 +24,10 @@ export const OfferFareControl = ({
 }: OfferFareControlProps) => {
   const [offer, setOffer] = useState(initialOffer);
 
-  // Use a ref to capture the very first initialOffer received and keep it static
   const recommendedFare = useRef(initialOffer);
 
   useEffect(() => {
     setOffer(initialOffer);
-    // This ensures if the component is re-mounted with a new trip,
-    // the recommendation resets once to that specific trip's starting price.
     recommendedFare.current = initialOffer;
   }, [initialOffer]);
 
@@ -83,7 +80,6 @@ export const OfferFareControl = ({
               <Text style={styles.offerValue}>{offer.toFixed(2)}</Text>
             </View>
 
-            {/* Static recommendation display */}
             <Text style={styles.recommendedText}>
               Recommended ${recommendedOffer.toFixed(2)}
             </Text>
@@ -114,7 +110,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: ms(30),
     paddingHorizontal: s(8),
-    width: "85%", // Percentage is fine for main width
+    width: "85%",
     justifyContent: "space-between",
   },
   adjustBtn: {
@@ -124,11 +120,6 @@ const styles = StyleSheet.create({
     borderRadius: ms(30),
     alignItems: "center",
     justifyContent: "center",
-    // Adding a subtle shadow for that premium depth
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
     elevation: 2,
   },
   adjustText: {
@@ -143,7 +134,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    minWidth: s(120), // Ensure it doesn't jump when numbers change
+    minWidth: s(120),
   },
   currencySymbol: {
     fontSize: ms(18),

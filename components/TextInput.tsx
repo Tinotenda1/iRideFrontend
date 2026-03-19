@@ -1,9 +1,10 @@
 //components/TextInput.tsx
 
-import React from 'react';
-import { TextInput as RNTextInput, Text, View } from 'react-native';
-import { theme } from '../constants/theme';
-import { createStyles, typedTypography } from '../utils/styles';
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
+import React from "react";
+import { TextInput as RNTextInput, Text, View } from "react-native";
+import { theme } from "../constants/theme";
+import { createStyles, typedTypography } from "../utils/styles";
 
 interface TextInputProps {
   label?: string;
@@ -12,8 +13,13 @@ interface TextInputProps {
   onChangeText: (text: string) => void;
   error?: string;
   autoFocus?: boolean;
-  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
-  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad' | 'number-pad';
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
+  keyboardType?:
+    | "default"
+    | "email-address"
+    | "numeric"
+    | "phone-pad"
+    | "number-pad";
   secureTextEntry?: boolean;
   editable?: boolean;
 }
@@ -25,8 +31,8 @@ export default function TextInput({
   onChangeText,
   error,
   autoFocus = false,
-  autoCapitalize = 'sentences',
-  keyboardType = 'default',
+  autoCapitalize = "sentences",
+  keyboardType = "default",
   secureTextEntry = false,
   editable = true,
 }: TextInputProps) {
@@ -53,31 +59,33 @@ export default function TextInput({
 
 const styles = createStyles({
   container: {
-    marginBottom: theme.spacing.md,
+    marginBottom: vs(theme.spacing.md),
   },
   label: {
     ...typedTypography.bodySmall,
+    fontSize: ms(typedTypography.bodySmall.fontSize || 12),
     color: theme.colors.text,
-    fontWeight: '600',
-    marginBottom: theme.spacing.sm,
+    fontWeight: "600",
+    marginBottom: vs(theme.spacing.sm),
   },
   input: {
     ...typedTypography.body,
+    fontSize: ms(typedTypography.body.fontSize || 16),
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.full,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
+    borderRadius: ms(theme.borderRadius.full),
+    paddingHorizontal: s(theme.spacing.md),
+    paddingVertical: vs(theme.spacing.md),
     color: theme.colors.text,
-    minHeight: 50,
+    minHeight: vs(50),
   },
   inputError: {
     borderColor: theme.colors.error,
   },
   errorText: {
     ...typedTypography.caption,
+    fontSize: ms(typedTypography.caption.fontSize || 10),
     color: theme.colors.error,
-    marginTop: theme.spacing.xs,
+    marginTop: vs(theme.spacing.xs),
   },
 });
-

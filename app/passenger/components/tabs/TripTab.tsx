@@ -1,4 +1,5 @@
 // app/passenger/components/tabs/TripTab.tsx
+import { ms, s, vs } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -8,7 +9,6 @@ import {
   Linking,
   Modal,
   Platform,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -21,6 +21,7 @@ import { IRAvatar } from "../../../../components/IRAvatar";
 import { IRButton } from "../../../../components/IRButton";
 import { theme } from "../../../../constants/theme";
 import { getUserInfo } from "../../../../utils/storage";
+import { createStyles } from "../../../../utils/styles";
 import { subscribeToRideCancellation } from "../../socketConnectionUtility/passengerSocketService";
 
 interface TripTabProps {
@@ -34,7 +35,7 @@ const PREDEFINED_REASONS = [
   "Driver asked me to cancel",
   "Incorrect pickup address",
   "No longer need the ride",
-  "Emergency / Drop me here", // Added relevant reason
+  "Emergency / Drop me here",
 ];
 
 const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
@@ -53,9 +54,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
 
   const isOn_trip =
     rideData.status === "on_trip" || currentRide?.status === "on_trip";
-  //console.log("currentRide - passenger", currentRide);
   const driver = currentRide?.driver;
-  const passenger = currentRide?.passenger || "Passenger";
   const vehicle = currentRide?.driver?.vehicle;
   const profilePic = driver?.profilePic;
   const totalTrips = driver?.totalTrips;
@@ -82,7 +81,6 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
     setIsExpanded(nextState);
     onExpand?.(nextState);
 
-    // Animate the button opacity and slight slide
     Animated.timing(fadeAnim, {
       toValue: nextState ? 1 : 0,
       duration: 300,
@@ -116,7 +114,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
       onCancel();
       if (isMounted.current) {
         setShowCancelModal(false);
-        setIsExpanded(false); // Reset expansion on success
+        setIsExpanded(false);
       }
     } catch (error) {
       console.error("❌ Cancel failed:", error);
@@ -159,7 +157,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
 
       const data = await response.json();
       if (data.success) {
-        setShowDropModal(false); // Close modal on success
+        setShowDropModal(false);
         onCancel();
         if (isMounted.current) setIsExpanded(false);
       } else {
@@ -181,24 +179,16 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
       Alert.alert("Error", "Passenger phone number is not available.");
       return;
     }
-
-    // Prepend + and keep only digits
     const phoneNumber = "+" + driver.phone.replace(/\D/g, "");
-    let url = "";
-
-    if (Platform.OS === "android") {
-      url = `tel:${phoneNumber}`;
-    } else {
-      url = `telprompt:${phoneNumber}`;
-    }
+    let url =
+      Platform.OS === "android"
+        ? `tel:${phoneNumber}`
+        : `telprompt:${phoneNumber}`;
 
     Linking.canOpenURL(url)
       .then((supported) => {
-        if (supported) {
-          Linking.openURL(url);
-        } else {
-          Alert.alert("Error", "Unable to open dialer.");
-        }
+        if (supported) Linking.openURL(url);
+        else Alert.alert("Error", "Unable to open dialer.");
       })
       .catch((err) => console.error("Dialer error:", err));
   };
@@ -209,30 +199,22 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
         Alert.alert("Error", "Driver phone number is not available.");
         return;
       }
-
-      // Ensure phone number has only digits and starts with +
       const phoneNumber = "+" + driver.phone.replace(/\D/g, "");
-
-      // Get passenger info and build full name
       const userInfo = await getUserInfo();
       const passengerName = userInfo
         ? `${userInfo.firstName || ""} ${userInfo.lastName || ""}`.trim()
         : "Passenger";
 
-      // Predefined message
       const message = encodeURIComponent(`DRIFT Passenger - ${passengerName}:`);
-
       const url = `https://wa.me/${phoneNumber}?text=${message}`;
 
       const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      } else {
+      if (supported) await Linking.openURL(url);
+      else
         Alert.alert(
           "WhatsApp not installed",
           "Please install WhatsApp to send a message.",
         );
-      }
     } catch (err) {
       console.error("WhatsApp error:", err);
     }
@@ -268,7 +250,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
             >
               <Ionicons
                 name={isExpanded ? "chevron-down" : "chevron-up"}
-                size={24}
+                size={ms(24)}
                 color="#475569"
               />
             </TouchableOpacity>
@@ -279,37 +261,30 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
           <View style={styles.driverInfo}>
             <IRAvatar
               source={profilePic ? { uri: profilePic } : undefined}
-              size={52}
+              size={ms(52)}
             />
             <View>
               <Text style={styles.driverName}>{driver.name}</Text>
               <View style={styles.ratingBadge}>
-                {/* Render 5 stars based on driver rating */}
                 {Array.from({ length: 5 }).map((_, i) => {
                   const safeRating = typeof rating === "number" ? rating : 5;
-
                   return (
                     <Ionicons
                       key={i}
                       name="star"
-                      size={12}
-                      color={i < Math.round(safeRating) ? "#FFC107" : "#E5E7EB"} // Gold = filled, Gray = empty
-                      style={{ marginRight: 1 }}
+                      size={ms(12)}
+                      color={i < Math.round(safeRating) ? "#FFC107" : "#E5E7EB"}
+                      style={{ marginRight: s(1) }}
                     />
                   );
                 })}
-
-                {/* Numeric rating value */}
                 <Text style={styles.ratingText}>
                   {typeof rating === "number" ? rating.toFixed(2) : "5.00"}
                 </Text>
-
-                {/* Total trips */}
                 <Text style={styles.tripCount}> • {totalTrips} rides</Text>
               </View>
             </View>
           </View>
-          {/* Call button */}
           <TouchableOpacity
             style={[
               styles.iconButton,
@@ -317,15 +292,14 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
             ]}
             onPress={handleCallDriver}
           >
-            <Ionicons name="call" size={22} color="#fff" />
+            <Ionicons name="call" size={ms(22)} color="#fff" />
           </TouchableOpacity>
-          {/* WhatsApp button */}
           <TouchableOpacity
-            style={[styles.iconButton, { backgroundColor: "#25D366" }]} // WhatsApp green
+            style={[styles.iconButton, { backgroundColor: "#25D366" }]}
             activeOpacity={0.7}
             onPress={handleWhatsAppDriver}
           >
-            <Ionicons name="logo-whatsapp" size={22} color="#fff" />
+            <Ionicons name="logo-whatsapp" size={ms(22)} color="#fff" />
           </TouchableOpacity>
         </View>
 
@@ -334,7 +308,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
             <IRAvatar
               source={vehiclePic ? { uri: vehiclePic } : undefined}
               variant="rounded"
-              size={50}
+              size={ms(50)}
               style={{ backgroundColor: "#f8fafc" }}
             />
             <View>
@@ -363,20 +337,22 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
             onPress={() => setShowCancelModal(true)}
           />
         ) : (
-          <View style={{ gap: 10, paddingBottom: 20 }}>
+          <View style={{ gap: vs(10), paddingBottom: vs(20) }}>
             <IRButton
               title="Safety Toolkit"
               variant="outline"
               onPress={() => {}}
               leftIcon={
-                <Ionicons name="shield-checkmark" size={20} color="#007AFF" />
+                <Ionicons
+                  name="shield-checkmark"
+                  size={ms(20)}
+                  color="#007AFF"
+                />
               }
               style={styles.safetyButton}
               textStyle={styles.safetyButtonText}
               borderColor="#E2E8F0"
             />
-
-            {/* Premium Fade & Slide Animation */}
             {isExpanded && (
               <Animated.View
                 style={{
@@ -385,7 +361,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
                     {
                       translateY: fadeAnim.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [10, 0], // Slides up 10px while fading in
+                        outputRange: [vs(10), 0],
                       }),
                     },
                   ],
@@ -397,12 +373,8 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
                   onPress={() => setShowDropModal(true)}
                   loading={isCancelling}
                   borderColor="#fee2e2"
-                  style={{
-                    backgroundColor: "#fef2f2",
-                    height: 56,
-                    borderRadius: 16,
-                  }}
-                  textStyle={{ color: "#ef4444", fontWeight: "700" }}
+                  style={styles.dropButton}
+                  textStyle={styles.dropButtonText}
                 />
               </Animated.View>
             )}
@@ -466,7 +438,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, styles.remoteModalPadding]}>
             <View style={styles.alertCircle}>
-              <Ionicons name="alert-circle" size={36} color="#ef4444" />
+              <Ionicons name="alert-circle" size={ms(36)} color="#ef4444" />
             </View>
             <Text style={styles.modalTitle}>Trip Cancelled</Text>
             <Text style={styles.modalSubtitle}>
@@ -482,12 +454,13 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
           </View>
         </View>
       </Modal>
+
       <ActionConfirmationModal
         visible={showDropModal}
         title="End trip early?"
         subtitle="Are you sure you want the driver to stop here? You will be charged for the distance covered."
         confirmText="Yes, Drop Me Here"
-        confirmVariant="danger" // Using danger variant for visual emphasis
+        confirmVariant="danger"
         loading={isCancelling}
         onConfirm={handleDropMeHere}
         onClose={() => setShowDropModal(false)}
@@ -496,26 +469,26 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = createStyles({
   container: {
     flex: 1,
-    paddingTop: 15,
+    paddingTop: vs(15),
     backgroundColor: "#fff",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: s(16),
   },
   topSection: { flex: 1 },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: vs(12),
   },
   center: { justifyContent: "center", alignItems: "center" },
   loadingText: {
-    marginTop: 10,
+    marginTop: vs(10),
     color: "#94a3b8",
-    fontSize: 14,
+    fontSize: ms(14),
     fontWeight: "500",
   },
   driverRow: {
@@ -523,21 +496,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  driverInfo: { flexDirection: "row", alignItems: "center", gap: 10 },
-  driverName: { fontSize: 18, fontWeight: "700", color: "#1e293b" },
-  ratingBadge: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  driverInfo: { flexDirection: "row", alignItems: "center", gap: s(10) },
+  driverName: { fontSize: ms(18), fontWeight: "700", color: "#1e293b" },
+  ratingBadge: { flexDirection: "row", alignItems: "center", marginTop: vs(2) },
   ratingText: {
-    fontSize: 13,
+    fontSize: ms(13),
     fontWeight: "700",
-    marginLeft: 4,
+    marginLeft: s(4),
     color: "#1e293b",
   },
-  tripCount: { fontSize: 13, color: "#94a3b8", fontWeight: "500" },
+  tripCount: { fontSize: ms(13), color: "#94a3b8", fontWeight: "500" },
   iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#f8fafc",
+    width: ms(44),
+    height: ms(44),
+    borderRadius: ms(22),
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
@@ -547,53 +519,58 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginVertical: 10,
+    marginVertical: vs(10),
   },
-  vehicleInfo: { flexDirection: "row", alignItems: "center", gap: 12 },
+  vehicleInfo: { flexDirection: "row", alignItems: "center", gap: s(12) },
   pulseDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: ms(6),
+    height: ms(6),
+    borderRadius: ms(3),
     backgroundColor: "#10B981",
-    marginRight: 6,
+    marginRight: s(6),
   },
   safetyButton: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    //marginBottom: 20,
+    borderRadius: ms(16),
     borderWidth: 1,
-    height: 56,
+    height: vs(56),
     justifyContent: "center",
   },
-  safetyButtonText: { fontSize: 16, fontWeight: "700", color: "#475569" },
+  safetyButtonText: { fontSize: ms(16), fontWeight: "700", color: "#475569" },
+  dropButton: {
+    backgroundColor: "#fef2f2",
+    height: vs(56),
+    borderRadius: ms(16),
+  },
+  dropButtonText: { color: "#ef4444", fontWeight: "700", fontSize: ms(16) },
   carModel: {
-    fontSize: 15,
+    fontSize: ms(15),
     fontWeight: "600",
     color: "#475569",
-    marginBottom: 2,
+    marginBottom: vs(2),
   },
   plateBadge: {
     backgroundColor: "#f1f5f9",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: s(6),
+    paddingVertical: vs(2),
+    borderRadius: ms(4),
     borderWidth: 1,
     borderColor: "#e2e8f0",
     alignSelf: "flex-start",
   },
   plateNumber: {
-    fontSize: 11,
+    fontSize: ms(11),
     fontWeight: "700",
     color: "#475569",
     textTransform: "uppercase",
   },
   pricePill: {
     backgroundColor: "#f1f5f9",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: s(12),
+    paddingVertical: vs(6),
+    borderRadius: ms(12),
   },
-  priceText: { fontSize: 18, fontWeight: "800", color: "#10B981" },
+  priceText: { fontSize: ms(18), fontWeight: "800", color: "#10B981" },
   footer: { marginTop: "auto" },
   modalOverlay: {
     flex: 1,
@@ -602,89 +579,89 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: "#fff",
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 24,
-    paddingBottom: 40,
+    borderTopLeftRadius: ms(32),
+    borderTopRightRadius: ms(32),
+    padding: s(24),
+    paddingBottom: vs(40),
   },
   modalIndicator: {
-    width: 40,
-    height: 4,
+    width: s(40),
+    height: vs(4),
     backgroundColor: "#e2e8f0",
-    borderRadius: 2,
+    borderRadius: ms(2),
     alignSelf: "center",
-    marginBottom: 20,
+    marginBottom: vs(20),
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: ms(24),
     fontWeight: "800",
     color: "#1e293b",
-    marginBottom: 4,
+    marginBottom: vs(4),
   },
-  modalSubtitle: { fontSize: 15, color: "#64748b", marginBottom: 20 },
+  modalSubtitle: { fontSize: ms(15), color: "#64748b", marginBottom: vs(20) },
   reasonContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 16,
+    gap: s(8),
+    marginBottom: vs(16),
   },
   reasonChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: s(14),
+    paddingVertical: vs(10),
+    borderRadius: ms(12),
     backgroundColor: "#f1f5f9",
     borderWidth: 1.5,
     borderColor: "transparent",
   },
   reasonChipActive: { backgroundColor: "#ecfdf5", borderColor: "#10B981" },
-  reasonChipText: { fontSize: 13, fontWeight: "600", color: "#475569" },
+  reasonChipText: { fontSize: ms(13), fontWeight: "600", color: "#475569" },
   reasonChipTextActive: { color: "#10B981" },
   reasonInput: {
     width: "100%",
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    borderRadius: 16,
-    padding: 16,
-    fontSize: 15,
+    borderRadius: ms(16),
+    padding: s(16),
+    fontSize: ms(15),
     color: "#1e293b",
-    minHeight: 80,
+    minHeight: vs(80),
     textAlignVertical: "top",
-    marginBottom: 24,
+    marginBottom: vs(24),
   },
-  modalActions: { width: "100%", gap: 12 },
+  modalActions: { width: "100%", gap: vs(12) },
   remoteModalPadding: {
     alignItems: "center",
-    borderTopLeftRadius: 40,
-    borderTopRightRadius: 40,
+    borderTopLeftRadius: ms(40),
+    borderTopRightRadius: ms(40),
   },
   alertCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: ms(64),
+    height: ms(64),
+    borderRadius: ms(32),
     backgroundColor: "#fef2f2",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: vs(16),
   },
   reasonDisplayBox: {
     width: "100%",
     backgroundColor: "#f8fafc",
-    padding: 20,
-    borderRadius: 20,
-    marginBottom: 30,
+    padding: s(20),
+    borderRadius: ms(20),
+    marginBottom: vs(30),
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
   reasonLabel: {
-    fontSize: 12,
+    fontSize: ms(12),
     fontWeight: "700",
     color: "#94a3b8",
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: vs(4),
   },
   reasonValue: {
-    fontSize: 16,
+    fontSize: ms(16),
     color: "#334155",
     fontWeight: "600",
     fontStyle: "italic",
@@ -694,17 +671,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#ecfdf5",
     alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
+    paddingHorizontal: s(10),
+    paddingVertical: vs(4),
+    borderRadius: ms(20),
   },
   ongoingText: {
-    fontSize: 12,
+    fontSize: ms(12),
     fontWeight: "700",
     color: "#10B981",
     textTransform: "uppercase",
   },
-  expandToggle: { padding: 4 },
+  expandToggle: { padding: s(4) },
 });
 
 export default TripTab;

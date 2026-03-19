@@ -1,4 +1,5 @@
 // components/TripStatusModal.tsx
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Modal, StyleSheet, Text, View } from "react-native";
@@ -56,7 +57,7 @@ const TripStatusModal: React.FC<TripStatusModalProps> = ({
       transparent
       animationType="fade"
       onRequestClose={onClose}
-      statusBarTranslucent={true} // ✅ This ensures it covers the status bar area
+      statusBarTranslucent={true}
     >
       <View style={styles.modalBackdrop}>
         <View style={styles.boltModal}>
@@ -68,7 +69,7 @@ const TripStatusModal: React.FC<TripStatusModalProps> = ({
           >
             <Ionicons
               name={current.icon as any}
-              size={42}
+              size={ms(42)} // Responsive icon size
               color={current.color}
             />
           </View>
@@ -79,7 +80,10 @@ const TripStatusModal: React.FC<TripStatusModalProps> = ({
           <IRButton
             title={current.btnText}
             onPress={onClose}
-            style={{ backgroundColor: current.btnBg, borderRadius: 16 }}
+            style={{
+              backgroundColor: current.btnBg,
+              borderRadius: ms(16), // Responsive button corners
+            }}
             textStyle={styles.modalButtonText}
             size="sm"
           />
@@ -95,46 +99,46 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15, 23, 42, 0.8)",
     justifyContent: "center",
     alignItems: "center",
-    paddingTop: 20,
-    paddingHorizontal: 20,
+    paddingTop: vs(20),
+    paddingHorizontal: s(20),
   },
   boltModal: {
     backgroundColor: "#fff",
     width: "100%",
-    borderRadius: 32,
-    padding: 24,
+    borderRadius: ms(32),
+    padding: ms(24),
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: vs(10) },
     shadowOpacity: 0.1,
-    shadowRadius: 20,
+    shadowRadius: ms(20),
     elevation: 5,
   },
   iconCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: ms(88),
+    height: ms(88),
+    borderRadius: ms(44),
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: vs(20),
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: ms(24),
     fontWeight: "800",
     color: "#1e293b",
-    marginBottom: 10,
+    marginBottom: vs(10),
     textAlign: "center",
   },
   modalReason: {
-    fontSize: 16,
+    fontSize: ms(16),
     color: "#64748b",
     textAlign: "center",
-    marginBottom: 32,
-    lineHeight: 24,
+    marginBottom: vs(32),
+    lineHeight: vs(24),
   },
   modalButtonText: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: ms(18),
     fontWeight: "700",
   },
 });

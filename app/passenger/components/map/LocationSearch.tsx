@@ -1,3 +1,4 @@
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import * as Crypto from "expo-crypto";
@@ -54,14 +55,12 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
 
   /**
    * Generates a unique UUID for Google Places session billing.
-   * This groups multiple keystrokes into one "session" to save costs.
    */
   const refreshSessionToken = () => {
     const newToken = Crypto.randomUUID();
     setSessionToken(newToken);
   };
 
-  // Initial setup: focus input and start a billing session
   useEffect(() => {
     refreshSessionToken();
     if (autoFocus && inputRef.current) {
@@ -69,10 +68,6 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
     }
   }, [autoFocus]);
 
-  /**
-   * Calls Google Places Autocomplete API.
-   * Restricted to Zimbabwe (ZW) for operational accuracy.
-   */
   const fetchAutocomplete = async (text: string) => {
     if (text.length < 3) {
       setSuggestions([]);
@@ -87,7 +82,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
         key: GOOGLE_MAPS_APIKEY || "",
         types: "geocode|establishment",
         sessiontoken: sessionToken,
-        components: "country:zw", // Geographic restriction
+        components: "country:zw",
       });
 
       const response = await fetch(`${baseUrl}?${queryParams.toString()}`);
@@ -100,10 +95,6 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
     }
   };
 
-  /**
-   * Handles text input with debouncing.
-   * Wait 500ms after typing stops before calling the API.
-   */
   const handleTextChange = (text: string) => {
     onDestinationChange(text);
     if (!sessionToken) refreshSessionToken();
@@ -114,9 +105,6 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
     }, 500);
   };
 
-  /**
-   * Fetches the final Lat/Lng coordinates for a selected result.
-   */
   const handlePlaceSelect = async (prediction: any) => {
     onDestinationChange(prediction.structured_formatting.main_text);
     setSuggestions([]);
@@ -137,7 +125,6 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
         longitude: lng,
       });
 
-      // End current billing session and reset for next search
       setSessionToken("");
       refreshSessionToken();
     } catch (error) {
@@ -157,7 +144,6 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
 
   return (
     <View style={styles.wrapper}>
-      {/* Search Input Bar */}
       <View style={styles.container}>
         {searching ? (
           <ActivityIndicator
@@ -168,7 +154,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
         ) : (
           <Ionicons
             name="search"
-            size={20}
+            size={ms(20)}
             color={theme.colors.textSecondary}
             style={styles.leftIcon}
           />
@@ -188,14 +174,13 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
           <TouchableOpacity onPress={clearSearch} style={styles.rightIcon}>
             <Ionicons
               name="close-circle"
-              size={20}
+              size={ms(20)}
               color={theme.colors.textSecondary}
             />
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Suggestion List Overlay */}
       {editable && suggestions.length > 0 && (
         <View style={styles.suggestionsContainer}>
           <FlatList
@@ -210,7 +195,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
                 <View style={styles.iconCircle}>
                   <Ionicons
                     name="location-sharp"
-                    size={16}
+                    size={ms(16)}
                     color={theme.colors.primary}
                   />
                 </View>
@@ -228,7 +213,6 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
         </View>
       )}
 
-      {/* No Results Feedback */}
       {editable &&
         suggestions.length === 0 &&
         destination.length >= 3 &&
@@ -243,7 +227,6 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
   );
 };
 
-// --- Styles ---
 const styles = createStyles({
   wrapper: {
     zIndex: 1000,
@@ -252,64 +235,69 @@ const styles = createStyles({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: theme.colors.background,
-    borderRadius: 200,
-    paddingHorizontal: theme.spacing.md,
-    height: 54,
-    //...theme.shadows.md,
+    borderRadius: ms(27), // Half of height for perfect pill shape
+    paddingHorizontal: s(theme.spacing.md),
+    height: vs(54),
   },
   leftIcon: {
-    marginRight: theme.spacing.sm,
+    marginRight: s(theme.spacing.sm),
   },
   rightIcon: {
-    marginLeft: theme.spacing.sm,
+    marginLeft: s(theme.spacing.sm),
   },
   searchInput: {
     flex: 1,
     ...typedTypography.body,
+    fontSize: ms(16),
     color: theme.colors.text,
   },
   suggestionsContainer: {
     position: "absolute",
-    top: 60,
+    top: vs(60),
     left: 0,
     right: 0,
-    maxHeight: 250,
+    maxHeight: vs(300),
     overflow: "hidden",
+    //backgroundColor: theme.colors.surfa,
+    borderRadius: ms(12),
   },
   suggestionItem: {
     flexDirection: "row",
     alignItems: "center",
-    padding: theme.spacing.md,
+    padding: ms(theme.spacing.md),
     borderBottomWidth: 0.5,
     borderBottomColor: theme.colors.border,
   },
   iconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: ms(32),
+    height: ms(32),
+    borderRadius: ms(16),
     backgroundColor: theme.colors.primary + "15",
     justifyContent: "center",
     alignItems: "center",
   },
   suggestionText: {
     flex: 1,
-    marginLeft: theme.spacing.sm,
+    marginLeft: s(theme.spacing.sm),
   },
   suggestionName: {
     ...typedTypography.body,
+    fontSize: ms(15),
     fontWeight: "600",
   },
   suggestionAddress: {
     ...typedTypography.caption,
+    fontSize: ms(12),
     color: theme.colors.textSecondary,
   },
   noResults: {
-    marginTop: 5,
-    padding: theme.spacing.md,
+    marginTop: vs(5),
+    padding: ms(theme.spacing.md),
     alignItems: "center",
   },
   noResultsText: {
     ...typedTypography.caption,
+    fontSize: ms(12),
     color: theme.colors.textSecondary,
   },
 });

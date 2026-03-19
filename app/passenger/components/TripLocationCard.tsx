@@ -1,10 +1,19 @@
 // app/passenger/components/TripLocationCard.tsx
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { Navigation } from "lucide-react-native";
 import React, { useEffect, useRef } from "react";
-import { Animated, Text, TouchableOpacity, View } from "react-native";
+import {
+  Animated,
+  Dimensions,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { theme } from "../../../constants/theme";
 import { createStyles } from "../../../utils/styles";
 import { useRideBooking } from "../../context/RideBookingContext";
+
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 interface TripLocationCardProps {
   onPress?: () => void;
@@ -21,14 +30,15 @@ const TripLocationCard: React.FC<TripLocationCardProps> = ({
   );
 
   const isBookingActive = rideData.status === "idle";
-  const translateY = useRef(new Animated.Value(-300)).current; // Start hidden
+  // Start hidden off-screen based on device height
+  const translateY = useRef(new Animated.Value(-SCREEN_HEIGHT * 0.4)).current;
 
   useEffect(() => {
     const hasDestination = !!rideData.destination;
     const delayTime = hasDestination ? RIDE_DELAY : 0;
 
     Animated.spring(translateY, {
-      toValue: topPosition, // ✅ Now controlled by parent
+      toValue: topPosition,
       useNativeDriver: true,
       tension: 60,
       friction: 10,
@@ -48,7 +58,6 @@ const TripLocationCard: React.FC<TripLocationCardProps> = ({
       ]}
     >
       <TouchableOpacity
-        //activeOpacity={0.9}
         onPress={onPress}
         disabled={!isBookingActive}
         style={styles.cardContent}
@@ -80,20 +89,17 @@ const TripLocationCard: React.FC<TripLocationCardProps> = ({
             ]}
             numberOfLines={1}
           >
-            {
-              // Prefer restored address → then name → then fallback
-              currentRide?.destination?.name ||
-                currentRide?.destination?.address ||
-                rideData.destination?.address ||
-                rideData.destination?.name ||
-                "Select destination"
-            }
+            {currentRide?.destination?.name ||
+              currentRide?.destination?.address ||
+              rideData.destination?.address ||
+              rideData.destination?.name ||
+              "Select destination"}
           </Text>
         </View>
 
         {isBookingActive && (
           <View style={styles.sideAction}>
-            <Navigation size={18} color={theme.colors.primary} />
+            <Navigation size={ms(18)} color={theme.colors.primary} />
           </View>
         )}
       </TouchableOpacity>
@@ -101,69 +107,70 @@ const TripLocationCard: React.FC<TripLocationCardProps> = ({
   );
 };
 
-// ... keep existing styles ...
 const styles = createStyles({
   animatedWrapper: {
     position: "absolute",
     top: 0,
-    left: theme.spacing.md,
-    right: theme.spacing.md,
+    left: s(theme.spacing.md),
+    right: s(theme.spacing.md),
     zIndex: 100,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
-    shadowRadius: 10,
+    shadowRadius: ms(10),
     elevation: 8,
   },
   cardContent: {
     flexDirection: "row",
     backgroundColor: theme.colors.surface,
-    borderRadius: 16,
-    padding: theme.spacing.md,
+    borderRadius: ms(16),
+    padding: s(theme.spacing.md),
     alignItems: "center",
-    minHeight: 80,
-
-    // ✅ Black border
+    minHeight: vs(80),
     borderWidth: 1,
     borderColor: theme.colors.secondary,
   },
   lineDecorator: {
     alignItems: "center",
-    width: 20,
-    height: 40,
-    marginRight: theme.spacing.sm,
+    width: s(20),
+    height: vs(40),
+    marginRight: s(theme.spacing.sm),
   },
   dotPickup: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: ms(6),
+    height: ms(6),
+    borderRadius: ms(3),
     backgroundColor: theme.colors.primary,
   },
   line: {
     flex: 1,
-    width: 1,
+    width: s(1),
     backgroundColor: theme.colors.border,
-    marginVertical: 2,
+    marginVertical: vs(2),
   },
-  squareDestination: { width: 6, height: 6, backgroundColor: theme.colors.red },
+  squareDestination: {
+    width: ms(6),
+    height: ms(6),
+    backgroundColor: theme.colors.red,
+  },
   locationsWrapper: { flex: 1, justifyContent: "center" },
-  locationRow: { height: 22, justifyContent: "center" },
+  locationRow: { height: vs(22), justifyContent: "center" },
   locationText: {
-    fontSize: 14,
+    fontSize: ms(14),
     color: theme.colors.textSecondary,
     fontWeight: "500",
   },
   destinationText: { color: theme.colors.text, fontWeight: "700" },
   disabledText: { color: "#506055ff", fontWeight: "500" },
   divider: {
-    height: 1,
+    height: vs(1),
     backgroundColor: theme.colors.background,
     opacity: 0.3,
-    marginVertical: 4,
+    marginVertical: vs(4),
   },
   sideAction: {
-    paddingLeft: theme.spacing.sm,
-    marginLeft: theme.spacing.sm,
+    paddingLeft: s(theme.spacing.sm),
+    marginLeft: s(theme.spacing.sm),
     justifyContent: "center",
     alignItems: "center",
   },

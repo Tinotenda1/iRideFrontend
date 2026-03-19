@@ -1,51 +1,49 @@
 // utils/responsive.ts
-import { Dimensions, PixelRatio } from "react-native";
+import { Dimensions, PixelRatio, Platform, StatusBar } from "react-native";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+// Use "screen" to get the absolute physical size of the glass
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("screen");
 
-// 1. Identify the "Short" and "Long" sides.
-// This ensures your math stays consistent even if the user rotates the phone.
-const [shortDimension, longDimension] =
-  SCREEN_WIDTH < SCREEN_HEIGHT
-    ? [SCREEN_WIDTH, SCREEN_HEIGHT]
-    : [SCREEN_HEIGHT, SCREEN_WIDTH];
+// Calculate the actual usable height (handling the Android Status Bar)
+const ACTUAL_HEIGHT =
+  Platform.OS === "android"
+    ? SCREEN_HEIGHT - (StatusBar.currentHeight || 0)
+    : SCREEN_HEIGHT;
 
-// 2. Set Base Guidelines (Reference Device)
-// These are the dimensions of a standard "modern" phone.
-// If your M35 looks perfect, use its specs here (Approx 390x844 for logic).
 const guidelineBaseWidth = 375;
 const guidelineBaseHeight = 812;
 
-// 3. Device Type Check
-export const isTablet = shortDimension / longDimension > 0.7; // Typical tablet aspect ratio
-export const isSmallPhone = shortDimension < 350; // iPhone SE / Mini style
-
-/**
- * SCALING FUNCTIONS
+/** * HP (Height Percentage): Use this for Trays and Modals
+ * This ensures 50% is ALWAYS 50% regardless of the phone height.
  */
+export const hp = (percentage: number) => {
+  return Math.round(
+    PixelRatio.roundToNearestPixel((ACTUAL_HEIGHT * percentage) / 100),
+  );
+};
 
-// s (Scale): For Width, Padding, Margin (Horizontal)
+/** * WP (Width Percentage): Use this for full-width sections
+ */
+export const wp = (percentage: number) => {
+  return Math.round(
+    PixelRatio.roundToNearestPixel((SCREEN_WIDTH * percentage) / 100),
+  );
+};
+
 export const s = (size: number) => {
-  const scale = shortDimension / guidelineBaseWidth;
-  const newSize = size * scale;
-  return Math.round(PixelRatio.roundToNearestPixel(newSize));
+  const scale = SCREEN_WIDTH / guidelineBaseWidth;
+  return Math.round(PixelRatio.roundToNearestPixel(size * scale));
 };
 
-// vs (Vertical Scale): For Height, Top/Bottom (Vertical)
 export const vs = (size: number) => {
-  const scale = longDimension / guidelineBaseHeight;
-  const newSize = size * scale;
-  return Math.round(PixelRatio.roundToNearestPixel(newSize));
+  const scale = ACTUAL_HEIGHT / guidelineBaseHeight;
+  return Math.round(PixelRatio.roundToNearestPixel(size * scale));
 };
 
-// ms (Moderate Scale): For Fonts and Border Radius
-// This is the "Magic" function. It scales, but at a 50% lower rate.
-// This prevents a font from jumping from 16pt to 32pt on a tablet.
 export const ms = (size: number, factor = 0.5) => {
   const newSize = size + (s(size) - size) * factor;
   return Math.round(PixelRatio.roundToNearestPixel(newSize));
 };
 
-// 4. Exporting Raw Dimensions for one-off checks
 export { SCREEN_HEIGHT, SCREEN_WIDTH };
 

@@ -1,6 +1,7 @@
 // app/passenger/components/RideTypeCard.tsx
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics"; // 1. Import Haptics
+import * as Haptics from "expo-haptics";
 import React from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import { theme } from "../../../constants/theme";
@@ -21,7 +22,6 @@ const RideTypeCard: React.FC<RideTypeCardProps> = ({
   selected,
   onPress,
 }) => {
-  // 2. Wrap the onPress to include the haptic trigger
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPress();
@@ -33,7 +33,7 @@ const RideTypeCard: React.FC<RideTypeCardProps> = ({
         styles.card,
         selected ? styles.cardSelected : styles.cardUnselected,
       ]}
-      onPress={handlePress} // Use the new handler
+      onPress={handlePress}
       activeOpacity={0.7}
     >
       {/* Selection Checkmark */}
@@ -41,7 +41,7 @@ const RideTypeCard: React.FC<RideTypeCardProps> = ({
         <View style={styles.selectedIndicator}>
           <Ionicons
             name="checkmark-circle"
-            size={20}
+            size={ms(20)}
             color={theme.colors.primary}
           />
         </View>
@@ -67,10 +67,7 @@ const RideTypeCard: React.FC<RideTypeCardProps> = ({
 
         <Text
           numberOfLines={1}
-          style={[
-            styles.priceText,
-            selected && styles.priceTextSelected, // Brand color when selected
-          ]}
+          style={[styles.priceText, selected && styles.priceTextSelected]}
         >
           ${price}
         </Text>
@@ -83,16 +80,16 @@ const styles = createStyles({
   card: {
     flexDirection: "row",
     alignItems: "center",
-    width: 135,
-    height: 90,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    marginRight: 10,
+    width: s(135),
+    height: vs(90),
+    borderRadius: ms(20),
+    paddingHorizontal: s(8),
+    marginRight: s(10),
     position: "relative",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
-    shadowRadius: 10,
+    shadowRadius: ms(10),
     elevation: 3,
   },
   cardUnselected: {
@@ -107,13 +104,13 @@ const styles = createStyles({
     shadowOpacity: 0.15,
   },
   imageContainer: {
-    width: 65,
+    width: s(65),
     alignItems: "center",
     justifyContent: "center",
   },
   carImage: {
-    width: 60,
-    height: 45,
+    width: s(60),
+    height: vs(45),
     opacity: 0.85,
   },
   carImageSelected: {
@@ -123,21 +120,21 @@ const styles = createStyles({
   details: {
     flex: 1,
     justifyContent: "center",
-    paddingLeft: 8,
+    paddingLeft: s(8),
   },
   titleText: {
     ...typedTypography.caption,
-    fontSize: 13,
+    fontSize: ms(13),
     fontWeight: "500",
     color: theme.colors.textSecondary,
-    marginBottom: 2,
+    marginBottom: vs(2),
   },
   priceText: {
     ...typedTypography.body,
     fontWeight: "800",
     color: theme.colors.text,
-    fontSize: 16,
-    letterSpacing: -0.5,
+    fontSize: ms(16),
+    letterSpacing: s(-0.5),
   },
   priceTextSelected: {
     color: theme.colors.primary,
@@ -147,10 +144,10 @@ const styles = createStyles({
   },
   selectedIndicator: {
     position: "absolute",
-    top: -8,
-    right: -4,
+    top: vs(-8),
+    right: s(-4),
     backgroundColor: "#FFF",
-    borderRadius: 50,
+    borderRadius: ms(50),
     zIndex: 10,
   },
 });

@@ -100,7 +100,8 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
-    zIndex: 998,
+    zIndex: 9998,
+    elevation: 9998,
   },
   container: {
     position: "absolute",
@@ -111,7 +112,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: theme.borderRadius.xl,
     borderTopRightRadius: theme.borderRadius.xl,
     padding: theme.spacing.md,
-    zIndex: 999,
+    zIndex: 9999,
+    elevation: 9999,
   },
   label: {
     fontSize: 16,

@@ -1,12 +1,13 @@
+import { ms, vs } from "@/utils/responsive"; // Added responsiveness utility
 import React from "react";
 import {
   ActivityIndicator,
   StyleProp,
-  StyleSheet,
   Text,
   TouchableOpacity,
   ViewStyle,
 } from "react-native";
+import { createStyles } from "../utils/styles"; // Assuming path based on previous components
 
 interface CancelButtonProps {
   onPress: () => void;
@@ -29,7 +30,7 @@ const CancelButton: React.FC<CancelButtonProps> = ({
       activeOpacity={0.7}
     >
       {isLoading ? (
-        <ActivityIndicator color="#FF3B30" />
+        <ActivityIndicator color="#FF3B30" size={ms(20)} />
       ) : (
         <Text style={styles.text}>{label}</Text>
       )}
@@ -37,19 +38,19 @@ const CancelButton: React.FC<CancelButtonProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const styles = createStyles({
   button: {
     width: "100%",
-    padding: 14,
-    borderRadius: 12,
+    padding: vs(14),
+    borderRadius: ms(50),
     backgroundColor: "#F2F2F2",
     alignItems: "center",
-    marginBottom: 20,
+    //marginBottom: vs(20),
   },
   text: {
     color: "#FF3B30",
     fontWeight: "600",
-    fontSize: 16,
+    fontSize: ms(16),
   },
 });
 

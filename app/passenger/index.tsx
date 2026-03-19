@@ -30,6 +30,7 @@ import AdditionalInfoTray from "./components/trays/AdditionalInfoTray";
 import InputTray from "./components/trays/InputTray";
 import TripLocationCard from "./components/TripLocationCard";
 
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { resetSessionRestore } from "../services/sessionRestore";
 import MapContainer from "./components/map/MapContainer";
@@ -44,7 +45,7 @@ if (Platform.OS === "android") {
 
 const PassengerScreen: React.FC = () => {
   /* ===========================
-     REFS
+      REFS
   =========================== */
 
   const trayRef = useRef<any>(null);
@@ -57,17 +58,16 @@ const PassengerScreen: React.FC = () => {
   const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
   // Layout percentages
-  const TOP_CARD_PERCENT = 0.2; // 12%
-  const BOTTOM_TRAY_PERCENT = 0.32; // 32%
+  const TOP_CARD_PERCENT = 0.2;
+  const BOTTOM_TRAY_PERCENT = 0.32;
 
   const TOP_CARD_HEIGHT = SCREEN_HEIGHT * TOP_CARD_PERCENT;
   const BASE_TRAY_HEIGHT = SCREEN_HEIGHT * BOTTOM_TRAY_PERCENT;
 
-  // Determine the position here
-  const HIDDEN_POSITION = -300;
+  const HIDDEN_POSITION = vs(-300); // Responsive hidden position
 
   /* ===========================
-     CONSTANTS
+      CONSTANTS
   =========================== */
 
   const RIDE_DELAY = Number(
@@ -75,7 +75,7 @@ const PassengerScreen: React.FC = () => {
   );
 
   /* ===========================
-     CONTEXT & SESSION
+      CONTEXT & SESSION
   =========================== */
 
   const socket = getPassengerSocket();
@@ -91,7 +91,7 @@ const PassengerScreen: React.FC = () => {
   const { restoreSession, isRestoring } = useSessionRestoration();
 
   /* ===========================
-     STATE
+      STATE
   =========================== */
   const [trayHeight, setTrayHeight] = useState(0);
   const [traySettled, setTraySettled] = useState(false);
@@ -141,7 +141,7 @@ const PassengerScreen: React.FC = () => {
   });
 
   /* ===========================
-     ANIMATIONS
+      ANIMATIONS
   =========================== */
 
   const cardTopPosition = !!rideData.destination
@@ -152,7 +152,7 @@ const PassengerScreen: React.FC = () => {
   const menuOpacity = useRef(new Animated.Value(1)).current;
 
   /* ===========================
-     RATING
+      RATING
   =========================== */
 
   const handleRatingSubmit = useCallback(
@@ -188,12 +188,10 @@ const PassengerScreen: React.FC = () => {
         setRatingSnapshot(null);
         setCurrentRide(null);
 
-        /* FORCE FULL RESET */
         updateRideData({
           status: "idle",
           destination: null,
           activeTrip: null,
-          //offer: null,
         });
       } finally {
         setIsSubmitting(false);
@@ -203,7 +201,7 @@ const PassengerScreen: React.FC = () => {
   );
 
   /* ===========================
-     OFFERS
+      OFFERS
   =========================== */
 
   const removeOffer = useCallback((driverPhone: string, rideId: string) => {
@@ -261,7 +259,7 @@ const PassengerScreen: React.FC = () => {
   );
 
   /* ===========================
-     MODALS
+      MODALS
   =========================== */
 
   const handleCloseModal = () => {
@@ -281,19 +279,12 @@ const PassengerScreen: React.FC = () => {
   useEffect(() => {
     fetchRecentDestinations();
     const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
-      // Typing 'prev' as AppStateStatus fixes the TS7006 error
       setCurrentAppState((prev: AppStateStatus) => {
         if (
           prev === "active" &&
           (next === "inactive" || next === "background")
         ) {
-          resetSessionRestore(); // ✅ VERY IMPORTANT
-        }
-
-        if (
-          (prev === "inactive" || prev === "background") &&
-          next === "active"
-        ) {
+          resetSessionRestore();
         }
         return next;
       });
@@ -302,14 +293,13 @@ const PassengerScreen: React.FC = () => {
     return () => {
       sub.remove();
     };
-  }, []); // Logic is now self-contained; empty dependency array is fine.
+  }, []);
 
   /* ===========================
-     BACKEND RESTORE PUSH
+      BACKEND RESTORE PUSH
   =========================== */
 
   useEffect(() => {
-    // We bind the listener to the CURRENT socket instance
     const unsub = onReconnectState((data) => {
       console.log("♻️ Restore push received:", data);
       restoreSession(data);
@@ -321,7 +311,7 @@ const PassengerScreen: React.FC = () => {
   }, [restoreSession, socket]);
 
   /* ===========================
-     SHOW RATING AFTER RESTORE
+      SHOW RATING AFTER RESTORE
   =========================== */
 
   useEffect(() => {
@@ -338,7 +328,7 @@ const PassengerScreen: React.FC = () => {
   }, [rideData.status, currentRide]);
 
   /* ===========================
-     SOCKET LISTENERS (FULL)
+      SOCKET LISTENERS (FULL)
   =========================== */
 
   useEffect(() => {
@@ -368,36 +358,25 @@ const PassengerScreen: React.FC = () => {
     };
 
     const handleNearbyDriverUpdate = (data: any) => {
-      console.log("📡 nearby_driver_update:", data);
-
       const { driverPhone, latitude, longitude, heading } = data;
 
-      if (!driverPhone || !latitude || !longitude) {
-        console.log("⚠️ Invalid driver update payload");
-        return;
-      }
+      if (!driverPhone || !latitude || !longitude) return;
 
       setNearbyDrivers((prevDrivers) => {
         const existingIndex = prevDrivers.findIndex(
           (d) => d.phone === driverPhone,
         );
 
-        // Driver already exists → update location
         if (existingIndex !== -1) {
           const updated = [...prevDrivers];
-
           updated[existingIndex] = {
             ...updated[existingIndex],
             latitude,
             longitude,
             heading,
           };
-
           return updated;
         }
-
-        // New driver → add to map
-        console.log("🚗 New nearby driver detected:", driverPhone);
 
         return [
           ...prevDrivers,
@@ -411,7 +390,6 @@ const PassengerScreen: React.FC = () => {
       });
     };
 
-    // This function will be called from your index.tsx socket listener
     const handleMatchedDriverUpdate = (data: any) => {
       const { driverPhone, latitude, longitude, heading } = data;
 
@@ -427,14 +405,12 @@ const PassengerScreen: React.FC = () => {
 
     const handleDriverResponse = (newOffer: any) => {
       const phone = newOffer.driver?.phone;
-
       if (!phone || !newOffer.rideId) return;
 
       const expiresIn = newOffer.expiresIn || 30000;
 
       setOffers((prev) => {
         const filtered = prev.filter((o) => o.driver.phone !== phone);
-
         return [
           {
             ...newOffer,
@@ -457,32 +433,27 @@ const PassengerScreen: React.FC = () => {
       const matchedRide: RideResponse = {
         rideId,
         status: "matched",
-
         pickup: {
           address: tripDetails.ride.pickupAddress,
           latitude: tripDetails.ride.pickup.lat,
           longitude: tripDetails.ride.pickup.lng,
         },
-
         destination: {
           address: tripDetails.ride.destinationAddress,
           latitude: tripDetails.ride.destination.lat,
           longitude: tripDetails.ride.destination.lng,
         },
-
         vehicleType: tripDetails.ride.vehicleType,
         offer: tripDetails.offer,
         offerType: tripDetails.offerType || "fair",
         paymentMethod: tripDetails.ride.paymentMethod || "Cash",
         timestamp: new Date().toISOString(),
-
         driver: {
           name: tripDetails.driver.name,
           phone: tripDetails.driver.phone,
           rating: parseFloat(tripDetails.driver.rating || "5"),
           profilePic: tripDetails.driver.profilePic,
           totalTrips: tripDetails.driver.totalTrips || 0,
-
           vehicle: {
             model: tripDetails.vehicle.model,
             color: tripDetails.vehicle.color,
@@ -536,7 +507,6 @@ const PassengerScreen: React.FC = () => {
 
       setOffers([]);
       setSubmissionStates({});
-
       updateRideData({ status: "idle" });
     };
 
@@ -548,8 +518,6 @@ const PassengerScreen: React.FC = () => {
       updateRideData({ status: "idle" });
     };
 
-    /* ATTACH */
-
     socket.on("ride:completed", handleTripCompleted);
     socket.on("ride:driver_response", handleDriverResponse);
     socket.on("ride:matched", handleMatched);
@@ -560,8 +528,6 @@ const PassengerScreen: React.FC = () => {
     socket.on("ride:match_failed", handleBusy);
     socket.on("nearby_driver_update", handleNearbyDriverUpdate);
     socket.on("driver:location_update", handleMatchedDriverUpdate);
-
-    /* CLEANUP */
 
     return () => {
       socket.off("ride:completed", handleTripCompleted);
@@ -584,16 +550,14 @@ const PassengerScreen: React.FC = () => {
   ]);
 
   /* ===========================
-     UI ANIMATIONS
+      UI ANIMATIONS
   =========================== */
 
   useEffect(() => {
     let timeout: any;
-
     const activeStates = ["searching", "matched", "arrived", "on_trip"];
 
     if (rideData.destination) {
-      // Hide menu when a destination is set
       timeout = setTimeout(() => {
         Animated.timing(menuOpacity, {
           toValue: 0,
@@ -606,7 +570,6 @@ const PassengerScreen: React.FC = () => {
         }
       }, RIDE_DELAY);
     } else {
-      // Show menu immediately when destination is cleared (TripLocationCard closes)
       Animated.timing(menuOpacity, {
         toValue: 1,
         duration: 300,
@@ -618,17 +581,14 @@ const PassengerScreen: React.FC = () => {
   }, [rideData.destination, rideData.status]);
 
   /* ===========================
-     TRAY
+      TRAY
   =========================== */
 
   const handleTrayHeightChange = useCallback(
     (height: number) => {
       setTrayHeight(height);
-
-      // Mark tray as animating
       setTraySettled(false);
 
-      // Re-enable map updates after animation
       requestAnimationFrame(() => {
         setTimeout(() => {
           setTraySettled(true);
@@ -636,32 +596,38 @@ const PassengerScreen: React.FC = () => {
       });
 
       Animated.spring(searchCardBottomAnim, {
-        toValue: isTrayOpen ? height + 10 : 90,
+        toValue: isTrayOpen ? height + vs(10) : vs(90),
         useNativeDriver: false,
       }).start();
     },
     [isTrayOpen],
   );
+
   /* ===========================
-     RENDER
+      RENDER
   =========================== */
 
   return (
     <>
       <View style={styles.container}>
         <View style={styles.contentArea}>
-          {/* MAP */}
           <MapContainer
             nearbyDrivers={nearbyDrivers}
             matchedDriver={matchedDriver}
           />
 
           <Animated.View
-            style={[styles.menuButton, { opacity: menuOpacity }]}
+            style={[
+              styles.menuButton,
+              {
+                opacity: menuOpacity,
+                top: vs(40) + insets.top,
+              },
+            ]}
             pointerEvents={rideData.destination ? "none" : "auto"}
           >
             <TouchableOpacity onPress={() => sidebarRef.current?.open()}>
-              <Ionicons name="menu" size={28} color="#00000096" />
+              <Ionicons name="menu" size={ms(28)} color="#00000096" />
             </TouchableOpacity>
           </Animated.View>
         </View>
@@ -670,7 +636,7 @@ const PassengerScreen: React.FC = () => {
           ref={trayRef}
           onTrayHeightChange={handleTrayHeightChange}
           onTrayStateChange={setIsTrayOpen}
-          onTraySettled={setTraySettled} // ✅ new
+          onTraySettled={setTraySettled}
           onLocationInputFocus={(f: "pickup" | "destination") => {
             setActiveInputField(f);
             inputTrayRef.current?.open();
@@ -710,7 +676,7 @@ const PassengerScreen: React.FC = () => {
           userImage={ratingSnapshot?.driverPic}
           subtitle="How was your experience?"
           onSelectRating={handleRatingSubmit}
-          isLoading={isSubmitting} // Use the variable here to fix the ESLint error
+          isLoading={isSubmitting}
         />
 
         <TripLocationCard
@@ -729,39 +695,36 @@ const PassengerScreen: React.FC = () => {
 
 export default PassengerScreen;
 
-/* ===========================
-   STYLES
-=========================== */
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
   },
-
   contentArea: {
     flex: 1,
     backgroundColor: "#f5f5f5",
     overflow: "hidden",
   },
-
   menuButton: {
     position: "absolute",
-    top: 40,
-    left: 20,
+    left: s(20),
     backgroundColor: "#fff",
-    padding: 8,
-    borderRadius: 50,
+    padding: ms(8),
+    borderRadius: ms(50),
     zIndex: 100,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
-
   offersOverlay: {
     position: "absolute",
-    top: 150,
+    top: vs(150),
     bottom: 0,
     width: "100%",
     zIndex: 5,
-    paddingHorizontal: 16,
+    paddingHorizontal: s(16),
   },
   loaderOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -772,18 +735,18 @@ const styles = StyleSheet.create({
   },
   loaderCard: {
     backgroundColor: "white",
-    padding: 25,
-    borderRadius: 15,
+    padding: ms(25),
+    borderRadius: ms(15),
     alignItems: "center",
     elevation: 5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowRadius: ms(3.84),
   },
   loaderText: {
-    marginTop: 15,
-    fontSize: 16,
+    marginTop: vs(15),
+    fontSize: ms(16),
     fontWeight: "600",
     color: "#333",
   },

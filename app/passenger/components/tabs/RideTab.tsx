@@ -1,4 +1,5 @@
 // app/passenger/components/tabs/RideTab.tsx
+import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Wallet } from "lucide-react-native";
@@ -23,8 +24,7 @@ const RideTab: React.FC<TabProps> = ({
   onSwitchToSearching,
 }) => {
   const insets = useSafeAreaInsets();
-  const { rideData, updateRideData, submitRideBooking, fetchPrices } =
-    useRideBooking();
+  const { rideData, updateRideData, submitRideBooking } = useRideBooking();
 
   const [isBooking, setIsBooking] = useState(false);
   const [isFetchingPrices, setIsFetchingPrices] = useState(false);
@@ -38,7 +38,6 @@ const RideTab: React.FC<TabProps> = ({
     !!rideData.paymentMethod &&
     selectedVehiclePrice > 0;
 
-  // ✅ LOGGING: Observe prices arriving in the tab
   useEffect(() => {
     if (
       rideData.vehiclePrices &&
@@ -51,10 +50,8 @@ const RideTab: React.FC<TabProps> = ({
     }
   }, [rideData.vehiclePrices]);
 
-  // 1. INITIALIZATION LOGIC
   useEffect(() => {
     const initTab = async () => {
-      // Set default vehicle if none selected
       if (!rideData.vehicleType) {
         updateRideData({ vehicleType: "4seater" });
       }
@@ -64,9 +61,6 @@ const RideTab: React.FC<TabProps> = ({
     initTab();
   }, []);
 
-  // 2. SYNC OFFER WITH SELECTED VEHICLE PRICE
-  // This ensures that when prices arrive OR the user switches vehicles,
-  // the 'offer' state is updated to the new base price.
   useEffect(() => {
     const currentPrice = rideData.vehiclePrices?.[rideData.vehicleType];
     if (currentPrice && currentPrice > 0) {
@@ -111,7 +105,7 @@ const RideTab: React.FC<TabProps> = ({
       if (!result) {
         Alert.alert(
           "Error",
-          "We couldn't process your request. Please try again. If the issue persists, contact support.",
+          "We couldn't process your request. Please try again.",
         );
         return;
       }
@@ -120,7 +114,7 @@ const RideTab: React.FC<TabProps> = ({
     } catch (error) {
       Alert.alert(
         "Connection Problem",
-        "We are having trouble connecting right now. Please check your internet and try again.",
+        "We are having trouble connecting right now.",
       );
     } finally {
       setIsBooking(false);
@@ -131,7 +125,7 @@ const RideTab: React.FC<TabProps> = ({
     <View
       style={[
         styles.container,
-        { paddingBottom: Math.max(insets.bottom, theme.spacing.md) },
+        { paddingBottom: Math.max(insets.bottom, vs(theme.spacing.md)) },
       ]}
     >
       <View style={styles.mainContent}>
@@ -150,7 +144,7 @@ const RideTab: React.FC<TabProps> = ({
                       {type.seats}{" "}
                       <Ionicons
                         name="person"
-                        size={14}
+                        size={ms(14)}
                         color={theme.colors.textSecondary}
                       />
                     </>
@@ -183,7 +177,7 @@ const RideTab: React.FC<TabProps> = ({
         </View>
 
         <View style={styles.sectionHeader}>
-          <Wallet size={16} color={theme.colors.textSecondary} />
+          <Wallet size={ms(16)} color={theme.colors.textSecondary} />
           <Text style={styles.sectionHeaderText}>Payment Method</Text>
         </View>
 
@@ -232,7 +226,7 @@ const RideTab: React.FC<TabProps> = ({
             </Text>
             <Ionicons
               name="chevron-forward"
-              size={16}
+              size={ms(16)}
               color={theme.colors.textSecondary}
             />
           </TouchableOpacity>
@@ -262,7 +256,7 @@ const RideTab: React.FC<TabProps> = ({
             />
           )}
         </View>
-        <View style={{ paddingHorizontal: theme.spacing.md }}>
+        <View style={{ paddingHorizontal: s(theme.spacing.md) }}>
           <IRButton
             title={
               isBooking
@@ -285,7 +279,6 @@ const styles = createStyles({
     flex: 1,
     backgroundColor: theme.colors.surface,
     justifyContent: "space-between",
-    marginBottom: theme.spacing.sm,
   },
   mainContent: {
     flex: 1,
@@ -298,7 +291,7 @@ const styles = createStyles({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 30,
+    width: s(30),
     zIndex: 1,
   },
   rightFade: {
@@ -306,57 +299,51 @@ const styles = createStyles({
     right: 0,
     top: 0,
     bottom: 0,
-    width: 30,
+    width: s(30),
     zIndex: 1,
   },
   rideTypesCarousel: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    gap: theme.spacing.sm,
+    paddingHorizontal: s(theme.spacing.md),
+    paddingVertical: vs(theme.spacing.md),
+    gap: s(theme.spacing.sm),
   },
   rideTypeWrapper: {
-    width: 140,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: theme.colors.surface,
-    marginHorizontal: theme.spacing.md,
-    marginVertical: theme.spacing.sm,
+    width: s(140),
   },
   actionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: s(theme.spacing.md),
+    paddingVertical: vs(theme.spacing.sm),
   },
   paymentSection: {
     flexDirection: "row",
-    gap: theme.spacing.lg,
+    gap: s(theme.spacing.lg),
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: theme.spacing.md,
+    gap: s(8),
+    paddingHorizontal: s(theme.spacing.md),
     backgroundColor: theme.colors.surface,
   },
   sectionHeaderText: {
-    fontSize: 12,
+    fontSize: ms(12),
     fontWeight: "700",
     color: theme.colors.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: s(0.5),
   },
   radioItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: s(8),
   },
   radioOuter: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: ms(18),
+    height: ms(18),
+    borderRadius: ms(9),
     borderWidth: 2,
     borderColor: theme.colors.border,
     alignItems: "center",
@@ -366,13 +353,13 @@ const styles = createStyles({
     borderColor: theme.colors.primary,
   },
   radioInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: ms(8),
+    height: ms(8),
+    borderRadius: ms(4),
     backgroundColor: theme.colors.primary,
   },
   radioLabel: {
-    fontSize: 14,
+    fontSize: ms(14),
     fontWeight: "600",
     color: theme.colors.textSecondary,
   },
@@ -380,21 +367,21 @@ const styles = createStyles({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: theme.colors.background,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: s(theme.spacing.sm),
+    paddingVertical: vs(6),
+    borderRadius: ms(20),
   },
   infoText: {
-    fontSize: 13,
+    fontSize: ms(13),
     fontWeight: "600",
     color: theme.colors.textSecondary,
-    marginRight: 4,
+    marginRight: s(4),
   },
   textPrimary: {
     color: theme.colors.text,
   },
   offerContainer: {
-    paddingBottom: theme.spacing.sm,
+    paddingBottom: vs(theme.spacing.sm),
   },
 });
 

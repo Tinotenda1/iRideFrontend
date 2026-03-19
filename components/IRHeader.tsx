@@ -1,3 +1,4 @@
+import { ms, vs } from "@/utils/responsive"; // Added responsiveness utility
 import React from "react";
 import { StyleSheet, Text, TextStyle, View, ViewStyle } from "react-native";
 import { theme } from "../constants/theme";
@@ -22,21 +23,22 @@ const styles = StyleSheet.create<{
   subtitle: TextStyle;
 }>({
   container: {
-    marginBottom: theme.spacing.xl,
+    marginBottom: vs(theme.spacing.xl),
     alignItems: "center",
   },
   title: {
-    fontSize: theme.typography.h1.fontSize,
+    // ms is used for font sizes to prevent them from becoming too massive on tablets
+    fontSize: ms(theme.typography.h1.fontSize),
     fontWeight: theme.typography.h1.fontWeight as TextStyle["fontWeight"],
-    lineHeight: theme.typography.h1.lineHeight,
+    lineHeight: vs(theme.typography.h1.lineHeight),
     color: theme.colors.text,
     textAlign: "center",
-    marginBottom: theme.spacing.sm,
+    marginBottom: vs(theme.spacing.sm),
   },
   subtitle: {
-    fontSize: theme.typography.body.fontSize,
+    fontSize: ms(theme.typography.body.fontSize),
     fontWeight: theme.typography.body.fontWeight as TextStyle["fontWeight"],
-    lineHeight: theme.typography.body.lineHeight,
+    lineHeight: vs(theme.typography.body.lineHeight),
     color: theme.colors.textSecondary,
     textAlign: "center",
   },

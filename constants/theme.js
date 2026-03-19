@@ -1,12 +1,12 @@
 // constants/theme.js
+import { ms, s, vs } from "@/utils/responsive";
 
-// theme colors and styles
 export const theme = {
   colors: {
     primary: "#25D366", // Premium Bolt Emerald
     primaryDark: "#059669",
     secondary: "#0084FF", // Modern action blue
-    background: "#EEEEEE", // Slate-50 background
+    background: "#F5F5F5", // Slate-50 background
     surface: "#FFFFFF",
     text: "#0F172A", // Deep Slate-900
     textSecondary: "#64748B", // Slate-500
@@ -31,71 +31,71 @@ export const theme = {
     },
     sm: {
       shadowColor: "#0F172A",
-      shadowOffset: { width: 0, height: 1 },
+      shadowOffset: { width: 0, height: vs(1) },
       shadowOpacity: 0.05,
-      shadowRadius: 2,
+      shadowRadius: ms(2),
       elevation: 2,
     },
     md: {
       shadowColor: "#0F172A",
-      shadowOffset: { width: 0, height: 4 },
+      shadowOffset: { width: 0, height: vs(4) },
       shadowOpacity: 0.1,
-      shadowRadius: 6,
+      shadowRadius: ms(6),
       elevation: 4,
     },
     lg: {
       shadowColor: "#0F172A",
-      shadowOffset: { width: 0, height: 10 },
+      shadowOffset: { width: 0, height: vs(10) },
       shadowOpacity: 0.15,
-      shadowRadius: 12,
+      shadowRadius: ms(12),
       elevation: 8,
     },
   },
   spacing: {
-    xs: 4,
-    sm: 8,
-    md: 16,
-    lg: 24,
-    xl: 32,
-    xxl: 48,
+    xs: s(4),
+    sm: s(8),
+    md: s(16),
+    lg: s(24),
+    xl: s(32),
+    xxl: s(48),
   },
   borderRadius: {
-    sm: 8,
-    md: 12,
-    lg: 16,
-    xl: 24,
+    sm: ms(8),
+    md: ms(12),
+    lg: ms(16),
+    xl: ms(24),
     full: 9999,
   },
   typography: {
     h1: {
-      fontSize: 28,
-      fontWeight: "800", // ✅ string
-      lineHeight: 36,
+      fontSize: ms(28),
+      fontWeight: "800",
+      lineHeight: vs(36),
     },
     h2: {
-      fontSize: 24,
+      fontSize: ms(24),
       fontWeight: "700",
-      lineHeight: 32,
+      lineHeight: vs(32),
     },
     h3: {
-      fontSize: 20,
+      fontSize: ms(20),
       fontWeight: "700",
-      lineHeight: 28,
+      lineHeight: vs(28),
     },
     body: {
-      fontSize: 16,
+      fontSize: ms(16),
       fontWeight: "500",
-      lineHeight: 24,
+      lineHeight: vs(24),
     },
     bodySmall: {
-      fontSize: 14,
+      fontSize: ms(14),
       fontWeight: "400",
-      lineHeight: 20,
+      lineHeight: vs(20),
     },
     caption: {
-      fontSize: 12,
+      fontSize: ms(12),
       fontWeight: "600",
-      lineHeight: 16,
+      lineHeight: vs(16),
     },
   },
 };
