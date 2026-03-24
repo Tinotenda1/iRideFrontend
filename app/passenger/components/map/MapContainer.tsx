@@ -29,7 +29,6 @@ import MapView, {
 import MapViewDirections from "react-native-maps-directions";
 import { theme } from "../../../../constants/theme";
 import { useRideBooking } from "../../../context/RideBookingContext";
-import { HEIGHTS } from "../tabs/Tray";
 
 const GOOGLE_MAPS_APIKEY = Constants.expoConfig?.extra?.googleMapsApiKey ?? "";
 const { width, height } = Dimensions.get("window");
@@ -63,8 +62,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
   const mapRef = useRef<MapView>(null);
   const { rideData, updateRideData, fetchPrices } = useRideBooking();
   const { pickupLocation, destination, status } = rideData;
-
-  const [currentTrayHeight, setCurrentTrayHeight] = useState(trayHeight);
   const [userRegion, setUserRegion] = useState<Region | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMoved, setIsMoved] = useState(false);
@@ -90,16 +87,6 @@ const MapContainer: React.FC<MapContainerProps> = ({
 
   const TOP_LIMIT = height * 0.2;
 
-  const STATUS_TO_TRAY_HEIGHT: Record<string, keyof typeof HEIGHTS> = {
-    idle: "input",
-    booking: "ride",
-    searching: "searching",
-    matched: "matched",
-    arrived: "matched",
-    on_trip: "on_trip",
-    completed: "input",
-  };
-
   useEffect(() => {
     setAnimatedCoords([]);
     setSnappedPoints(null);
@@ -117,22 +104,14 @@ const MapContainer: React.FC<MapContainerProps> = ({
     return () => cancelAnimationFrame(id);
   }, [status]);
 
-  useEffect(() => {
-    if (!status) return;
-    const key = STATUS_TO_TRAY_HEIGHT[status];
-    if (!key) return;
-    const newHeight = HEIGHTS[key];
-    if (newHeight !== currentTrayHeight) setCurrentTrayHeight(newHeight);
-  }, [status, currentTrayHeight]);
-
   const getMapPadding = useCallback(
     () => ({
       top: TOP_LIMIT,
-      bottom: currentTrayHeight,
+      bottom: trayHeight,
       left: 0,
       right: 0,
     }),
-    [currentTrayHeight],
+    [trayHeight],
   );
 
   useEffect(() => {
@@ -181,8 +160,8 @@ const MapContainer: React.FC<MapContainerProps> = ({
 
       mapRef.current.fitToCoordinates(points, {
         edgePadding: {
-          top: vs(100),
-          bottom: currentTrayHeight + vs(40),
+          top: vs(50),
+          bottom: vs(100), //trayHeight + vs(40),
           left: s(80),
           right: s(80),
         },
@@ -233,7 +212,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
     routeCoordinates,
     status,
     matchedDriver,
-    currentTrayHeight,
+    trayHeight,
   ]);
 
   useEffect(() => {
@@ -256,7 +235,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
   useEffect(() => {
     const timeout = setTimeout(animateCamera, 150);
     return () => clearTimeout(timeout);
-  }, [currentTrayHeight, animateCamera]);
+  }, [trayHeight, animateCamera]);
 
   useEffect(() => {
     if (status && status !== "idle") animateCamera();
@@ -497,7 +476,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
 
       {isMoved && !isAnimating && (
         <TouchableOpacity
-          style={[styles.recenterButton, { bottom: currentTrayHeight }]}
+          style={[styles.recenterButton, { bottom: trayHeight }]}
           onPress={() => {
             setIsMoved(false);
             animateCamera();

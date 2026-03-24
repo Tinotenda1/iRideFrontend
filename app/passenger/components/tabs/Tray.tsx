@@ -1,12 +1,14 @@
+// app/passenger/components/tabs/Tray.tsx
 import { LinearGradient } from "expo-linear-gradient";
 import React, {
   forwardRef,
   useCallback,
   useEffect,
   useImperativeHandle,
+  useRef,
   useState,
 } from "react";
-import { BackHandler, StyleSheet, View } from "react-native";
+import { BackHandler, Dimensions, StyleSheet, View } from "react-native";
 import Animated, {
   Extrapolation,
   interpolate,
@@ -17,11 +19,10 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 
+import { hp, SCREEN_WIDTH, vs } from "@/utils/responsive";
 import { useRideBooking } from "../../../../app/context/RideBookingContext";
 import { theme } from "../../../../constants/theme";
 import { createStyles } from "../../../../utils/styles";
-// Use your established responsive utility
-import { hp, SCREEN_WIDTH, vs } from "@/utils/responsive";
 
 import LocationInputTab from "./LocationInputTab";
 import RideTab from "./RideTab";
@@ -30,13 +31,15 @@ import TripTab from "./TripTab";
 
 /* -------------------------------- Constants -------------------------------- */
 
-export const HEIGHTS = {
-  input: hp(50), // Exactly 50% of any screen
-  ride: hp(45), // Exactly 40% of any screen
-  searching: hp(35), // Exactly 30% of any screen
-  matched: hp(25), // Exactly 25% of any screen
-  on_trip: hp(32), // Exactly 32% of any screen
-  expanded: hp(40), // Exactly 40% of any screen
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+
+export const FALLBACK_HEIGHTS = {
+  input: hp(45),
+  ride: hp(40),
+  searching: hp(35),
+  matched: hp(25),
+  on_trip: hp(32),
+  expanded: hp(45),
 };
 
 const CLOSED_HEIGHT = vs(140);
@@ -55,12 +58,6 @@ const SPRING_CONFIG = {
   damping: 20,
   stiffness: 250,
   mass: 0.8,
-};
-
-const EXPANDED_SPRING_CONFIG = {
-  damping: 20,
-  stiffness: 150,
-  mass: 0.5,
 };
 
 /* -------------------------------------------------------------------------- */
@@ -123,13 +120,15 @@ const Tray = forwardRef<any, any>((props, ref) => {
   } = props;
 
   const { rideData, updateRideData } = useRideBooking();
+
   const [currentTab, setCurrentTab] = useState<TabType>("input");
   const [isExpanded, setIsExpanded] = useState(false);
 
+  const tabHeightsRef = useRef<Record<string, number>>({});
+
   const transitionIndex = useSharedValue(0);
   const translateY = useSharedValue(0);
-  const expandedProgress = useSharedValue(0);
-  const animatedHeight = useSharedValue(HEIGHTS.input);
+  const animatedHeight = useSharedValue(FALLBACK_HEIGHTS.input);
 
   const notifyTrayFinished = (h: number, isOpen: boolean) => {
     onTrayHeightChange?.(h);
@@ -137,79 +136,107 @@ const Tray = forwardRef<any, any>((props, ref) => {
     onTraySettled?.(true);
   };
 
+  // -----------------------------
+  // Centralized Height Handler
+  // -----------------------------
+  const handleContentHeight = useCallback(
+    (tab: TabType, height: number) => {
+      if (!height || height === tabHeightsRef.current[tab]) return;
+
+      tabHeightsRef.current[tab] = height;
+
+      if (currentTab === tab && !isExpanded) {
+        animatedHeight.value = withSpring(height, SPRING_CONFIG);
+      }
+    },
+    [currentTab, isExpanded, animatedHeight],
+  );
+
+  // -----------------------------
+  // Animate to Tab
+  // -----------------------------
   const animateTo = useCallback(
     (tab: TabType, expand = false) => {
-      const index = TAB_INDEX[tab];
-      let targetHeight = HEIGHTS[tab];
-
-      if ((tab === "on_trip" || tab === "matched") && expand) {
-        targetHeight = HEIGHTS.expanded;
-      }
-
-      animatedHeight.value = withSpring(targetHeight, SPRING_CONFIG);
-
-      if (tab === "on_trip" || tab === "matched") {
-        setIsExpanded(expand);
-        expandedProgress.value = withSpring(
-          expand ? 1 : 0,
-          EXPANDED_SPRING_CONFIG,
+      // Move getTargetHeight inside callback to avoid "Object is not a function"
+      const getTargetHeight = (tab: TabType, expanded: boolean) => {
+        if ((tab === "on_trip" || tab === "matched") && expanded) {
+          return FALLBACK_HEIGHTS.expanded;
+        }
+        const measured = tabHeightsRef.current[tab];
+        const fallback = FALLBACK_HEIGHTS[tab];
+        return Math.max(
+          200,
+          Math.min(measured || fallback, SCREEN_HEIGHT * 0.92),
         );
-      } else {
-        setIsExpanded(false);
-        expandedProgress.value = withSpring(0, EXPANDED_SPRING_CONFIG);
-      }
+      };
+
+      const index = TAB_INDEX[tab];
+      setCurrentTab(tab);
+      setIsExpanded(expand);
+
+      const target = getTargetHeight(tab, expand);
+
+      animatedHeight.value = withSpring(target, SPRING_CONFIG);
 
       if (tab === "input") {
         updateRideData({ destination: null, vehiclePrices: {} });
       }
 
-      setCurrentTab(tab);
-
       transitionIndex.value = withSpring(index, SPRING_CONFIG, (finished) => {
-        if (finished) {
-          runOnJS(notifyTrayFinished)(targetHeight, true);
-        }
+        if (finished) runOnJS(notifyTrayFinished)(target, true);
       });
     },
-    [transitionIndex, updateRideData, expandedProgress, animatedHeight],
+    [updateRideData, animatedHeight, transitionIndex],
   );
 
   const openTray = useCallback(() => {
     translateY.value = withSpring(0, SPRING_CONFIG, (finished) => {
       if (finished) {
-        let height = HEIGHTS[currentTab];
-        if (
-          (currentTab === "on_trip" || currentTab === "matched") &&
-          isExpanded
-        ) {
-          height = HEIGHTS.expanded;
-        }
+        const getTargetHeight = (tab: TabType, expanded: boolean) => {
+          if ((tab === "on_trip" || tab === "matched") && expanded) {
+            return FALLBACK_HEIGHTS.expanded;
+          }
+          const measured = tabHeightsRef.current[tab];
+          const fallback = FALLBACK_HEIGHTS[tab];
+          return Math.max(
+            200,
+            Math.min(measured || fallback, SCREEN_HEIGHT * 0.92),
+          );
+        };
+        const height = getTargetHeight(currentTab, isExpanded);
         runOnJS(notifyTrayFinished)(height, true);
       }
     });
   }, [currentTab, isExpanded, translateY]);
 
   const closeTray = useCallback(() => {
-    let currentHeight = HEIGHTS[currentTab];
-    if ((currentTab === "on_trip" || currentTab === "matched") && isExpanded) {
-      currentHeight = HEIGHTS.expanded;
-    }
+    const getTargetHeight = (tab: TabType, expanded: boolean) => {
+      if ((tab === "on_trip" || tab === "matched") && expanded) {
+        return FALLBACK_HEIGHTS.expanded;
+      }
+      const measured = tabHeightsRef.current[tab];
+      const fallback = FALLBACK_HEIGHTS[tab];
+      return Math.max(
+        200,
+        Math.min(measured || fallback, SCREEN_HEIGHT * 0.92),
+      );
+    };
+    const currentHeight = getTargetHeight(currentTab, isExpanded);
     const target = currentHeight - CLOSED_HEIGHT;
 
     translateY.value = withSpring(target, SPRING_CONFIG, (finished) => {
-      if (finished) {
-        runOnJS(notifyTrayFinished)(CLOSED_HEIGHT, false);
-      }
+      if (finished) runOnJS(notifyTrayFinished)(CLOSED_HEIGHT, false);
     });
   }, [currentTab, isExpanded, translateY]);
 
-  const containerStyle = useAnimatedStyle(() => {
-    return {
-      height: animatedHeight.value,
-      transform: [{ translateY: translateY.value }],
-    };
-  });
+  const containerStyle = useAnimatedStyle(() => ({
+    height: animatedHeight.value,
+    transform: [{ translateY: translateY.value }],
+  }));
 
+  // -----------------------------
+  // Sync with Ride Context
+  // -----------------------------
   useEffect(() => {
     if (!rideData.destination) {
       animateTo("input");
@@ -226,11 +253,15 @@ const Tray = forwardRef<any, any>((props, ref) => {
       case "on_trip":
         animateTo("on_trip");
         break;
-      default:
+      case "booking":
+        animateTo("ride");
         break;
     }
-  }, [rideData.status, rideData.destination, animateTo]);
+  }, [rideData.status, rideData.destination]);
 
+  // -----------------------------
+  // Back Button Handling
+  // -----------------------------
   useEffect(() => {
     const handler = () => {
       if (currentTab === "ride") {
@@ -244,6 +275,9 @@ const Tray = forwardRef<any, any>((props, ref) => {
     return () => sub.remove();
   }, [currentTab, animateTo, updateRideData]);
 
+  // -----------------------------
+  // Imperative Handle
+  // -----------------------------
   useImperativeHandle(ref, () => ({
     openTray,
     switchToRides: () => animateTo("ride"),
@@ -268,16 +302,18 @@ const Tray = forwardRef<any, any>((props, ref) => {
         <View style={styles.tabsWrapper}>
           <TabSlide index={0} transitionIndex={transitionIndex}>
             <LocationInputTab
+              onContentHeight={(h) => handleContentHeight("input", h)}
               onFocus={(f) => {
                 openTray();
-                onLocationInputFocus?.(f);
+                props.onLocationInputFocus?.(f);
               }}
             />
           </TabSlide>
 
           <TabSlide index={1} transitionIndex={transitionIndex}>
             <RideTab
-              id="ride-options"
+              id={"ride"}
+              onContentHeight={(h) => handleContentHeight("ride", h)}
               onOpenAdditionalInfo={onOpenAdditionalInfo || (() => {})}
               onSwitchToSearching={() => animateTo("searching")}
             />
@@ -285,6 +321,7 @@ const Tray = forwardRef<any, any>((props, ref) => {
 
           <TabSlide index={2} transitionIndex={transitionIndex}>
             <SearchingTab
+              onContentHeight={(h) => handleContentHeight("searching", h)}
               isActive={currentTab === "searching"}
               hasOffers={!!hasOffers}
               onClearOffers={onClearOffers}
@@ -298,6 +335,7 @@ const Tray = forwardRef<any, any>((props, ref) => {
 
           <TabSlide index={3} transitionIndex={transitionIndex}>
             <TripTab
+              onContentHeight={(h) => handleContentHeight("on_trip", h)}
               onCancel={() => animateTo("input")}
               onExpand={(v) => animateTo("on_trip", v)}
             />
@@ -325,16 +363,9 @@ const styles = createStyles({
     elevation: 20,
     overflow: "hidden",
   },
-  background: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  contentContainer: {
-    flex: 1,
-  },
-  tabsWrapper: {
-    flex: 1,
-    overflow: "hidden",
-  },
+  background: { ...StyleSheet.absoluteFillObject },
+  contentContainer: { flex: 1 },
+  tabsWrapper: { flex: 1, overflow: "hidden" },
 });
 
 export default Tray;

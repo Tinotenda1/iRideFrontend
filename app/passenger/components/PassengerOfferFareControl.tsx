@@ -120,12 +120,12 @@ const styles = StyleSheet.create({
     borderRadius: ms(30),
     alignItems: "center",
     justifyContent: "center",
-    elevation: 2,
+    elevation: 0.5,
   },
   adjustText: {
     fontSize: ms(24),
     fontWeight: "400",
-    color: "#0f172a",
+    color: theme.colors.black,
   },
   disabledOpacity: {
     opacity: 0.2,
@@ -139,14 +139,14 @@ const styles = StyleSheet.create({
   currencySymbol: {
     fontSize: ms(18),
     fontWeight: "600",
-    color: "#0f172a",
+    color: theme.colors.black,
     marginRight: s(2),
     marginTop: vs(2),
   },
   offerValue: {
     fontSize: ms(28),
     fontWeight: "700",
-    color: "#0f172a",
+    color: theme.colors.black,
     fontVariant: ["tabular-nums"],
   },
   recommendedText: {

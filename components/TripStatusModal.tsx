@@ -5,8 +5,13 @@ import React from "react";
 import { Modal, StyleSheet, Text, View } from "react-native";
 import { IRButton } from "./IRButton";
 
-export type ModalType = "arrival" | "cancellation" | "completion" | "started";
-
+export type ModalType =
+  | "arrival"
+  | "cancellation"
+  | "completion"
+  | "started"
+  | "pending"
+  | "rejected";
 interface TripStatusModalProps {
   visible: boolean;
   type: ModalType;
@@ -45,6 +50,18 @@ const TripStatusModal: React.FC<TripStatusModalProps> = ({
       icon: "navigate-circle",
       color: "#007AFF",
       btnText: "Great",
+      btnBg: "#000",
+    },
+    pending: {
+      icon: "time",
+      color: "#FF9500", // Amber/Orange
+      btnText: "Ok",
+      btnBg: "#000",
+    },
+    rejected: {
+      icon: "close-circle",
+      color: "#FF3B30", // Red
+      btnText: "Try Again",
       btnBg: "#000",
     },
   };

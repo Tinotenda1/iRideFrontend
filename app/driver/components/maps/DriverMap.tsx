@@ -106,6 +106,8 @@ const DriverMap: React.FC<Props> = ({
   // FIXED: Removed the 800ms auto-center loop that was causing the "jumping"
   // The camera is now driven solely by the driver location watcher below.
 
+  // Inside useEffect where watchDriverLocation is called
+
   useEffect(() => {
     const cleanup = watchDriverLocation(
       (location) => {
@@ -133,8 +135,9 @@ const DriverMap: React.FC<Props> = ({
         });
 
         const now = Date.now();
-        // 2. FIXED: Smooth Camera Follow logic
-        // We only auto-follow if the user hasn't panned away (showRecenter is false)
+
+        // FIXED: Camera now follows whenever the user hasn't panned away,
+        // regardless of rideData.status.
         if (!showRecenter && now - lastCameraUpdate.current > 2500) {
           lastCameraUpdate.current = now;
 
@@ -148,6 +151,7 @@ const DriverMap: React.FC<Props> = ({
                 longitude: location.longitude,
               },
               heading: location.heading ?? 0,
+              // Apply 3D pitch if on trip, otherwise stay flat (0)
               pitch: ["matched", "arrived", "on_trip"].includes(
                 rideData?.status || "",
               )

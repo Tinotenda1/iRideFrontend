@@ -1,25 +1,30 @@
 // app/passenger/components/tabs/TripTab.tsx
 import { ms, s, vs } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
+  Image,
   Linking,
   Modal,
   Platform,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRideBooking } from "../../../../app/context/RideBookingContext";
 import { ActionConfirmationModal } from "../../../../components/ActionConfirmationModal";
 import CancelButton from "../../../../components/CancelButton";
 import { IRAvatar } from "../../../../components/IRAvatar";
 import { IRButton } from "../../../../components/IRButton";
 import { theme } from "../../../../constants/theme";
+import { getApiBaseUrl } from "../../../../utils/api";
 import { getUserInfo } from "../../../../utils/storage";
 import { createStyles } from "../../../../utils/styles";
 import { subscribeToRideCancellation } from "../../socketConnectionUtility/passengerSocketService";
@@ -27,6 +32,7 @@ import { subscribeToRideCancellation } from "../../socketConnectionUtility/passe
 interface TripTabProps {
   onCancel: () => void;
   onExpand?: (isExpanded: boolean) => void;
+  onContentHeight?: (h: number) => void; // Added for dynamic height
 }
 
 const PREDEFINED_REASONS = [
@@ -38,7 +44,11 @@ const PREDEFINED_REASONS = [
   "Emergency / Drop me here",
 ];
 
-const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
+const TripTab: React.FC<TripTabProps> = ({
+  onCancel,
+  onExpand,
+  onContentHeight,
+}) => {
   const { currentRide, rideData } = useRideBooking();
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -48,6 +58,8 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
     reason: string;
     cancelledBy: string;
   } | null>(null);
+
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const isMounted = useRef(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -63,6 +75,24 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
   const vehicleLicencePlate = vehicle?.licensePlate;
   const displayOffer = currentRide?.offer;
   const [showDropModal, setShowDropModal] = useState(false);
+
+  const resolveImagePath = (path: string | null | undefined) => {
+    if (!path) return undefined;
+    if (
+      path.startsWith("http") ||
+      path.startsWith("file://") ||
+      path.startsWith("content://")
+    ) {
+      return { uri: path };
+    }
+    try {
+      const baseUrl = getApiBaseUrl().replace(/\/$/, "");
+      const cleanPath = path.startsWith("/") ? path : `/${path}`;
+      return { uri: `${baseUrl}${cleanPath}` };
+    } catch (e) {
+      return { uri: path };
+    }
+  };
 
   useEffect(() => {
     isMounted.current = true;
@@ -227,15 +257,25 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
 
   if (!driver?.name) {
     return (
-      <View style={[styles.container, styles.center]}>
-        <ActivityIndicator color="#10B981" size="large" />
+      <View
+        style={[styles.container, styles.center]}
+        onLayout={(e) => onContentHeight?.(e.nativeEvent.layout.height)}
+      >
+        <ActivityIndicator color={theme.colors.primary} size="large" />
         <Text style={styles.loadingText}>Connecting to driver...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      edges={["bottom"]}
+      onLayout={(e) => {
+        const height = e.nativeEvent.layout.height;
+        onContentHeight?.(height);
+      }}
+    >
       <View style={styles.topSection}>
         {isOn_trip && (
           <View style={styles.headerRow}>
@@ -259,10 +299,15 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
 
         <View style={styles.driverRow}>
           <View style={styles.driverInfo}>
-            <IRAvatar
-              source={profilePic ? { uri: profilePic } : undefined}
-              size={ms(52)}
-            />
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() =>
+                profilePic &&
+                setPreviewImage(resolveImagePath(profilePic)?.uri || null)
+              }
+            >
+              <IRAvatar source={resolveImagePath(profilePic)} size={ms(52)} />
+            </TouchableOpacity>
             <View>
               <Text style={styles.driverName}>{driver.name}</Text>
               <View style={styles.ratingBadge}>
@@ -292,25 +337,40 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
             ]}
             onPress={handleCallDriver}
           >
-            <Ionicons name="call" size={ms(22)} color="#fff" />
+            <Ionicons name="call" size={ms(22)} color={theme.colors.surface} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.iconButton, { backgroundColor: "#25D366" }]}
+            style={[
+              styles.iconButton,
+              { backgroundColor: theme.colors.primary },
+            ]}
             activeOpacity={0.7}
             onPress={handleWhatsAppDriver}
           >
-            <Ionicons name="logo-whatsapp" size={ms(22)} color="#fff" />
+            <Ionicons
+              name="logo-whatsapp"
+              size={ms(22)}
+              color={theme.colors.surface}
+            />
           </TouchableOpacity>
         </View>
 
         <View style={styles.vehicleRow}>
           <View style={styles.vehicleInfo}>
-            <IRAvatar
-              source={vehiclePic ? { uri: vehiclePic } : undefined}
-              variant="rounded"
-              size={ms(50)}
-              style={{ backgroundColor: "#f8fafc" }}
-            />
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() =>
+                vehiclePic &&
+                setPreviewImage(resolveImagePath(vehiclePic)?.uri || null)
+              }
+            >
+              <IRAvatar
+                source={resolveImagePath(vehiclePic)}
+                variant="rounded"
+                size={ms(50)}
+                style={{ backgroundColor: theme.colors.background }}
+              />
+            </TouchableOpacity>
             <View>
               <Text style={styles.carModel}>
                 {vehicle?.color} {vehicle?.model}
@@ -337,7 +397,10 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
             onPress={() => setShowCancelModal(true)}
           />
         ) : (
-          <View style={{ gap: vs(10), paddingBottom: vs(20) }}>
+          /* Change: Adjusted padding and gap for the expanded state */
+          <View
+            style={{ gap: vs(10), paddingBottom: isExpanded ? vs(5) : vs(20) }}
+          >
             <IRButton
               title="Safety Toolkit"
               variant="outline"
@@ -346,12 +409,12 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
                 <Ionicons
                   name="shield-checkmark"
                   size={ms(20)}
-                  color="#007AFF"
+                  color={theme.colors.secondary}
                 />
               }
               style={styles.safetyButton}
               textStyle={styles.safetyButtonText}
-              borderColor="#E2E8F0"
+              borderColor={theme.colors.border}
             />
             {isExpanded && (
               <Animated.View
@@ -372,7 +435,7 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
                   variant="outline"
                   onPress={() => setShowDropModal(true)}
                   loading={isCancelling}
-                  borderColor="#fee2e2"
+                  borderColor={theme.colors.red}
                   style={styles.dropButton}
                   textStyle={styles.dropButtonText}
                 />
@@ -381,6 +444,43 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
           </View>
         )}
       </View>
+
+      {/* Modals remain unchanged as they don't affect inline tray height */}
+      <Modal
+        visible={!!previewImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewImage(null)}
+      >
+        <TouchableOpacity
+          style={styles.fullScreenContainer}
+          activeOpacity={1}
+          onPress={() => setPreviewImage(null)}
+        >
+          <BlurView
+            intensity={90}
+            tint="dark"
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.imageContent}>
+            <View style={styles.modalImageWrapper}>
+              {previewImage && (
+                <Image
+                  source={{ uri: previewImage }}
+                  style={styles.fullScreenImage}
+                  resizeMode="contain"
+                />
+              )}
+            </View>
+            <TouchableOpacity
+              style={styles.closeImageBtn}
+              onPress={() => setPreviewImage(null)}
+            >
+              <Ionicons name="close" size={ms(28)} color="white" />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal visible={showCancelModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -438,7 +538,11 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, styles.remoteModalPadding]}>
             <View style={styles.alertCircle}>
-              <Ionicons name="alert-circle" size={ms(36)} color="#ef4444" />
+              <Ionicons
+                name="alert-circle"
+                size={ms(36)}
+                color={theme.colors.red}
+              />
             </View>
             <Text style={styles.modalTitle}>Trip Cancelled</Text>
             <Text style={styles.modalSubtitle}>
@@ -465,26 +569,32 @@ const TripTab: React.FC<TripTabProps> = ({ onCancel, onExpand }) => {
         onConfirm={handleDropMeHere}
         onClose={() => setShowDropModal(false)}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = createStyles({
   container: {
-    flex: 1,
+    // Removed flex: 1 to allow dynamic height
     paddingTop: vs(15),
-    backgroundColor: "#fff",
-    justifyContent: "space-between",
+    backgroundColor: theme.colors.surface,
     paddingHorizontal: s(16),
   },
-  topSection: { flex: 1 },
+  topSection: {
+    // Removed flex: 1
+    marginBottom: vs(10),
+  },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: vs(12),
+    //marginBottom: vs(12),
   },
-  center: { justifyContent: "center", alignItems: "center" },
+  center: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: vs(40),
+  },
   loadingText: {
     marginTop: vs(10),
     color: "#94a3b8",
@@ -495,6 +605,7 @@ const styles = createStyles({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: vs(10),
   },
   driverInfo: { flexDirection: "row", alignItems: "center", gap: s(10) },
   driverName: { fontSize: ms(18), fontWeight: "700", color: "#1e293b" },
@@ -513,7 +624,7 @@ const styles = createStyles({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: theme.colors.border,
   },
   vehicleRow: {
     flexDirection: "row",
@@ -526,11 +637,11 @@ const styles = createStyles({
     width: ms(6),
     height: ms(6),
     borderRadius: ms(3),
-    backgroundColor: "#10B981",
+    backgroundColor: theme.colors.primary,
     marginRight: s(6),
   },
   safetyButton: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.surface,
     borderRadius: ms(16),
     borderWidth: 1,
     height: vs(56),
@@ -538,11 +649,16 @@ const styles = createStyles({
   },
   safetyButtonText: { fontSize: ms(16), fontWeight: "700", color: "#475569" },
   dropButton: {
-    backgroundColor: "#fef2f2",
+    backgroundColor: theme.colors.background,
     height: vs(56),
     borderRadius: ms(16),
+    marginTop: vs(10),
   },
-  dropButtonText: { color: "#ef4444", fontWeight: "700", fontSize: ms(16) },
+  dropButtonText: {
+    color: theme.colors.red,
+    fontWeight: "700",
+    fontSize: ms(16),
+  },
   carModel: {
     fontSize: ms(15),
     fontWeight: "600",
@@ -550,12 +666,12 @@ const styles = createStyles({
     marginBottom: vs(2),
   },
   plateBadge: {
-    backgroundColor: "#f1f5f9",
+    backgroundColor: theme.colors.background,
     paddingHorizontal: s(6),
     paddingVertical: vs(2),
     borderRadius: ms(4),
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: theme.colors.border,
     alignSelf: "flex-start",
   },
   plateNumber: {
@@ -565,20 +681,27 @@ const styles = createStyles({
     textTransform: "uppercase",
   },
   pricePill: {
-    backgroundColor: "#f1f5f9",
+    backgroundColor: theme.colors.background,
     paddingHorizontal: s(12),
     paddingVertical: vs(6),
     borderRadius: ms(12),
   },
-  priceText: { fontSize: ms(18), fontWeight: "800", color: "#10B981" },
-  footer: { marginTop: "auto" },
+  priceText: {
+    fontSize: ms(18),
+    fontWeight: "800",
+    color: theme.colors.primary,
+  },
+  footer: {
+    //marginTop: vs(10),
+    //paddingBottom: vs(20),
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.7)",
+    backgroundColor: theme.colors.black,
     justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: "#fff",
+    backgroundColor: theme.colors.surface,
     borderTopLeftRadius: ms(32),
     borderTopRightRadius: ms(32),
     padding: s(24),
@@ -587,7 +710,7 @@ const styles = createStyles({
   modalIndicator: {
     width: s(40),
     height: vs(4),
-    backgroundColor: "#e2e8f0",
+    backgroundColor: theme.colors.background,
     borderRadius: ms(2),
     alignSelf: "center",
     marginBottom: vs(20),
@@ -609,18 +732,21 @@ const styles = createStyles({
     paddingHorizontal: s(14),
     paddingVertical: vs(10),
     borderRadius: ms(12),
-    backgroundColor: "#f1f5f9",
+    backgroundColor: theme.colors.background,
     borderWidth: 1.5,
     borderColor: "transparent",
   },
-  reasonChipActive: { backgroundColor: "#ecfdf5", borderColor: "#10B981" },
+  reasonChipActive: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.primary,
+  },
   reasonChipText: { fontSize: ms(13), fontWeight: "600", color: "#475569" },
-  reasonChipTextActive: { color: "#10B981" },
+  reasonChipTextActive: { color: theme.colors.primary },
   reasonInput: {
     width: "100%",
-    backgroundColor: "#f8fafc",
+    backgroundColor: theme.colors.background,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: theme.colors.border,
     borderRadius: ms(16),
     padding: s(16),
     fontSize: ms(15),
@@ -639,19 +765,19 @@ const styles = createStyles({
     width: ms(64),
     height: ms(64),
     borderRadius: ms(32),
-    backgroundColor: "#fef2f2",
+    backgroundColor: theme.colors.background,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: vs(16),
   },
   reasonDisplayBox: {
     width: "100%",
-    backgroundColor: "#f8fafc",
+    backgroundColor: theme.colors.background,
     padding: s(20),
     borderRadius: ms(20),
     marginBottom: vs(30),
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: theme.colors.border,
   },
   reasonLabel: {
     fontSize: ms(12),
@@ -669,7 +795,7 @@ const styles = createStyles({
   ongoingBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#ecfdf5",
+    backgroundColor: theme.colors.background,
     alignSelf: "flex-start",
     paddingHorizontal: s(10),
     paddingVertical: vs(4),
@@ -678,10 +804,40 @@ const styles = createStyles({
   ongoingText: {
     fontSize: ms(12),
     fontWeight: "700",
-    color: "#10B981",
+    color: theme.colors.primary,
     textTransform: "uppercase",
   },
   expandToggle: { padding: s(4) },
+
+  fullScreenContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imageContent: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalImageWrapper: {
+    width: "90%",
+    height: "70%",
+    borderRadius: ms(20),
+    overflow: "hidden",
+  },
+  fullScreenImage: { width: "100%", height: "100%" },
+  closeImageBtn: {
+    position: "absolute",
+    top: vs(60),
+    right: s(20),
+    width: ms(44),
+    height: ms(44),
+    borderRadius: ms(22),
+    backgroundColor: theme.colors.black,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });
 
 export default TripTab;

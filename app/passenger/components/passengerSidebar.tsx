@@ -1,8 +1,13 @@
-// app/driver/components/DriverSideBar.tsx
-import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
+import { ms, s, vs } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated,
   ScrollView,
@@ -11,11 +16,18 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+// Components & Utils
 import { IRButton } from "../../../components/IRButton";
 import { LogoutButton } from "../../../components/Logout";
 import { ProfileHeader } from "../../../components/ProfileHeader";
+import TripStatusModal, {
+  ModalType,
+} from "../../../components/TripStatusModal";
 import { theme } from "../../../constants/theme";
+import { api } from "../../../utils/api";
 import { ROUTES } from "../../../utils/routes";
+import { getUserInfo, updateUserInfo } from "../../../utils/storage";
 import { createStyles, typedTypography } from "../../../utils/styles";
 
 interface SidebarProps {
@@ -27,21 +39,116 @@ interface SidebarProps {
 
 const SIDEBAR_WIDTH = s(300);
 
-export default React.forwardRef(function Sidebar(
+export default forwardRef(function Sidebar(
   { userType, userName, userRating = 4.8, userImage }: SidebarProps,
   ref,
 ) {
-  const slideAnim = React.useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
-  const overlayOpacity = React.useRef(new Animated.Value(0)).current;
-  const [isOpen, setIsOpen] = React.useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [isDriver, setIsDriver] = useState(false);
+
+  // Modal & Registration States
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<ModalType>("pending");
+  const [modalContent, setModalContent] = useState({ title: "", message: "" });
+  const [backendStatus, setBackendStatus] = useState("unregistered");
+  const [rejectionMessage, setRejectionMessage] = useState("");
+
+  const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
   const router = useRouter();
 
-  React.useImperativeHandle(ref, () => ({
+  useImperativeHandle(ref, () => ({
     open: () => setIsOpen(true),
     close: () => setIsOpen(false),
   }));
 
-  React.useEffect(() => {
+  // ✅ 1. Check Backend Status when Sidebar Opens
+  useEffect(() => {
+    console.log("userType:", userType);
+    // Inside your useEffect for checking status...
+    const checkStatus = async () => {
+      if (userType === "passenger" && isOpen) {
+        try {
+          const storedUser = await getUserInfo();
+          // ✅ Sanitize the phone number: remove all non-numeric characters
+          const rawPhone = storedUser?.phone;
+          const sanitizedPhone = rawPhone ? rawPhone.replace(/\D/g, "") : null;
+
+          if (!sanitizedPhone) return;
+
+          const response = await api.get(`/user/checkUserType`, {
+            params: { phone: sanitizedPhone }, // Use the sanitized version
+          });
+
+          const { user_type, verification_status, message } = response.data;
+
+          setBackendStatus(verification_status);
+          setRejectionMessage(message || "");
+
+          if (user_type === "driver" || verification_status === "approved") {
+            setIsDriver(true);
+          }
+        } catch (error) {
+          console.error("Sidebar Sync Error:", error);
+        }
+      }
+    };
+    checkStatus();
+  }, [isOpen, userType]);
+
+  // ✅ 2. Handle Mode Switching Logic
+  const handleSwitchMode = async () => {
+    // 1. If already recognized as a driver, just navigate
+    if (userType === "driver" || isDriver || backendStatus === "approved") {
+      // ✅ If they are approved on the backend but still saved as a 'passenger' locally
+      if (userType === "passenger") {
+        try {
+          // Use your existing updateUserInfo helper to persist the change
+          await updateUserInfo({
+            userType: "driver",
+          });
+          console.log("🚀 Local storage promoted to Driver mode");
+        } catch (error) {
+          console.error("Failed to update local userType storage:", error);
+        }
+      }
+
+      router.replace(ROUTES.DRIVER.HOME as never);
+      return;
+    }
+
+    // Handle Passenger Logic based on verification
+    switch (backendStatus) {
+      case "pending":
+        setModalType("pending");
+        setModalContent({
+          title: "Review in Progress",
+          message:
+            "Your registration is being reviewed. This usually takes 24-48 hours. If there is anything you need to correct or do, we will let you know. You will be notified once done.",
+        });
+        setModalVisible(true);
+        break;
+
+      case "rejected":
+        setModalType("cancellation"); // Mapping 'rejected' to existing TripStatusModal visual
+        setModalContent({
+          title: "Registration Declined",
+          message:
+            rejectionMessage ||
+            "Your registration was declined. Please check your details and try again.",
+        });
+        setModalVisible(true);
+        break;
+
+      case "unregistered":
+      default:
+        router.push(ROUTES.ONBOARDING.DRIVER_ONBOARDING as never);
+        break;
+    }
+  };
+
+  // ✅ 3. Sidebar Animations
+  useEffect(() => {
     if (isOpen) {
       Animated.parallel([
         Animated.spring(slideAnim, {
@@ -71,7 +178,7 @@ export default React.forwardRef(function Sidebar(
         }),
       ]).start();
     }
-  }, [isOpen, slideAnim, overlayOpacity]);
+  }, [isOpen]);
 
   const menuItems = [
     {
@@ -89,10 +196,6 @@ export default React.forwardRef(function Sidebar(
     { label: "Support", screen: "/support", icon: "help-circle" as const },
     { label: "Settings", screen: "/settings", icon: "settings" as const },
   ];
-
-  const safelyDisconnectDriver = () => {
-    console.log("🔌 Sidebar: disconnecting driver socket");
-  };
 
   return (
     <>
@@ -125,7 +228,6 @@ export default React.forwardRef(function Sidebar(
               <TouchableOpacity
                 onPress={() => setIsOpen(false)}
                 style={styles.closeButton}
-                activeOpacity={0.7}
               >
                 <Ionicons
                   name="chevron-back"
@@ -146,7 +248,6 @@ export default React.forwardRef(function Sidebar(
                 key={index}
                 style={styles.menuItem}
                 onPress={() => console.log(`Navigating to: ${item.screen}`)}
-                activeOpacity={0.7}
               >
                 <Ionicons
                   name={item.icon}
@@ -166,23 +267,18 @@ export default React.forwardRef(function Sidebar(
 
           <View style={styles.footerContent}>
             <IRButton
-              title="Login as Driver"
+              title={
+                ["pending", "rejected", "approved"].includes(backendStatus) ||
+                isDriver
+                  ? "Switch to Driver"
+                  : "Become a Driver"
+              }
               variant="primary"
               size="md"
               fullWidth
-              onPress={() => {
-                safelyDisconnectDriver();
-                const dashboardRoute =
-                  userType === "passenger"
-                    ? ROUTES.DRIVER.HOME
-                    : ROUTES.PASSENGER.HOME;
-                router.replace({
-                  pathname: dashboardRoute,
-                  params: { switchingFromDriver: true },
-                } as never);
-              }}
+              onPress={handleSwitchMode}
             />
-            <TouchableOpacity onPress={safelyDisconnectDriver}>
+            <TouchableOpacity onPress={() => console.log("Logout triggered")}>
               <LogoutButton />
             </TouchableOpacity>
 
@@ -193,6 +289,21 @@ export default React.forwardRef(function Sidebar(
           </View>
         </SafeAreaView>
       </Animated.View>
+
+      {/* ✅ Registration Status Modal */}
+      <TripStatusModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalContent.title}
+        message={modalContent.message}
+        onClose={() => {
+          setModalVisible(false);
+          // If rejected, redirect to onboarding after they close the modal
+          if (backendStatus === "rejected") {
+            router.push(ROUTES.ONBOARDING.DRIVER_ONBOARDING as never);
+          }
+        }}
+      />
     </>
   );
 });
@@ -206,7 +317,6 @@ const styles = createStyles({
     bottom: 0,
     backgroundColor: "black",
     zIndex: 99998,
-    elevation: 99998,
   },
   overlayTouchable: { flex: 1 },
   container: {
@@ -217,12 +327,9 @@ const styles = createStyles({
     height: "100%",
     backgroundColor: theme.colors.background,
     zIndex: 99999,
-    elevation: 99999,
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
     shadowRadius: ms(10),
-    //borderTopRightRadius: ms(theme.borderRadius.xl),
-    //borderBottomRightRadius: ms(theme.borderRadius.xl),
   },
   safeArea: { flex: 1 },
   header: {

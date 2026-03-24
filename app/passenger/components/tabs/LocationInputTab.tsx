@@ -1,12 +1,9 @@
-// app/passenger/components/tabs/LocationInputTab.tsx
-
 import { Clock, Navigation, Search, Trash2 } from "lucide-react-native";
 import React, { useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
   BackHandler,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -26,6 +23,7 @@ import Animated, {
 
 import * as Location from "expo-location";
 import { theme } from "../../../../constants/theme";
+import { ms, s, vs } from "../../../../utils/responsive";
 import { createStyles } from "../../../../utils/styles";
 import { useRideBooking } from "../../../context/RideBookingContext";
 import { Place } from "../map/LocationSearch";
@@ -56,8 +54,6 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
   const [isDeleting, setIsDeleting] = React.useState(false);
   const translateX = useSharedValue(0);
 
-  // FIX: Keep the UI in the "armed" state even if the parent state is cleared,
-  // as long as we are currently deleting.
   const isArmed = armedRowId === item.id || isDeleting;
 
   const fastSnapConfig = {
@@ -69,7 +65,7 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
   const panGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .onUpdate((event) => {
-      if (isDeleting) return; // Disable swipe while deleting
+      if (isDeleting) return;
       if (event.translationX < 0) {
         translateX.value = event.translationX * 0.35;
       } else {
@@ -120,25 +116,17 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
               ) : (
                 <TouchableOpacity
                   onPress={async () => {
-                    // Changed to async
                     setIsDeleting(true);
                     try {
-                      // Logic: call onDelete and wait for it
                       await onDelete();
                     } catch (error) {
-                      // If parent throws, stop loading
                       setIsDeleting(false);
                     } finally {
-                      // Only disarm if successful or specifically needed
                       setArmedRowId(null);
                     }
                   }}
                 >
-                  {isDeleting ? (
-                    <ActivityIndicator size="small" color="#FF3B30" />
-                  ) : (
-                    <Trash2 size={18} color="#FF3B30" />
-                  )}
+                  <Trash2 size={18} color="#FF3B30" />
                 </TouchableOpacity>
               )}
             </View>
@@ -158,27 +146,26 @@ const SwipeableDestinationItem: React.FC<SwipeItemProps> = ({
 interface LocationInputTabProps {
   onFocus?: (field: "pickup" | "destination") => void;
   onSuggestionSelect?: (place: Place) => void;
+  onContentHeight?: (h: number) => void;
 }
 
 const LocationInputTab: React.FC<LocationInputTabProps> = ({
   onFocus,
   onSuggestionSelect,
+  // onContentHeight removed from usage to use fallback height only
 }) => {
   const { rideData, updateRideData, loading, hideRecentDestination } =
     useRideBooking();
-
   const [armedRowId, setArmedRowId] = React.useState<string | null>(null);
 
-  // Back handler to disarm when hardware back is pressed
   useEffect(() => {
     const backAction = () => {
       if (armedRowId) {
         setArmedRowId(null);
-        return true; // prevent default back behavior
+        return true;
       }
       return false;
     };
-
     const subscription = BackHandler.addEventListener(
       "hardwareBackPress",
       backAction,
@@ -191,38 +178,33 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") return;
-
         const location = await Location.getCurrentPositionAsync({});
 
         const reverseGeocodeWithTimeout = async (coords: {
           latitude: number;
           longitude: number;
-        }): Promise<Location.LocationGeocodedAddress[]> => {
+        }) => {
           return Promise.race([
             Location.reverseGeocodeAsync(coords),
             new Promise<Location.LocationGeocodedAddress[]>((_, reject) =>
-              setTimeout(
-                () => reject(new Error("Reverse geocode timeout")),
-                5000,
-              ),
+              setTimeout(() => reject(new Error("Timeout")), 5000),
             ),
           ]);
         };
 
         let address = "Current Location";
         try {
-          const reverse: Location.LocationGeocodedAddress[] =
-            await reverseGeocodeWithTimeout({
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-            });
+          const reverse = await reverseGeocodeWithTimeout({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
           if (reverse[0]) {
             address =
               `${reverse[0].name || ""} ${reverse[0].street || ""}`.trim() ||
               "Current Location";
           }
         } catch (err) {
-          console.warn("Reverse geocode failed, using fallback:", err);
+          console.warn("Reverse geocode failed", err);
         }
 
         const currentPlace: Place = {
@@ -232,60 +214,38 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         };
-
         updateRideData({ pickupLocation: currentPlace });
       } catch (err) {
-        console.error("Failed to set pickup location:", err);
+        console.error("Pickup set failed", err);
       }
     };
-
     setPickupToCurrentLocation();
   }, [updateRideData]);
-
-  // Log prices whenever they are updated (optional)
-  useEffect(() => {
-    if (
-      rideData.vehiclePrices &&
-      Object.keys(rideData.vehiclePrices).length > 0
-    ) {
-      console.log("[RideTab] Received updated prices:", rideData.vehiclePrices);
-    }
-  }, [rideData.vehiclePrices]);
-
-  // Inside LocationInputTab.tsx
 
   const handleSelect = (
     field: "pickup" | "destination",
     place: Place | null,
   ) => {
     if (field === "destination" && place) {
-      // VALIDATION: Check if pickup exists
       if (!rideData.pickupLocation) {
         Alert.alert(
           "Pickup Missing",
           "We need to know where to pick you up first!",
-          [{ text: "OK" }],
         );
-        return; // Stop the flow
+        return;
       }
-
-      updateRideData({
-        [field]: place,
-        status: "booking", // trigger status change
-      });
+      updateRideData({ [field]: place, status: "booking" });
       onSuggestionSelect?.(place);
     } else {
-      updateRideData({
-        [field]: place,
-      });
+      updateRideData({ [field]: place });
     }
-    console.log(`[RideTab] ${field} set to:`, place);
   };
 
   const recentDestinations = rideData.recentDestinations || [];
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={styles.root}>
+      {/* Removed onLayout to ensure this tab uses the parent's fallback height only */}
       <View style={styles.container}>
         <View style={styles.inputSection}>
           <View style={styles.lineDecorator}>
@@ -322,25 +282,24 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
           </View>
         </View>
 
-        <ScrollView
-          style={styles.scrollContainer}
-          contentContainerStyle={styles.suggestionsContainer}
+        <Animated.ScrollView
+          style={styles.scrollableSuggestions}
           showsVerticalScrollIndicator={false}
+          nestedScrollEnabled={true}
         >
-          {recentDestinations.length > 0 && (
-            <Text style={styles.sectionTitle}>Recent Destinations</Text>
-          )}
+          <View style={styles.suggestionsContainer}>
+            {recentDestinations.length > 0 && (
+              <Text style={styles.sectionTitle}>Recent Destinations</Text>
+            )}
 
-          {loading && recentDestinations.length === 0 ? (
-            <View style={styles.loaderContainer} />
-          ) : recentDestinations.length > 0 ? (
-            recentDestinations.map((item: Place, index: number) => {
-              const stableKey =
-                item.id || `${item.latitude}-${item.longitude}-${index}`;
-
-              return (
+            {loading && recentDestinations.length === 0 ? (
+              <View style={styles.loaderContainer}>
+                <ActivityIndicator color={theme.colors.primary} />
+              </View>
+            ) : recentDestinations.length > 0 ? (
+              recentDestinations.map((item: Place, index: number) => (
                 <SwipeableDestinationItem
-                  key={stableKey}
+                  key={item.id || index}
                   item={item}
                   index={index}
                   isLast={index === recentDestinations.length - 1}
@@ -348,261 +307,213 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
                   setArmedRowId={setArmedRowId}
                   onPress={() => handleSelect("destination", item)}
                   onDelete={async () => {
-                    if (item.id) {
-                      try {
-                        await hideRecentDestination(item.id);
-                      } catch (err) {
-                        Alert.alert(
-                          "Deletion Failed",
-                          "We couldn't remove this destination. Please try again.",
-                          [{ text: "OK" }],
-                        );
-                        throw err;
-                      }
-                    }
+                    if (item.id) await hideRecentDestination(item.id);
                   }}
                 />
-              );
-            })
-          ) : !loading ? (
-            /* Premium Drift Welcome State */
-            <View style={styles.driftWelcomeContainer}>
-              <Text style={styles.driftTitle}>Ready to drift somewhere?</Text>
-
-              <Text style={styles.driftSubtext}>
-                Your most recent destinations will appear here for a quicker
-                start.
-              </Text>
-
-              <View style={styles.instructionBox}>
-                <View style={styles.instructionRow}>
-                  <View style={styles.miniIcon}>
-                    <Trash2 size={14} color={theme.colors.red} />
+              ))
+            ) : !loading ? (
+              <View style={styles.driftWelcomeContainer}>
+                <Text style={styles.driftTitle}>Ready to drift somewhere?</Text>
+                <Text style={styles.driftSubtext}>
+                  Your most recent destinations will appear here for a quicker
+                  start.
+                </Text>
+                <View style={styles.instructionBox}>
+                  <View style={styles.instructionRow}>
+                    <View style={styles.miniIcon}>
+                      <Trash2 size={14} color={theme.colors.red} />
+                    </View>
+                    <Text style={styles.instructionText}>
+                      Swipe left and tap the trash icon to remove a destination.
+                    </Text>
                   </View>
-                  <Text style={styles.instructionText}>
-                    Swipe left and tap the trash icon to remove a destination.
-                  </Text>
                 </View>
               </View>
-            </View>
-          ) : (
-            /* Fallback/Error state - can be kept for actual network failures */
-            <View style={styles.errorContainer}>
-              <View style={styles.errorIconCircle}>
-                <View style={styles.statusDot} />
-                <Navigation
-                  size={20}
-                  color={theme.colors.textSecondary + "80"}
-                />
+            ) : (
+              <View style={styles.errorContainer}>
+                <View style={styles.errorIconCircle}>
+                  <View style={styles.statusDot} />
+                  <Navigation
+                    size={20}
+                    color={theme.colors.textSecondary + "80"}
+                  />
+                </View>
+                <Text style={styles.errorText}>No destinations found</Text>
               </View>
-              <Text style={styles.errorText}>No destinations found</Text>
-              <Text style={styles.errorSubtext}>
-                Check your settings to see recent places
-              </Text>
-            </View>
-          )}
-        </ScrollView>
+            )}
+          </View>
+        </Animated.ScrollView>
       </View>
     </GestureHandlerRootView>
   );
 };
 
 const styles = createStyles({
-  container: { flex: 1, backgroundColor: theme.colors.surface },
-  scrollContainer: { flex: 1 },
+  root: {
+    // Container-only styles
+  },
+  container: {
+    backgroundColor: theme.colors.surface,
+    paddingBottom: vs(theme.spacing.xl),
+  },
   inputSection: {
     flexDirection: "row",
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
+    paddingHorizontal: s(theme.spacing.md),
+    paddingTop: vs(theme.spacing.md),
     backgroundColor: theme.colors.surface,
   },
   lineDecorator: {
     alignItems: "center",
-    width: 20,
-    marginVertical: 15,
-    marginRight: theme.spacing.sm,
+    width: s(20),
+    marginVertical: vs(15),
+    marginRight: s(theme.spacing.sm),
   },
   dotPickup: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: ms(8),
+    height: ms(8),
+    borderRadius: ms(4),
     backgroundColor: theme.colors.primary,
   },
   line: {
     flex: 1,
     width: 1,
     backgroundColor: theme.colors.border,
-    marginVertical: 4,
+    marginVertical: vs(4),
   },
-  squareDestination: { width: 8, height: 8, backgroundColor: theme.colors.red },
+  squareDestination: {
+    width: ms(8),
+    height: ms(8),
+    backgroundColor: theme.colors.red,
+  },
   fieldsWrapper: {
     flex: 1,
     backgroundColor: theme.colors.background,
-    borderRadius: 12,
-    paddingHorizontal: theme.spacing.md,
+    borderRadius: ms(12),
+    paddingHorizontal: s(theme.spacing.md),
   },
-  inputContainer: { height: 50, flexDirection: "row", alignItems: "center" },
-  textInput: { flex: 1, fontSize: 15, color: theme.colors.text },
-  inputSeparator: { height: 1, backgroundColor: theme.colors.border + "50" },
-  searchIcon: { marginLeft: theme.spacing.xs },
+  inputContainer: {
+    height: vs(50),
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  textInput: {
+    flex: 1,
+    fontSize: ms(15),
+    color: theme.colors.text,
+  },
+  inputSeparator: {
+    height: 1,
+    backgroundColor: theme.colors.border + "50",
+  },
+  searchIcon: {
+    marginLeft: s(theme.spacing.xs),
+  },
+  scrollableSuggestions: {
+    maxHeight: vs(300),
+  },
   suggestionsContainer: {
-    marginTop: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.xl,
+    marginTop: vs(theme.spacing.lg),
+    paddingHorizontal: s(theme.spacing.md),
   },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: ms(11),
+    fontWeight: "800",
     color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.sm,
+    marginBottom: vs(theme.spacing.sm),
     textTransform: "uppercase",
-    letterSpacing: 1.2,
+    letterSpacing: s(1.5),
   },
   suggestionItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: theme.spacing.md,
+    paddingVertical: vs(theme.spacing.md),
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border + "30",
     backgroundColor: theme.colors.surface,
   },
-  noBorder: { borderBottomWidth: 0 },
+  noBorder: {
+    borderBottomWidth: 0,
+  },
   iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: ms(40),
+    height: ms(40),
+    borderRadius: ms(20),
     backgroundColor: theme.colors.background,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: theme.spacing.md,
+    marginRight: s(theme.spacing.md),
   },
-  textContainer: { flex: 1 },
-  placeName: { fontSize: 16, fontWeight: "600", color: theme.colors.text },
+  textContainer: {
+    flex: 1,
+  },
+  placeName: {
+    fontSize: ms(16),
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
   placeAddress: {
-    fontSize: 13,
+    fontSize: ms(13),
     color: theme.colors.textSecondary,
-    marginTop: 2,
+    marginTop: vs(2),
   },
-  loaderContainer: { paddingVertical: 20, alignItems: "center" },
-  emptyText: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    textAlign: "center",
-    marginTop: 20,
+  loaderContainer: {
+    paddingVertical: vs(20),
+    alignItems: "center",
   },
-  // Premium offline/empty state styles
   errorContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 40,
-    marginTop: 10,
+    paddingVertical: vs(40),
   },
   errorIconCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: ms(50),
+    height: ms(50),
+    borderRadius: ms(25),
     backgroundColor: theme.colors.background,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
-    position: "relative",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    marginBottom: vs(16),
   },
   statusDot: {
     position: "absolute",
-    top: 12,
-    right: 12,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: vs(12),
+    right: s(12),
+    width: ms(8),
+    height: ms(8),
+    borderRadius: ms(4),
     backgroundColor: theme.colors.red,
     borderWidth: 2,
     borderColor: theme.colors.surface,
     zIndex: 1,
   },
   errorText: {
-    fontSize: 15,
+    fontSize: ms(15),
     fontWeight: "600",
     color: theme.colors.text,
-    letterSpacing: -0.3,
-  },
-  errorSubtext: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginTop: 4,
-    fontWeight: "400",
-  },
-
-  welcomeContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-    paddingHorizontal: 40,
-  },
-  welcomeIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: theme.colors.primary + "10",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  welcomeText: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: theme.colors.text,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  welcomeSubtext: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: theme.colors.textSecondary,
-    textAlign: "center",
-    fontWeight: "400",
   },
   driftWelcomeContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 50,
-    paddingHorizontal: theme.spacing.xl,
-  },
-  driftIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: theme.colors.primary + "08", // Very subtle tint
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: theme.colors.primary + "15",
+    paddingVertical: vs(30),
   },
   driftTitle: {
-    fontSize: 22,
+    fontSize: ms(20),
     fontWeight: "800",
     color: theme.colors.text,
-    marginBottom: 10,
+    marginBottom: vs(8),
     textAlign: "center",
-    letterSpacing: -0.5,
   },
   driftSubtext: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: ms(14),
+    lineHeight: vs(20),
     color: theme.colors.textSecondary,
     textAlign: "center",
-    marginBottom: 32,
-    paddingHorizontal: 10,
+    marginBottom: vs(24),
   },
   instructionBox: {
     backgroundColor: theme.colors.background,
-    padding: theme.spacing.md,
-    borderRadius: 16,
+    padding: s(theme.spacing.md),
+    borderRadius: ms(16),
     borderWidth: 1,
     borderColor: theme.colors.border + "40",
     width: "100%",
@@ -610,23 +521,22 @@ const styles = createStyles({
   instructionRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: s(12),
   },
   miniIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: ms(28),
+    height: ms(28),
+    borderRadius: ms(8),
     backgroundColor: theme.colors.surface,
     alignItems: "center",
     justifyContent: "center",
-    ...theme.shadows.sm,
   },
   instructionText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: ms(12),
     color: theme.colors.textSecondary,
     fontWeight: "500",
-    lineHeight: 16,
+    lineHeight: vs(16),
   },
 });
 

@@ -1,6 +1,6 @@
 // app/driver/components/RideRequestCard.tsx
 import { theme } from "@/constants/theme";
-import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
+import { ms, s, vs } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef } from "react";
 import {
@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { IRAvatar } from "../../../components/IRAvatar";
+import { getApiBaseUrl } from "../../../utils/api"; // Added for server image support
 import {
   onRemoveRideRequest,
   onRideCancelled,
@@ -63,6 +64,30 @@ export default function RideRequestCard({
   const priorityDurationMs = isPriority
     ? Number(rideData.priorityDurationMs) || 0
     : 0;
+
+  /**
+   * ✅ Resolves server vs local image paths
+   */
+  const resolveImagePath = (path: string | null | undefined) => {
+    if (!path) return undefined;
+
+    // If already a full URL or local file, return directly
+    if (
+      path.startsWith("http") ||
+      path.startsWith("file://") ||
+      path.startsWith("content://")
+    ) {
+      return { uri: path };
+    }
+
+    try {
+      const baseUrl = getApiBaseUrl().replace(/\/$/, "");
+      const cleanPath = path.startsWith("/") ? path : `/${path}`;
+      return { uri: `${baseUrl}${cleanPath}` };
+    } catch (e) {
+      return { uri: path };
+    }
+  };
 
   const getOfferBadge = (type: string) => {
     switch (type?.toLowerCase()) {
@@ -302,9 +327,7 @@ export default function RideRequestCard({
       >
         <View style={[styles.leftCol, isSubmitted && styles.desaturated]}>
           <IRAvatar
-            source={
-              rideData.passengerPic ? { uri: rideData.passengerPic } : undefined
-            }
+            source={resolveImagePath(rideData.passengerPic)}
             name={rideData.passengerName}
             size="md"
           />

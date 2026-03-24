@@ -612,6 +612,7 @@ const PassengerScreen: React.FC = () => {
       <View style={styles.container}>
         <View style={styles.contentArea}>
           <MapContainer
+            trayHeight={trayHeight}
             nearbyDrivers={nearbyDrivers}
             matchedDriver={matchedDriver}
           />
@@ -634,7 +635,7 @@ const PassengerScreen: React.FC = () => {
 
         <Tray
           ref={trayRef}
-          onTrayHeightChange={handleTrayHeightChange}
+          onTrayHeightChange={(h: number) => setTrayHeight(h)}
           onTrayStateChange={setIsTrayOpen}
           onTraySettled={setTraySettled}
           onLocationInputFocus={(f: "pickup" | "destination") => {

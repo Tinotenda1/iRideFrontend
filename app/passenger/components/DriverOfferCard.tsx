@@ -1,10 +1,11 @@
 // app/passenger/components/DriverOfferCard.tsx
 import { theme } from "@/constants/theme";
-import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
+import { ms, s, vs } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef } from "react";
 import { Animated, Easing, Text, TouchableOpacity, View } from "react-native";
 import { IRAvatar } from "../../../components/IRAvatar";
+import { getApiBaseUrl } from "../../../utils/api"; // Added for server image support
 import { createStyles } from "../../../utils/styles";
 
 const SLIDE_DURATION = 300;
@@ -34,6 +35,40 @@ export const DriverOfferCard: React.FC<Props> = ({
   const isLocked = isProcessing || isAccepted;
 
   const isYourFare = offer.type === "accept";
+
+  // ADD THIS LOG HERE
+  console.log("DEBUG: DriverOfferCard rendered for:", offer?.driver?.name);
+  console.log("DEBUG: profilePic value:", offer?.driver?.profilePic);
+
+  /**
+   * ✅ Robust Remote Avatar Resolver
+   */
+  const getDriverAvatar = (path: string | null | undefined) => {
+    if (!path || path === "" || path === "null") return undefined;
+
+    let finalUri = "";
+
+    if (
+      path.startsWith("http") ||
+      path.startsWith("file://") ||
+      path.startsWith("content://")
+    ) {
+      finalUri = path;
+    } else {
+      try {
+        const baseUrl = getApiBaseUrl().replace(/\/$/, "");
+        const cleanPath = path.startsWith("/") ? path : `/${path}`;
+        finalUri = `${baseUrl}${cleanPath}`;
+      } catch (e) {
+        finalUri = path;
+      }
+    }
+
+    // DEBUG: Uncomment this to see the URL in your console
+    console.log("Final Driver Avatar URI:", finalUri);
+
+    return { uri: finalUri };
+  };
 
   const slideOut = useCallback(
     (cb?: () => void) => {
@@ -109,7 +144,11 @@ export const DriverOfferCard: React.FC<Props> = ({
       <View style={[styles.content, isLocked && styles.lockedContent]}>
         <View style={styles.leftCol}>
           <IRAvatar
-            source={{ uri: offer.driver.profilePic }}
+            source={(() => {
+              const res = getDriverAvatar(offer.driver.profilePic);
+              console.log("Helper returned:", res);
+              return res;
+            })()}
             name={offer.driver.name}
             size="md"
           />

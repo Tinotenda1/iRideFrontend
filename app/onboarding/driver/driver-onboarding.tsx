@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
+    Image,
     ScrollView,
     StatusBar,
-    StyleSheet,
     Text,
     TextStyle,
     TouchableOpacity,
@@ -15,76 +15,417 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "@/constants/theme";
 import { hp, ms, s, vs } from "@/utils/responsive";
 import { createStyles } from "@/utils/styles";
+import { IRButton } from "../../../components/IRButton";
+import { ROUTES } from "../../../utils/routes";
+
+// ---------- Tabs ----------
+import {
+    compressImage,
+    compressMultipleImages,
+} from "@/utils/imageCompression";
+import { getUserInfo, updateUserInfo } from "@/utils/storage";
+import InputTray from "../../../components/universalInputTray";
+import { IdentityTab } from "./tabs/IdentityTab";
+import InformationTab from "./tabs/InformationTab";
+import { SubmitTab } from "./tabs/SubmitTab";
+import { VehicleTab } from "./tabs/VehicleTab"; // Import the new tab
+import { VehicleTypeTab } from "./tabs/VehicleTypeTab";
+import { WelcomeTab } from "./tabs/WelcomeTab";
+
+import TripStatusModal from "../../../components/TripStatusModal";
+import { submitDriverOnboarding } from "../../services/driverOnboardingService";
 
 /* -------------------------------- Types & Data ---------------------------- */
-
-type OnboardingStep = "welcome" | "documents" | "vehicle" | "training";
-
+type OnboardingStep =
+  | "welcome"
+  | "information"
+  | "identity"
+  | "vehicle"
+  | "vehicleType"
+  | "submit";
 interface StepContent {
   title: string;
   subtitle: string;
-  icon: keyof typeof Ionicons.glyphMap;
 }
+
+const STEP_ORDER: OnboardingStep[] = [
+  "welcome",
+  "information",
+  "identity",
+  "vehicle",
+  "vehicleType",
+  "submit",
+];
 
 const STEPS: Record<OnboardingStep, StepContent> = {
   welcome: {
-    title: "Welcome to Drift",
-    subtitle: "Complete these steps to start earning on your own schedule.",
-    icon: "speedometer-outline",
+    title: "Welcome",
+    subtitle:
+      "Complete these steps to start Drifting and earning on your own schedule.",
   },
-  documents: {
-    title: "Legal Documents",
-    subtitle: "We need to verify your identity and driving eligibility.",
-    icon: "document-text-outline",
+  information: {
+    title: "Personal Information",
+    subtitle:
+      "We need to verify your identity to ensure every Drift is secure.",
+  },
+  identity: {
+    title: "National Identification",
+    subtitle: "Upload your identification to be authorized as a Drift partner.",
   },
   vehicle: {
     title: "Vehicle Details",
-    subtitle: "Register the car you'll be using for trips.",
-    icon: "car-outline",
+    subtitle:
+      "Provide your vehicle specs to ensure a premium Drift experience.",
   },
-  training: {
-    title: "Quick Training",
-    subtitle: "A 2-minute guide on how to provide a 5-star experience.",
-    icon: "school-outline",
+  vehicleType: {
+    title: "Vehicle Capabilities",
+    subtitle: "Select the categories that best describe how you'll Drift.",
+  },
+  submit: {
+    title: "Registration Completion",
+    subtitle: "Ready to become a Drift partner? We cant wait to see you drift.",
   },
 };
 
 /* -------------------------------------------------------------------------- */
-
 const DriverOnboarding = () => {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState<OnboardingStep>("welcome");
 
-  const renderInstructions = () => (
-    <View style={styles.tabContent}>
-      <Text style={styles.sectionTitle}>Onboarding Instructions</Text>
+  // ---------- Lifted State: Information ----------
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [city, setCity] = useState("");
 
-      <InstructionItem
-        number={1}
-        text="Upload a clear photo of your Driver's License."
-      />
-      <InstructionItem
-        number={2}
-        text="Provide Vehicle Registration and Insurance details."
-      />
-      <InstructionItem
-        number={3}
-        text="Complete the safety background check."
-      />
+  // ---------- Lifted State: Identity ----------
+  const [idNumber, setIdNumber] = useState("");
+  const [nationalIdImage, setNationalIdImage] = useState<string | null>(null);
+  const [licenseFront, setLicenseFront] = useState<string | null>(null);
+  const [licenseBack, setLicenseBack] = useState<string | null>(null);
 
-      <View style={styles.infoBox}>
-        <Ionicons
-          name="information-circle"
-          size={ms(20)}
-          color={theme.colors.secondary}
-        />
-        <Text style={styles.infoText}>
-          Verification usually takes 24–48 hours after all documents are
-          submitted.
-        </Text>
-      </View>
-    </View>
-  );
+  // ---------- Lifted State: Vehicle ----------
+  const [plateNumber, setPlateNumber] = useState("");
+  const [year, setYear] = useState("");
+  const [makeModel, setMakeModel] = useState("");
+  const [color, setColor] = useState("");
+  const [regBookImage, setRegBookImage] = useState<string | null>(null);
+  const [carFront, setCarFront] = useState<string | null>(null);
+  const [carBack, setCarBack] = useState<string | null>(null);
+  const [carAngle, setCarAngle] = useState<string | null>(null);
+  const [vehicleType, setVehicleType] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    type: "completion" | "cancellation";
+    title: string;
+    message: string;
+  }>({
+    type: "completion",
+    title: "",
+    message: "",
+  });
+
+  // ---------- Refs for Trays ----------
+  const fullNameTrayRef = useRef<any>(null);
+  const cityTrayRef = useRef<any>(null);
+  const idNumberTrayRef = useRef<any>(null);
+  const plateTrayRef = useRef<any>(null);
+  const yearTrayRef = useRef<any>(null);
+  const makeModelTrayRef = useRef<any>(null);
+  const colorTrayRef = useRef<any>(null);
+
+  const currentIndex = STEP_ORDER.indexOf(currentStep);
+
+  useEffect(() => {
+    const loadExistingData = async () => {
+      try {
+        const userInfo = await getUserInfo();
+        if (userInfo) {
+          // --- Information Tab ---
+          if (userInfo.name) setName(userInfo.name);
+          if (userInfo.city) setCity(userInfo.city);
+          if (userInfo.profilePic) setProfileImage(userInfo.profilePic);
+
+          // --- Identity Tab ---
+          if (userInfo.idNumber) setIdNumber(userInfo.idNumber);
+          if (userInfo.nationalIdImage)
+            setNationalIdImage(userInfo.nationalIdImage);
+          if (userInfo.licenseFront) setLicenseFront(userInfo.licenseFront);
+          if (userInfo.licenseBack) setLicenseBack(userInfo.licenseBack);
+
+          // --- Vehicle Tab ---
+          if (userInfo.plateNumber) setPlateNumber(userInfo.plateNumber);
+          if (userInfo.vehicleYear) setYear(userInfo.vehicleYear);
+          if (userInfo.makeModel) setMakeModel(userInfo.makeModel);
+          if (userInfo.vehicleColor) setColor(userInfo.vehicleColor);
+          if (userInfo.regBookImage) setRegBookImage(userInfo.regBookImage);
+          if (userInfo.carFront) setCarFront(userInfo.carFront);
+          if (userInfo.carBack) setCarBack(userInfo.carBack);
+          if (userInfo.carAngle) setCarAngle(userInfo.carAngle);
+
+          // ---Vehicle Type Tab
+          if (userInfo.vehicleType) setVehicleType(userInfo.vehicleType);
+        }
+      } catch (error) {
+        console.error("Error loading persisted onboarding data:", error);
+      }
+    };
+
+    loadExistingData();
+  }, []);
+
+  const handleFinish = async () => {
+    setIsSubmitting(true);
+    setUploadProgress(0); // Reset progress
+
+    try {
+      const userInfo = await getUserInfo();
+      if (!userInfo) throw new Error("No user data found");
+
+      // Pass the setUploadProgress function as the callback
+      await submitDriverOnboarding(userInfo, (percent) => {
+        setUploadProgress(percent);
+      });
+
+      setModalConfig({
+        type: "completion",
+        title: "All Set!",
+        message:
+          "Your registration has been submitted. We'll review your details within 24-48 hours.",
+      });
+      setShowStatusModal(true);
+    } catch (error) {
+      setModalConfig({
+        type: "cancellation",
+        title: "Upload Failed",
+        message:
+          "We couldn't upload your documents. Please check your internet connection.",
+      });
+      setShowStatusModal(true);
+    } finally {
+      setIsSubmitting(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const handleModalClose = () => {
+    setShowStatusModal(false);
+    if (modalConfig.type === "completion") {
+      // On success, go back to passenger home
+      router.replace(ROUTES.PASSENGER.HOME);
+    }
+    // On cancellation (error), we stay on the submit tab so they can "Try Again"
+  };
+
+  const handleNext = async () => {
+    try {
+      let dataToSave: any = {};
+
+      switch (currentStep) {
+        case "information":
+          // Compress profile picture
+          const compressedProfile = profileImage
+            ? await compressImage(profileImage)
+            : undefined;
+          dataToSave = {
+            profilePic: compressedProfile,
+            name,
+            city,
+          };
+          break;
+
+        case "identity":
+          // Batch compress identity documents
+          const [compNational, compLicFront, compLicBack] =
+            await compressMultipleImages([
+              nationalIdImage,
+              licenseFront,
+              licenseBack,
+            ]);
+
+          dataToSave = {
+            idNumber,
+            nationalIdImage: compNational || undefined,
+            licenseFront: compLicFront || undefined,
+            licenseBack: compLicBack || undefined,
+          };
+          break;
+
+        case "vehicle":
+          // Batch compress all vehicle and registration photos
+          const [compReg, compCarFront, compCarBack, compCarAngle] =
+            await compressMultipleImages([
+              regBookImage,
+              carFront,
+              carBack,
+              carAngle,
+            ]);
+
+          dataToSave = {
+            plateNumber,
+            vehicleYear: year,
+            makeModel,
+            vehicleColor: color,
+            regBookImage: compReg || undefined,
+            carFront: compCarFront || undefined,
+            carBack: compCarBack || undefined,
+            carAngle: compCarAngle || undefined,
+          };
+          break;
+
+        case "vehicleType":
+          dataToSave = {
+            vehicleType,
+          };
+          break;
+
+        case "submit":
+          dataToSave = { profileCompleted: true };
+          break;
+
+        default:
+          break;
+      }
+
+      if (Object.keys(dataToSave).length > 0) {
+        await updateUserInfo(dataToSave);
+
+        // Update local state with compressed URIs to keep UI in sync
+        if (currentStep === "information" && dataToSave.profilePic)
+          setProfileImage(dataToSave.profilePic);
+        if (currentStep === "identity") {
+          if (dataToSave.nationalIdImage)
+            setNationalIdImage(dataToSave.nationalIdImage);
+          if (dataToSave.licenseFront) setLicenseFront(dataToSave.licenseFront);
+          if (dataToSave.licenseBack) setLicenseBack(dataToSave.licenseBack);
+        }
+        if (currentStep === "vehicle") {
+          if (dataToSave.regBookImage) setRegBookImage(dataToSave.regBookImage);
+          if (dataToSave.carFront) setCarFront(dataToSave.carFront);
+          if (dataToSave.carBack) setCarBack(dataToSave.carBack);
+          if (dataToSave.carAngle) setCarAngle(dataToSave.carAngle);
+        }
+        if (currentStep === "vehicleType") {
+          if (dataToSave.vehicleType) setVehicleType(dataToSave.vehicleType);
+        }
+      }
+
+      if (currentIndex < STEP_ORDER.length - 1) {
+        setCurrentStep(STEP_ORDER[currentIndex + 1]);
+      } else {
+        await handleFinish();
+      }
+    } catch (error) {
+      console.error("Onboarding Save Error:", error);
+    }
+  };
+
+  const handleBack = () => {
+    if (currentIndex > 0) {
+      setCurrentStep(STEP_ORDER[currentIndex - 1]);
+    }
+  };
+
+  // ---------- Step Validations ----------
+  const isInformationStepValid =
+    profileImage !== null && name.trim() !== "" && city.trim() !== "";
+
+  const isIdentityStepValid =
+    idNumber.trim() !== "" &&
+    nationalIdImage !== null &&
+    licenseFront !== null &&
+    licenseBack !== null;
+
+  const isVehicleStepValid =
+    plateNumber.trim() !== "" &&
+    year.trim() !== "" &&
+    makeModel.trim() !== "" &&
+    color.trim() !== "" &&
+    regBookImage !== null &&
+    carFront !== null &&
+    carBack !== null &&
+    carAngle !== null;
+
+  const isVehicleTypeStepValid = vehicleType.length > 0;
+
+  const isStepValid = (() => {
+    switch (currentStep) {
+      case "information":
+        return isInformationStepValid;
+      case "identity":
+        return isIdentityStepValid;
+      case "vehicle":
+        return isVehicleStepValid;
+      case "vehicleType":
+        return isVehicleTypeStepValid; // Validation check
+      default:
+        return true;
+    }
+  })();
+
+  // ---------- Step Components ----------
+  const stepComponents = {
+    welcome: <WelcomeTab />,
+    information: (
+      <InformationTab
+        profileImage={profileImage}
+        setProfileImage={setProfileImage}
+        name={name}
+        setName={setName}
+        city={city}
+        setCity={setCity}
+        fullNameTrayRef={fullNameTrayRef}
+        cityTrayRef={cityTrayRef}
+      />
+    ),
+    identity: (
+      <IdentityTab
+        idNumber={idNumber}
+        setIdNumber={setIdNumber}
+        nationalIdImage={nationalIdImage}
+        setNationalIdImage={setNationalIdImage}
+        licenseFront={licenseFront}
+        setLicenseFront={setLicenseFront}
+        licenseBack={licenseBack}
+        setLicenseBack={setLicenseBack}
+        idNumberTrayRef={idNumberTrayRef}
+      />
+    ),
+    vehicle: (
+      <VehicleTab
+        plateNumber={plateNumber}
+        setPlateNumber={setPlateNumber}
+        year={year}
+        setYear={setYear}
+        makeModel={makeModel}
+        setMakeModel={setMakeModel}
+        color={color}
+        setColor={setColor}
+        regBookImage={regBookImage}
+        setRegBookImage={setRegBookImage}
+        carFront={carFront}
+        setCarFront={setCarFront}
+        carBack={carBack}
+        setCarBack={setCarBack}
+        carAngle={carAngle}
+        setCarAngle={setCarAngle}
+        plateTrayRef={plateTrayRef}
+        yearTrayRef={yearTrayRef}
+        makeModelTrayRef={makeModelTrayRef}
+        colorTrayRef={colorTrayRef}
+      />
+    ),
+    vehicleType: (
+      <VehicleTypeTab
+        onTypeChange={setVehicleType}
+        initialValue={vehicleType} // Pass this so it stays selected if they go back
+      />
+    ),
+    submit: <SubmitTab />,
+  };
 
   return (
     <View style={styles.container}>
@@ -92,33 +433,39 @@ const DriverOnboarding = () => {
 
       {/* TOP SECTION */}
       <View style={styles.topSection}>
-        <LinearGradient
-          colors={[theme.colors.primaryDark, theme.colors.primary]}
-          style={styles.gradient}
-        />
-        <View
-          style={[styles.headerContent, { paddingTop: insets.top + vs(20) }]}
+        <TouchableOpacity
+          style={[styles.closeButton, { top: insets.top + vs(10) }]}
+          onPress={() => router.replace({ pathname: ROUTES.PASSENGER.HOME })}
         >
-          <View style={styles.iconCircle}>
-            <Ionicons
-              name={STEPS[currentStep].icon}
-              size={ms(40)}
-              color="#FFFFFF"
+          <Ionicons
+            name="close"
+            size={ms(30)}
+            color={theme.colors.textSecondary}
+          />
+        </TouchableOpacity>
+
+        <View style={styles.headerContent}>
+          <View style={styles.logoContainer}>
+            <Image
+              source={require("../../../assets/images/drift_logo.png")}
+              style={styles.driftLogo}
+              resizeMode="contain"
             />
           </View>
 
-          <Text style={styles.welcomeTitle}>{STEPS[currentStep].title}</Text>
-
-          <Text style={styles.welcomeSubtitle}>
-            {STEPS[currentStep].subtitle}
-          </Text>
+          <View style={styles.textContainer}>
+            <Text style={styles.welcomeTitle}>{STEPS[currentStep].title}</Text>
+            <Text style={styles.welcomeSubtitle}>
+              {STEPS[currentStep].subtitle}
+            </Text>
+          </View>
         </View>
       </View>
 
       {/* BOTTOM SECTION */}
       <View style={styles.bottomSection}>
         <View style={styles.tabsIndicatorContainer}>
-          {(Object.keys(STEPS) as OnboardingStep[]).map((step) => (
+          {STEP_ORDER.map((step) => (
             <View
               key={step}
               style={[
@@ -133,182 +480,198 @@ const DriverOnboarding = () => {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {currentStep === "welcome" && renderInstructions()}
+          {stepComponents[currentStep]}
         </ScrollView>
 
         <View
           style={[
             styles.footer,
-            {
-              paddingBottom: Math.max(insets.bottom, vs(20)),
-            },
+            { paddingBottom: Math.max(insets.bottom, vs(20)) },
           ]}
         >
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => setCurrentStep("documents")}
+          <View
+            style={[
+              styles.footer,
+              { paddingBottom: Math.max(insets.bottom, vs(20)) },
+            ]}
           >
-            <Text style={styles.buttonText}>Get Started</Text>
-            <Ionicons name="arrow-forward" size={ms(20)} color="#FFFFFF" />
-          </TouchableOpacity>
+            {/* Move Progress Bar OUTSIDE the footerRow */}
+            {isSubmitting && (
+              <View style={styles.progressContainer}>
+                <View style={styles.progressBarBackground}>
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      { width: `${uploadProgress}%` },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.progressText}>
+                  Uploading: {uploadProgress}%
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.footerRow}>
+              {currentIndex > 0 && (
+                <TouchableOpacity
+                  style={styles.backButton}
+                  onPress={handleBack}
+                >
+                  <Ionicons
+                    name="arrow-back"
+                    size={ms(24)}
+                    color={theme.colors.text}
+                  />
+                </TouchableOpacity>
+              )}
+              <IRButton
+                title={currentStep === "submit" ? "Finish" : "Next"}
+                variant="primary"
+                onPress={handleNext}
+                disabled={!isStepValid || isSubmitting} // Disable while uploading
+                loading={isSubmitting} // Show spinner inside button too
+                fullWidth
+                rightIcon={
+                  !isSubmitting &&
+                  currentStep !== "submit" && (
+                    <Ionicons
+                      name="arrow-forward"
+                      size={ms(20)}
+                      color={theme.colors.surface}
+                    />
+                  )
+                }
+                style={{
+                  flex: 1,
+                  opacity: !isStepValid ? 0.5 : 1,
+                }}
+              />
+            </View>
+          </View>
         </View>
       </View>
+
+      {/* Floating InputTrays */}
+      <InputTray
+        ref={fullNameTrayRef}
+        activeField="fullName"
+        initialValue={name}
+        onValueChange={setName}
+      />
+
+      <InputTray
+        ref={cityTrayRef}
+        activeField="city"
+        initialValue={city}
+        onValueChange={setCity}
+      />
+
+      <InputTray
+        ref={idNumberTrayRef}
+        activeField="idNumber"
+        initialValue={idNumber}
+        onValueChange={setIdNumber}
+      />
+      <InputTray
+        ref={plateTrayRef}
+        activeField="plateNumber"
+        initialValue={plateNumber}
+        onValueChange={setPlateNumber}
+      />
+      <InputTray
+        ref={yearTrayRef}
+        activeField="year"
+        initialValue={year}
+        onValueChange={setYear}
+      />
+      <InputTray
+        ref={makeModelTrayRef}
+        activeField="makeModel"
+        initialValue={makeModel}
+        onValueChange={setMakeModel}
+      />
+      <InputTray
+        ref={colorTrayRef}
+        activeField="color"
+        initialValue={color}
+        onValueChange={setColor}
+      />
+      <TripStatusModal
+        visible={showStatusModal}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={handleModalClose}
+      />
     </View>
   );
 };
 
-/* -------------------------------- Helpers --------------------------------- */
-
-const InstructionItem = ({
-  number,
-  text,
-}: {
-  number: number;
-  text: string;
-}) => (
-  <View style={styles.instructionRow}>
-    <View style={styles.numberBadge}>
-      <Text style={styles.numberText}>{number}</Text>
-    </View>
-    <Text style={styles.instructionText}>{text}</Text>
-  </View>
-);
-
-/* -------------------------------- Styles ---------------------------------- */
-
+// ... Styles remain the same as your provided code
 const styles = createStyles({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.primaryDark,
-  },
-
+  container: { flex: 1, backgroundColor: theme.colors.primaryDark },
   topSection: {
+    backgroundColor: theme.colors.background,
     height: hp(40),
     justifyContent: "center",
     alignItems: "center",
   },
-
-  gradient: {
-    ...StyleSheet.absoluteFillObject,
-  },
-
-  headerContent: {
-    alignItems: "center",
-    paddingHorizontal: s(30),
-  },
-
-  iconCircle: {
-    width: ms(80),
-    height: ms(80),
-    borderRadius: ms(40),
-    backgroundColor: "rgba(255,255,255,0.2)",
+  closeButton: {
+    position: "absolute",
+    right: s(20),
+    zIndex: 10,
+    padding: s(5),
+    width: ms(40),
+    height: ms(40),
+    borderRadius: ms(22),
+    marginTop: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: vs(20),
+    ...theme.shadows.sm,
   },
-
+  headerContent: { alignItems: "center", paddingHorizontal: s(30) },
+  driftLogo: { width: ms(150), height: ms(150) },
+  logoContainer: {
+    height: ms(160),
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  textContainer: { alignItems: "center", minHeight: vs(80) },
   welcomeTitle: {
-    ...(theme.typography.h1 as TextStyle),
-    color: "#FFFFFF",
+    ...(theme.typography.h1 as TextStyle), // Explicit cast here
+    color: theme.colors.text,
     textAlign: "center",
-  } as TextStyle,
-
+  },
   welcomeSubtitle: {
-    ...(theme.typography.body as TextStyle),
-    color: "rgba(255,255,255,0.8)",
+    ...(theme.typography.body as TextStyle), // Explicit cast here
+    color: theme.colors.textSecondary,
     textAlign: "center",
     marginTop: vs(8),
-  } as TextStyle,
-
+  },
   bottomSection: {
     flex: 1,
     backgroundColor: theme.colors.surface,
     borderTopLeftRadius: theme.borderRadius.xl,
     borderTopRightRadius: theme.borderRadius.xl,
     marginTop: vs(-30),
-    paddingTop: vs(20),
+    paddingVertical: vs(15),
+    ...theme.shadows.lg,
   },
-
   tabsIndicatorContainer: {
     flexDirection: "row",
     justifyContent: "center",
     gap: s(8),
-    marginBottom: vs(20),
+    paddingBottom: vs(10),
   },
-
-  stepDot: {
-    height: vs(4),
-    borderRadius: theme.borderRadius.full,
-  },
-
-  activeDot: {
-    width: s(24),
-    backgroundColor: theme.colors.primary,
-  },
-
-  inactiveDot: {
-    width: s(8),
-    backgroundColor: theme.colors.border,
-  },
-
+  stepDot: { height: vs(4), borderRadius: theme.borderRadius.full },
+  activeDot: { width: s(24), backgroundColor: theme.colors.primary },
+  inactiveDot: { width: s(8), backgroundColor: theme.colors.border },
   scrollContent: {
     paddingHorizontal: s(24),
     paddingBottom: vs(100),
   },
-
-  tabContent: {
-    flex: 1,
-  },
-
-  sectionTitle: {
-    ...(theme.typography.h3 as TextStyle),
-    color: theme.colors.text,
-    marginBottom: vs(20),
-  } as TextStyle,
-
-  instructionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: vs(16),
-  },
-
-  numberBadge: {
-    width: ms(28),
-    height: ms(28),
-    borderRadius: ms(14),
-    backgroundColor: theme.colors.background,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: s(12),
-  },
-
-  numberText: {
-    ...(theme.typography.caption as TextStyle),
-    color: theme.colors.primaryDark,
-  } as TextStyle,
-
-  instructionText: {
-    ...(theme.typography.bodySmall as TextStyle),
-    color: theme.colors.textSecondary,
-    flex: 1,
-  } as TextStyle,
-
-  infoBox: {
-    flexDirection: "row",
-    backgroundColor: theme.colors.background,
-    padding: s(16),
-    borderRadius: theme.borderRadius.md,
-    marginTop: vs(20),
-    alignItems: "center",
-    gap: s(10),
-  },
-
-  infoText: {
-    ...(theme.typography.caption as TextStyle),
-    color: theme.colors.textSecondary,
-    flex: 1,
-  } as TextStyle,
-
   footer: {
     position: "absolute",
     bottom: 0,
@@ -316,25 +679,36 @@ const styles = createStyles({
     right: 0,
     padding: s(24),
     backgroundColor: theme.colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
   },
-
-  primaryButton: {
-    backgroundColor: theme.colors.black,
-    height: vs(56),
-    borderRadius: theme.borderRadius.md,
-    flexDirection: "row",
+  footerRow: { flexDirection: "row", alignItems: "center", gap: s(12) },
+  backButton: {
+    width: vs(50),
+    height: vs(50),
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.background,
     justifyContent: "center",
     alignItems: "center",
-    gap: s(10),
   },
-
-  buttonText: {
-    ...(theme.typography.body as TextStyle),
-    color: "#FFFFFF",
-    fontWeight: "700",
-  } as TextStyle,
+  progressContainer: {
+    marginBottom: vs(15),
+    width: "100%",
+  },
+  progressBarBackground: {
+    height: vs(6),
+    backgroundColor: theme.colors.border,
+    borderRadius: theme.borderRadius.full,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: theme.colors.primary,
+  },
+  progressText: {
+    ...(theme.typography.caption as TextStyle), // Explicit cast here
+    color: theme.colors.textSecondary,
+    textAlign: "center",
+    marginTop: vs(4),
+  },
 });
 
 export default DriverOnboarding;

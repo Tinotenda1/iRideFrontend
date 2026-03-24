@@ -239,6 +239,8 @@ export const watchDriverLocation = (
   callback: (location: DriverLocation) => void,
   errorCallback?: (error: string) => void,
 ) => {
+  let isSubscribed = true; // Guard to prevent updates after unmounting
+
   const startWatching = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -247,7 +249,14 @@ export const watchDriverLocation = (
         return;
       }
 
+      // Ensure we don't have multiple watches running
+      if (watchId) {
+        watchId.remove();
+      }
+
       watchId = await Location.watchPositionAsync(watchOptions, (loc) => {
+        if (!isSubscribed) return; // Prevent processing if already cleaned up
+
         const { coords, timestamp } = loc;
 
         // 1. Filter out poor GPS data
@@ -261,7 +270,6 @@ export const watchDriverLocation = (
               Math.pow(coords.longitude - lastLon, 2),
           );
 
-          // Only calculate new heading if the driver has actually moved
           if (distanceMoved > MOVEMENT_THRESHOLD) {
             const newBearing = calculateBearing(
               lastLat,
@@ -270,8 +278,6 @@ export const watchDriverLocation = (
               coords.longitude,
             );
 
-            // Smooth the rotation (LERP)
-            // 0.4 means 40% of the new angle is applied each update
             const delta = newBearing - lastKnownHeading;
             const normalizedDelta = ((delta + 180) % 360) - 180;
             lastKnownHeading =
@@ -279,7 +285,6 @@ export const watchDriverLocation = (
           }
         }
 
-        // Update history
         lastLat = coords.latitude;
         lastLon = coords.longitude;
 
@@ -292,7 +297,7 @@ export const watchDriverLocation = (
           timestamp,
         };
 
-        // 3. Update UI (Map Marker)
+        // 3. Update UI
         callback(formatted);
 
         // 4. Update Server (Throttled)
@@ -315,10 +320,18 @@ export const watchDriverLocation = (
 
   startWatching();
 
+  // CLEANUP FUNCTION
   return () => {
+    isSubscribed = false;
     if (watchId) {
-      watchId.remove();
-      watchId = null;
+      // Use a try-catch to prevent "Call to function rejected" crashes
+      try {
+        watchId.remove();
+      } catch (e) {
+        console.warn("Watch removal failed or already removed:", e);
+      } finally {
+        watchId = null;
+      }
     }
   };
 };

@@ -1,4 +1,4 @@
-import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
+import { ms, s, vs } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, BackHandler, Text, View } from "react-native";
@@ -15,6 +15,7 @@ interface SearchingTabProps {
   hasOffers: boolean;
   isActive: boolean;
   onClearOffers?: () => void;
+  onContentHeight?: (h: number) => void; // Added for dynamic height
 }
 
 const SearchingTab: React.FC<SearchingTabProps> = ({
@@ -23,6 +24,7 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
   hasOffers,
   isActive,
   onClearOffers,
+  onContentHeight, // Destructured prop
 }) => {
   const insets = useSafeAreaInsets();
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -33,11 +35,10 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
   const viewingDriversCount = viewingDrivers.size;
 
   const isMounted = useRef(true);
-  const NO_DRIVERS_TIMEOUT = 300000; // 5 minutes
+  const NO_DRIVERS_TIMEOUT = 300000;
 
   useEffect(() => {
     let socketInstance: any;
-
     const setupSocket = async () => {
       try {
         const { getPassengerSocket } =
@@ -204,6 +205,11 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
         styles.container,
         { paddingBottom: Math.max(insets.bottom, vs(20)) },
       ]}
+      onLayout={(e) => {
+        // Report height of the entire component to the Tray
+        const height = e.nativeEvent.layout.height;
+        onContentHeight?.(height);
+      }}
     >
       <View style={styles.content}>
         {!showNoDrivers ? (
@@ -213,7 +219,9 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
                 <View
                   style={[
                     styles.liveDot,
-                    viewingDriversCount === 0 && { backgroundColor: "#94A3B8" },
+                    viewingDriversCount === 0 && {
+                      backgroundColor: theme.colors.background,
+                    },
                   ]}
                 />
                 <View
@@ -264,10 +272,12 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
       </View>
 
       {!showNoDrivers && (
-        <CancelButton
-          onPress={() => performCancellation(false)}
-          isLoading={isCancelling}
-        />
+        <View style={styles.buttonWrapper}>
+          <CancelButton
+            onPress={() => performCancellation(false)}
+            isLoading={isCancelling}
+          />
+        </View>
       )}
     </View>
   );
@@ -275,20 +285,20 @@ const SearchingTab: React.FC<SearchingTabProps> = ({
 
 const styles = createStyles({
   container: {
-    flex: 1,
+    // Removed flex: 1 to allow content-based height
     paddingHorizontal: s(20),
     alignItems: "center",
-    justifyContent: "space-between",
+    backgroundColor: theme.colors.surface,
   },
   content: {
     alignItems: "center",
-    flex: 1,
     justifyContent: "center",
+    paddingVertical: vs(30), // Added vertical padding to replace flex: 1 spacing
   },
   premiumRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingBottom: vs(15),
+    paddingBottom: vs(20),
     paddingHorizontal: s(16),
   },
   liveIndicator: {
@@ -302,7 +312,7 @@ const styles = createStyles({
     width: ms(10),
     height: ms(10),
     borderRadius: ms(5),
-    backgroundColor: "#00D26A",
+    backgroundColor: theme.colors.primary,
     zIndex: 2,
   },
   liveDotPulse: {
@@ -318,12 +328,12 @@ const styles = createStyles({
     color: theme.colors.textSecondary,
   },
   countHighlight: {
-    color: "#00D26A",
+    color: theme.colors.primary,
     fontWeight: "800",
   },
   noDriversContainer: {
     alignItems: "center",
-    marginBottom: vs(10),
+    marginBottom: vs(20),
   },
   pulseCircle: {
     width: ms(70),
@@ -332,7 +342,7 @@ const styles = createStyles({
     backgroundColor: theme.colors.primary + "20",
     borderWidth: 2,
     borderColor: theme.colors.primary,
-    marginBottom: vs(10),
+    marginBottom: vs(15),
   },
   title: {
     fontSize: ms(18),
@@ -342,15 +352,19 @@ const styles = createStyles({
   subtitle: {
     fontSize: ms(13),
     color: theme.colors.textSecondary,
-    marginTop: vs(4),
+    marginTop: vs(6),
     textAlign: "center",
   },
   subtitleNoDrivers: {
     fontSize: ms(13),
     color: theme.colors.textSecondary,
-    marginTop: vs(4),
+    marginTop: vs(6),
     textAlign: "center",
     paddingHorizontal: s(10),
+  },
+  buttonWrapper: {
+    width: "100%",
+    marginTop: vs(20),
   },
 });
 

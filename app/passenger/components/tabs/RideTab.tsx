@@ -1,5 +1,4 @@
-// app/passenger/components/tabs/RideTab.tsx
-import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
+import { ms, s, vs } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Wallet } from "lucide-react-native";
@@ -17,11 +16,13 @@ interface TabProps {
   id: string;
   onOpenAdditionalInfo: () => void;
   onSwitchToSearching: () => void;
+  onContentHeight?: (h: number) => void;
 }
 
 const RideTab: React.FC<TabProps> = ({
   onOpenAdditionalInfo,
   onSwitchToSearching,
+  onContentHeight,
 }) => {
   const insets = useSafeAreaInsets();
   const { rideData, updateRideData, submitRideBooking } = useRideBooking();
@@ -30,7 +31,8 @@ const RideTab: React.FC<TabProps> = ({
   const [isFetchingPrices, setIsFetchingPrices] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
-  // Computed values
+  const OFFER_CONTROL_HEIGHT = vs(60);
+
   const selectedVehiclePrice =
     rideData.vehiclePrices?.[rideData.vehicleType] || 0;
   const isSelectionComplete =
@@ -39,25 +41,13 @@ const RideTab: React.FC<TabProps> = ({
     selectedVehiclePrice > 0;
 
   useEffect(() => {
-    if (
-      rideData.vehiclePrices &&
-      Object.keys(rideData.vehiclePrices).length > 0
-    ) {
-      console.log(
-        "[RideTab] Prices available in state:",
-        rideData.vehiclePrices,
-      );
-    }
-  }, [rideData.vehiclePrices]);
-
-  useEffect(() => {
     const initTab = async () => {
       if (!rideData.vehicleType) {
         updateRideData({ vehicleType: "4seater" });
       }
-      setTimeout(() => setIsReady(true), 500);
+      // Delaying "Ready" helps ensure the OfferFareControl doesn't "pop" in too abruptly
+      setTimeout(() => setIsReady(true), 400);
     };
-
     initTab();
   }, []);
 
@@ -123,10 +113,16 @@ const RideTab: React.FC<TabProps> = ({
 
   return (
     <View
+      // 🔥 CRITICAL: Removed flex: 1 so the View wrap-fits the content
       style={[
         styles.container,
-        { paddingBottom: Math.max(insets.bottom, vs(theme.spacing.md)) },
+        { paddingBottom: Math.max(insets.bottom, vs(theme.spacing.xl)) },
       ]}
+      onLayout={(e) => {
+        const height = e.nativeEvent.layout.height;
+        // We add a small buffer (vs(10)) to ensure the button isn't too close to the edge
+        onContentHeight?.(height);
+      }}
     >
       <View style={styles.mainContent}>
         <View style={styles.carouselWrapper}>
@@ -233,15 +229,18 @@ const RideTab: React.FC<TabProps> = ({
         </View>
       </View>
 
-      <View>
+      <View style={styles.footerSection}>
         <View
           style={[
             styles.offerContainer,
             !isSelectionComplete && { opacity: 0.5 },
+            // 2. Reserve the height immediately
+            { minHeight: OFFER_CONTROL_HEIGHT, justifyContent: "center" },
           ]}
           pointerEvents={isSelectionComplete ? "auto" : "none"}
         >
-          {isReady && selectedVehiclePrice > 0 && (
+          {/* 3. Check for isReady AND valid pricing */}
+          {isReady && selectedVehiclePrice > 0 ? (
             <OfferFareControl
               minOffer={selectedVehiclePrice * 0.8}
               maxOffer={selectedVehiclePrice * 1.5}
@@ -254,6 +253,9 @@ const RideTab: React.FC<TabProps> = ({
                 updateRideData({ offer: newOffer, offerType: type });
               }}
             />
+          ) : (
+            /* 4. Placeholder View keeps the "Find Ride" button in position */
+            <View style={{ height: OFFER_CONTROL_HEIGHT }} />
           )}
         </View>
         <View style={{ paddingHorizontal: s(theme.spacing.md) }}>
@@ -261,7 +263,7 @@ const RideTab: React.FC<TabProps> = ({
             title={
               isBooking
                 ? ""
-                : `Find ${rideTypes.find((t) => t.id === rideData.vehicleType)?.label || "Ride"} Ride`
+                : `Find ${rideTypes.find((t) => t.id === rideData.vehicleType)?.label || "Ride"} Drift`
             }
             onPress={handleFindRides}
             loading={isBooking}
@@ -276,16 +278,13 @@ const RideTab: React.FC<TabProps> = ({
 
 const styles = createStyles({
   container: {
-    flex: 1,
+    // flex: 1 removed to allow content-based height
     backgroundColor: theme.colors.surface,
-    justifyContent: "space-between",
   },
   mainContent: {
-    flex: 1,
+    // Ensure content stays together
   },
-  carouselWrapper: {
-    position: "relative",
-  },
+  carouselWrapper: { position: "relative" },
   leftFade: {
     position: "absolute",
     left: 0,
@@ -307,9 +306,7 @@ const styles = createStyles({
     paddingVertical: vs(theme.spacing.md),
     gap: s(theme.spacing.sm),
   },
-  rideTypeWrapper: {
-    width: s(140),
-  },
+  rideTypeWrapper: { width: s(140) },
   actionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -317,29 +314,22 @@ const styles = createStyles({
     paddingHorizontal: s(theme.spacing.md),
     paddingVertical: vs(theme.spacing.sm),
   },
-  paymentSection: {
-    flexDirection: "row",
-    gap: s(theme.spacing.lg),
-  },
+  paymentSection: { flexDirection: "row", gap: s(theme.spacing.lg) },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: s(8),
     paddingHorizontal: s(theme.spacing.md),
-    backgroundColor: theme.colors.surface,
+    marginTop: vs(theme.spacing.xs),
   },
   sectionHeaderText: {
-    fontSize: ms(12),
-    fontWeight: "700",
+    fontSize: ms(11),
+    fontWeight: "800",
     color: theme.colors.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: s(0.5),
+    letterSpacing: s(1),
   },
-  radioItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: s(8),
-  },
+  radioItem: { flexDirection: "row", alignItems: "center", gap: s(8) },
   radioOuter: {
     width: ms(18),
     height: ms(18),
@@ -349,9 +339,7 @@ const styles = createStyles({
     alignItems: "center",
     justifyContent: "center",
   },
-  radioOuterSelected: {
-    borderColor: theme.colors.primary,
-  },
+  radioOuterSelected: { borderColor: theme.colors.primary },
   radioInner: {
     width: ms(8),
     height: ms(8),
@@ -377,11 +365,12 @@ const styles = createStyles({
     color: theme.colors.textSecondary,
     marginRight: s(4),
   },
-  textPrimary: {
-    color: theme.colors.text,
+  textPrimary: { color: theme.colors.text },
+  footerSection: {
+    marginTop: vs(theme.spacing.sm),
   },
   offerContainer: {
-    paddingBottom: vs(theme.spacing.sm),
+    paddingBottom: vs(theme.spacing.md),
   },
 });
 

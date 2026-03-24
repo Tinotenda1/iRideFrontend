@@ -258,7 +258,6 @@ const styles = createStyles({
     right: 0,
     maxHeight: vs(300),
     overflow: "hidden",
-    //backgroundColor: theme.colors.surfa,
     borderRadius: ms(12),
   },
   suggestionItem: {

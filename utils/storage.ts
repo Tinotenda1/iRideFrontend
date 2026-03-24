@@ -26,6 +26,27 @@ export interface UserInfo {
   city?: string;
   profilePic?: string;
 
+  //  DRIVER IDENTITY FIELDS ---
+  idNumber?: string;
+  nationalIdImage?: string; // Front of ID
+  licenseFront?: string;
+  licenseBack?: string;
+
+  // VEHICLE DATA ---
+  plateNumber?: string;
+  vehicleYear?: string;
+  makeModel?: string;
+  vehicleColor?: string;
+  regBookImage?: string;
+
+  // VEHICLE PHOTOS
+  carFront?: string;
+  carBack?: string;
+  carAngle?: string;
+
+  // VEHICLE TYPE
+  vehicleType?: string;
+
   // User type and status
   userType?: "passenger" | "driver";
   status?: "active" | "inactive" | "suspended";
@@ -361,6 +382,16 @@ export const storeUserInfo = async (userInfo: UserInfo): Promise<void> => {
       exists: userInfo.exists,
       createdAt: userInfo.createdAt,
       updatedAt: userInfo.updatedAt,
+      hasIdNumber: !!userInfo.idNumber,
+      hasNationalId: !!userInfo.nationalIdImage,
+      hasLicenseFront: !!userInfo.licenseFront,
+      hasLicenseBack: !!userInfo.licenseBack,
+      hasVehicleDocs: !!(userInfo.plateNumber && userInfo.regBookImage),
+      hasVehiclePhotos: !!(
+        userInfo.carFront &&
+        userInfo.carBack &&
+        userInfo.carAngle
+      ),
     });
   } catch (error) {
     console.error("Error storing user info:", error);
@@ -530,6 +561,7 @@ export const getSessionSummary = async (): Promise<{
   }
 };
 
+// ✅ Updated helper for backend response mapping
 export const createUserInfoFromResponse = (
   backendUser: any,
   phone: string,
@@ -545,6 +577,14 @@ export const createUserInfoFromResponse = (
     firstName: firstName,
     lastName: lastName,
     city: backendUser?.city,
+
+    // Map new backend fields if they exist
+    idNumber: backendUser?.id_number || backendUser?.idNumber,
+    nationalIdImage:
+      backendUser?.national_id_image || backendUser?.nationalIdImage,
+    licenseFront: backendUser?.license_front || backendUser?.licenseFront,
+    licenseBack: backendUser?.license_back || backendUser?.licenseBack,
+
     rating: backendUser?.rating,
     totalTrips: backendUser?.total_trips || backendUser?.totalTrips,
     iPoints: backendUser?.i_points || backendUser?.iPoints,
@@ -555,25 +595,16 @@ export const createUserInfoFromResponse = (
     profilePic: backendUser?.profile_pic || backendUser?.profilePic,
     phoneVerified:
       backendUser?.phone_verified || backendUser?.phoneVerified || false,
-    verificationMethod:
-      backendUser?.verification_method || backendUser?.verificationMethod,
-    verificationCode:
-      backendUser?.verification_code || backendUser?.verificationCode,
-    verificationCodeExpires:
-      backendUser?.verification_code_expires ||
-      backendUser?.verificationCodeExpires,
     currentDeviceId:
       backendUser?.current_device_id || backendUser?.currentDeviceId,
     status: backendUser?.status,
     createdAt: backendUser?.created_at || backendUser?.createdAt,
     updatedAt: backendUser?.updated_at || backendUser?.updatedAt,
-    // Legacy field for backward compatibility
     deviceId:
       backendUser?.current_device_id ||
       backendUser?.currentDeviceId ||
       backendUser?.deviceId,
   };
 
-  console.log("👤 Created user info from response:", userInfo);
   return userInfo;
 };

@@ -20,7 +20,7 @@ import {
   Platform,
   StyleSheet,
   UIManager,
-  View
+  View,
 } from "react-native";
 import MapView, { Region } from "react-native-maps";
 import DriverMap from "../components/maps/DriverMap";

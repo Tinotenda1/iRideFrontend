@@ -94,6 +94,9 @@ const InputTray = forwardRef<any, InputTrayProps>(
         />
 
         <View style={styles.container}>
+          {/* Premium Drag Handle */}
+          <View style={styles.dragHandle} />
+
           {/* Header Section */}
           <View style={styles.header}>
             <Text style={styles.label}>
@@ -132,7 +135,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: "rgba(15, 23, 42, 0.4)", // Slightly more blue-tinted dark overlay
-    zIndex: 9998,
+    zIndex: 998,
   },
   container: {
     position: "absolute",
@@ -144,14 +147,13 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 32,
     paddingHorizontal: 20,
     paddingTop: 12,
-    zIndex: 9999,
-    elevation: 9999,
-    overflow: "hidden",
+    zIndex: 999,
     // Premium Shadow
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -10 },
     shadowOpacity: 0.1,
     shadowRadius: 20,
+    elevation: 25,
   },
   dragHandle: {
     width: 38,

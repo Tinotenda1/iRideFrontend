@@ -1,9 +1,9 @@
-// app/driver/components/trays/tabs/TripTab.tsx
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Linking,
   Modal,
   Platform,
@@ -15,11 +15,12 @@ import {
   View,
 } from "react-native";
 
-import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
+import { ms, s, vs } from "@/utils/responsive";
 import { ActionConfirmationModal } from "../../../../../components/ActionConfirmationModal";
 import { IRAvatar } from "../../../../../components/IRAvatar";
 import { IRButton } from "../../../../../components/IRButton";
 import { theme } from "../../../../../constants/theme";
+import { getApiBaseUrl } from "../../../../../utils/api";
 import { useRideBooking } from "../../../../context/RideBookingContext";
 
 interface DriverTripTabProps {
@@ -51,6 +52,8 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
 
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  // Image Modal State
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const [confirmModal, setConfirmModal] = useState<{
     visible: boolean;
@@ -72,10 +75,26 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
   const offer = rideData.activeTrip?.offer;
   const status = rideData.status;
 
-  useEffect(() => {
-    if (status === "arrived") {
-      setIsArriving(false);
+  const resolveImagePath = (path: string | null | undefined) => {
+    if (!path) return undefined;
+    if (
+      path.startsWith("http") ||
+      path.startsWith("file://") ||
+      path.startsWith("content://")
+    ) {
+      return { uri: path };
     }
+    try {
+      const baseUrl = getApiBaseUrl().replace(/\/$/, "");
+      const cleanPath = path.startsWith("/") ? path : `/${path}`;
+      return { uri: `${baseUrl}${cleanPath}` };
+    } catch (e) {
+      return { uri: path };
+    }
+  };
+
+  useEffect(() => {
+    if (status === "arrived") setIsArriving(false);
     if (status === "on_trip") {
       setIsArriving(false);
       setIsStarting(false);
@@ -107,13 +126,11 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
 
   const handleConfirmCancel = useCallback(async () => {
     if (!isMounted.current || isCancelling) return;
-
     setIsCancelling(true);
     setIsActionLoading(true);
 
     try {
       const success = await onCancel(cancelReason);
-
       if (success && isMounted.current) {
         setShowCancelModal(false);
         setCancelReason("");
@@ -133,25 +150,12 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
       Alert.alert("Error", "Passenger phone number is not available.");
       return;
     }
-
     const phoneNumber = "+" + passenger.phone.replace(/\D/g, "");
-    let url = "";
-
-    if (Platform.OS === "android") {
-      url = `tel:${phoneNumber}`;
-    } else {
-      url = `telprompt:${phoneNumber}`;
-    }
-
-    Linking.canOpenURL(url)
-      .then((supported) => {
-        if (supported) {
-          Linking.openURL(url);
-        } else {
-          Alert.alert("Error", "Unable to open dialer.");
-        }
-      })
-      .catch((err) => console.error("Dialer error:", err));
+    const url =
+      Platform.OS === "android"
+        ? `tel:${phoneNumber}`
+        : `telprompt:${phoneNumber}`;
+    Linking.openURL(url).catch((err) => console.error("Dialer error:", err));
   };
 
   const handleWhatsAppPassenger = () => {
@@ -159,22 +163,18 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
       Alert.alert("Error", "Passenger phone number is not available.");
       return;
     }
-
     const phoneNumber = "+" + passenger.phone.replace(/\D/g, "");
-    const message = encodeURIComponent(`DRIFT Driver - ${driver.name}: `);
-
+    const message = encodeURIComponent(`Drift Driver - ${driver?.name}: `);
     const url = `https://wa.me/${phoneNumber}?text=${message}`;
 
     Linking.canOpenURL(url)
       .then((supported) => {
-        if (supported) {
-          Linking.openURL(url);
-        } else {
+        if (supported) Linking.openURL(url);
+        else
           Alert.alert(
             "WhatsApp not installed",
             "Please install WhatsApp to send a message.",
           );
-        }
       })
       .catch((err) => console.error("WhatsApp error:", err));
   };
@@ -193,13 +193,18 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
       <View style={styles.topSection}>
         <View style={styles.passengerRow}>
           <View style={styles.personInfo}>
-            <IRAvatar
-              source={
-                passenger.profilePic ? { uri: passenger.profilePic } : undefined
-              }
-              name={passenger.name}
-              size={ms(56)}
-            />
+            <TouchableOpacity
+              onPress={() => {
+                const img = resolveImagePath(passenger.profilePic);
+                if (img) setPreviewImage(img.uri);
+              }}
+            >
+              <IRAvatar
+                source={resolveImagePath(passenger.profilePic)}
+                name={passenger.name}
+                size={ms(56)}
+              />
+            </TouchableOpacity>
             <View>
               <Text style={styles.label}>PASSENGER</Text>
               <Text style={styles.passengerName}>{passenger.name}</Text>
@@ -253,7 +258,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
               >
                 <Ionicons name="call" size={ms(22)} color="#fff" />
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={[
                   styles.callButton,
@@ -299,7 +303,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
                 ${parseFloat(offer).toFixed(2)}
               </Text>
             </View>
-
             <View style={styles.paymentBadge}>
               <Ionicons
                 name={
@@ -311,9 +314,7 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
                 color="#475569"
               />
               <Text style={styles.paymentText}>
-                {rideInfo?.paymentMethod?.toLowerCase() === "ecocash"
-                  ? "ECOCASH"
-                  : "CASH"}
+                {rideInfo?.paymentMethod?.toUpperCase() || "CASH"}
               </Text>
             </View>
           </View>
@@ -346,7 +347,6 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
             loading={isArriving}
           />
         )}
-
         {status !== "on_trip" && (
           <IRButton
             title="Cancel Trip"
@@ -360,6 +360,28 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
         )}
       </View>
 
+      {/* --- MODALS --- */}
+
+      {/* Image Preview Modal */}
+      <Modal visible={!!previewImage} transparent animationType="fade">
+        <View style={styles.imagePreviewOverlay}>
+          <TouchableOpacity
+            style={styles.closeImage}
+            onPress={() => setPreviewImage(null)}
+          >
+            <Ionicons name="close" size={ms(30)} color="#fff" />
+          </TouchableOpacity>
+          {previewImage && (
+            <Image
+              source={{ uri: previewImage }}
+              style={styles.fullImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
+
+      {/* Cancel Modal */}
       <Modal
         visible={showCancelModal}
         transparent
@@ -452,6 +474,7 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
 };
 
 const styles = StyleSheet.create({
+  // ... your existing styles ...
   container: {
     flex: 1,
     backgroundColor: theme.colors.surface,
@@ -493,7 +516,6 @@ const styles = StyleSheet.create({
     width: s(48),
     height: s(48),
     borderRadius: ms(100),
-    backgroundColor: theme.colors.primary,
     justifyContent: "center",
     alignItems: "center",
     elevation: 3,
@@ -623,6 +645,25 @@ const styles = StyleSheet.create({
     marginBottom: vs(24),
   },
   modalActions: { width: "100%", gap: vs(12) },
+
+  // New Image Modal Styles
+  imagePreviewOverlay: {
+    flex: 1,
+    backgroundColor: "black",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fullImage: {
+    width: "100%",
+    height: "80%",
+  },
+  closeImage: {
+    position: "absolute",
+    top: vs(40),
+    right: s(20),
+    zIndex: 10,
+    padding: 10,
+  },
 });
 
 export default DriverTripTab;
