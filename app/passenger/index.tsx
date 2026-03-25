@@ -34,10 +34,7 @@ import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { resetSessionRestore } from "../services/sessionRestore";
 import MapContainer from "./components/map/MapContainer";
-import {
-  getPassengerSocket,
-  onReconnectState,
-} from "./socketConnectionUtility/passengerSocketService";
+import { getPassengerSocket } from "./socketConnectionUtility/passengerSocketService";
 
 if (Platform.OS === "android") {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -298,7 +295,7 @@ const PassengerScreen: React.FC = () => {
   /* ===========================
       BACKEND RESTORE PUSH
   =========================== */
-
+  /*
   useEffect(() => {
     const unsub = onReconnectState((data) => {
       console.log("♻️ Restore push received:", data);
@@ -308,7 +305,7 @@ const PassengerScreen: React.FC = () => {
     return () => {
       unsub?.();
     };
-  }, [restoreSession, socket]);
+  }, [restoreSession, socket]);*/
 
   /* ===========================
       SHOW RATING AFTER RESTORE

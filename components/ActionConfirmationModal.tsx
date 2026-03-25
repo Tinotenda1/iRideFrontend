@@ -1,5 +1,14 @@
+import { ms, s, vs } from "@/utils/responsive";
 import React from "react";
-import { Modal, StyleSheet, Text, View } from "react-native";
+import {
+  Modal,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 import { IRButton } from "./IRButton";
 
 interface ActionConfirmationModalProps {
@@ -31,34 +40,45 @@ export const ActionConfirmationModal: React.FC<
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
-      statusBarTranslucent
+      animationType="fade" // Changed to fade
+      statusBarTranslucent // Full screen behind status bar
+      onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalIndicator} />
-          <Text style={styles.modalTitle}>{title}</Text>
-          <Text style={styles.modalSubtitle}>{subtitle}</Text>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback>
+            <View style={styles.modalContent}>
+              <SafeAreaView style={styles.safeArea}>
+                <View style={styles.contentContainer}>
+                  <View style={styles.modalIndicator} />
+                  <Text style={styles.modalTitle}>{title}</Text>
+                  <Text style={styles.modalSubtitle}>{subtitle}</Text>
 
-          <View style={styles.modalActions}>
-            <IRButton
-              title={confirmText}
-              variant={confirmVariant}
-              style={
-                confirmColor ? { backgroundColor: confirmColor } : undefined
-              }
-              onPress={onConfirm}
-              loading={loading}
-            />
-            <IRButton
-              title="Go Back"
-              variant="ghost"
-              onPress={onClose}
-              disabled={loading}
-            />
-          </View>
+                  <View style={styles.modalActions}>
+                    <IRButton
+                      title={confirmText}
+                      variant={confirmVariant}
+                      style={
+                        confirmColor
+                          ? { backgroundColor: confirmColor }
+                          : undefined
+                      }
+                      onPress={onConfirm}
+                      loading={loading}
+                    />
+                    <IRButton
+                      title="Go Back"
+                      variant="ghost"
+                      onPress={onClose}
+                      disabled={loading}
+                    />
+                  </View>
+                </View>
+              </SafeAreaView>
+            </View>
+          </TouchableWithoutFeedback>
         </View>
-      </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 };
@@ -71,31 +91,39 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: "#fff",
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 24,
+    borderTopLeftRadius: ms(32),
+    borderTopRightRadius: ms(32),
+    width: "100%",
+  },
+  safeArea: {
+    width: "100%",
+  },
+  contentContainer: {
+    paddingHorizontal: s(24),
+    paddingTop: vs(12),
+    paddingBottom: Platform.OS === "android" ? vs(30) : vs(10), // Handling control bar padding
   },
   modalIndicator: {
-    width: 40,
-    height: 4,
+    width: s(40),
+    height: vs(4),
     backgroundColor: "#e2e8f0",
-    borderRadius: 2,
+    borderRadius: ms(2),
     alignSelf: "center",
-    marginBottom: 20,
+    marginBottom: vs(20),
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: ms(24),
     fontWeight: "800",
     color: "#1e293b",
-    marginBottom: 4,
+    marginBottom: vs(4),
   },
   modalSubtitle: {
-    fontSize: 15,
+    fontSize: ms(15),
     color: "#64748b",
-    marginBottom: 20,
+    marginBottom: vs(20),
   },
   modalActions: {
     width: "100%",
-    gap: 12,
+    gap: vs(12),
   },
 });

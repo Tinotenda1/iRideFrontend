@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ms, s, vs } from "@/utils/responsive";
 import { IRButton } from "../../../components/IRButton";
 import { theme } from "../../../constants/theme";
+import { useRideBooking } from "../../context/RideBookingContext"; // Added this import
 import {
   connectDriver,
   disconnectDriver,
@@ -36,13 +37,31 @@ export default function DriverHeader({
   setIsConnecting,
   setManualOffline,
 }: DriverHeaderProps) {
+  const { rideData } = useRideBooking(); // Access the current ride state
   const [isToggling, setIsToggling] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [status, setStatus] = useState<DriverSocketStatus>("offline");
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [manualOffline, setManualOfflineState] = useState(true); // start offline intentionally
-  const userInitiatedRef = useRef(false); // track user-triggered toggle
+  const [manualOffline, setManualOfflineState] = useState(true);
+  const userInitiatedRef = useRef(false);
+
+  // --- NEW: AUTOMATIC ONLINE TRIGGER FOR CRITICAL STATES ---
+  useEffect(() => {
+    const criticalStatuses = ["matched", "arrived", "on_trip", "on_rating"];
+    const isOffline = status === "offline";
+
+    // Use optional chaining and nullish coalescing to safely check status
+    const currentStatus = rideData?.status || "idle";
+
+    // If we are in a ride but the socket is offline, force a connection
+    if (criticalStatuses.includes(currentStatus) && isOffline && !isToggling) {
+      console.log(
+        `[DriverHeader] Critical state (${currentStatus}) detected. Auto-connecting...`,
+      );
+      executeToggle(true);
+    }
+  }, [rideData.status, status]);
 
   // Poll socket status
   useEffect(() => {
@@ -51,52 +70,45 @@ export default function DriverHeader({
     }, 300);
 
     return () => {
-      statusPollRef.current && clearInterval(statusPollRef.current);
+      if (statusPollRef.current) clearInterval(statusPollRef.current);
     };
   }, []);
 
-  const socketConnected = status === "connected"; // true if socket is up
+  const socketConnected = status === "connected";
   const isConnecting = status === "connecting" || status === "reconnecting";
-  const isAvailable = !manualOffline; // true if driver is manually online
+  const isConnectingOrToggling = isToggling || isConnecting;
 
   const lastStatus = useRef(socketConnected);
 
-  // Sync state only for user-initiated actions
+  // Sync state only for user-initiated actions (or auto-toggles)
   useEffect(() => {
     if (lastStatus.current !== socketConnected) {
+      // Note: userInitiatedRef.current will be true if triggered by the auto-effect above
       if (userInitiatedRef.current) {
         setOnline?.(socketConnected);
 
-        // ✅ Only update manualOffline when connection fully completes
-        if (socketConnected && !isConnecting) {
+        if (socketConnected) {
           setManualOffline?.(false);
           setManualOfflineState(false);
         }
-
         userInitiatedRef.current = false;
       }
-
       lastStatus.current = socketConnected;
       setIsToggling(false);
     }
-
     setIsConnecting?.(isConnecting);
   }, [socketConnected, isConnecting]);
 
-  // Toggle button handler
   const handleTogglePress = () => {
-    if (isToggling || isConnecting) return;
+    if (isConnectingOrToggling) return;
 
     if (!manualOffline) {
-      // user wants to go offline manually
       setShowOfflineModal(true);
     } else {
-      // user wants to go online
       executeToggle(true);
     }
   };
 
-  // Execute toggle
   const executeToggle = async (shouldGoOnline: boolean) => {
     userInitiatedRef.current = true;
     setIsToggling(true);
@@ -104,12 +116,12 @@ export default function DriverHeader({
 
     try {
       if (shouldGoOnline) {
-        await connectDriver(); // attempt connection
-        // DON'T set manualOffline false here!
-        // Wait until socket is fully connected (DriverHome useEffect handles it)
+        await connectDriver();
       } else {
         disconnectDriver();
-        setManualOffline?.(true); // keep offline immediately
+        setManualOfflineState(true);
+        setManualOffline?.(true);
+        setOnline?.(false);
       }
     } catch (err) {
       console.error("[DriverHeader] Toggle failed:", err);
@@ -118,22 +130,18 @@ export default function DriverHeader({
     }
   };
 
-  // Button UI logic
+  // --- UI LOGIC ---
   let buttonText = "GO ONLINE";
-  if (isToggling || isConnecting) {
+  if (isConnectingOrToggling) {
     buttonText = "WAITING...";
-  } else if (isAvailable) {
+  } else if (!manualOffline) {
     buttonText = "GO OFFLINE";
   }
 
   const buttonStyle = [
     styles.statusPill,
-    isAvailable
-      ? socketConnected
-        ? styles.pillOnline // 🟢 fully online
-        : styles.pillOffline // 🔴 socket issue
-      : styles.pillOffline, // ⚫ manually offline
-    (isToggling || isConnecting) && { opacity: 0.8 },
+    !manualOffline && socketConnected ? styles.pillOnline : styles.pillOffline,
+    isConnectingOrToggling && { opacity: 0.8 },
   ];
 
   return (
@@ -150,10 +158,10 @@ export default function DriverHeader({
         <TouchableOpacity
           activeOpacity={0.9}
           onPress={handleTogglePress}
-          disabled={isToggling || isConnecting}
+          disabled={isConnectingOrToggling}
           style={buttonStyle}
         >
-          {isToggling || isConnecting ? (
+          {isConnectingOrToggling ? (
             <ActivityIndicator size="small" color={theme.colors.surface} />
           ) : (
             <View style={styles.statusDot} />
@@ -170,7 +178,6 @@ export default function DriverHeader({
         </TouchableOpacity>
       </View>
 
-      {/* Offline Confirmation Modal */}
       <Modal visible={showOfflineModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -178,7 +185,7 @@ export default function DriverHeader({
               <Ionicons
                 name="power-outline"
                 size={ms(32)}
-                color={theme.colors.red}
+                color={theme.colors.error}
               />
             </View>
 
@@ -208,6 +215,8 @@ export default function DriverHeader({
     </SafeAreaView>
   );
 }
+
+// ... (styles stay exactly the same)
 
 const styles = StyleSheet.create({
   safe: {
@@ -241,7 +250,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: s(16),
     paddingVertical: vs(10),
     borderRadius: ms(50),
-    minWidth: s(150),
+    minWidth: s(160),
     justifyContent: "center",
     gap: s(10),
   },

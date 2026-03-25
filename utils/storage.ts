@@ -6,6 +6,34 @@ const AUTH_TOKEN_KEY = "auth_token";
 const USER_INFO_KEY = "user_info";
 const ONBOARDING_COMPLETED_KEY = "onboarding_completed";
 const DEVICE_ID_KEY = "device_id";
+const LAST_RIDE_STATUS_KEY = "last_ride_status";
+
+// ✅ Store current ride status
+export const saveLastRideStatus = async (status: string): Promise<void> => {
+  try {
+    await SecureStore.setItemAsync(LAST_RIDE_STATUS_KEY, status);
+  } catch (error) {
+    console.error("Error saving ride status:", error);
+  }
+};
+
+// ✅ Get last known ride status
+export const getLastRideStatus = async (): Promise<string | null> => {
+  try {
+    return await SecureStore.getItemAsync(LAST_RIDE_STATUS_KEY);
+  } catch (error) {
+    return null;
+  }
+};
+
+// ✅ Clear status (call this on ride completion/cancellation)
+export const clearLastRideStatus = async (): Promise<void> => {
+  try {
+    await SecureStore.deleteItemAsync(LAST_RIDE_STATUS_KEY);
+  } catch (error) {
+    console.error("Error clearing ride status:", error);
+  }
+};
 
 export interface UserInfo {
   // Core identification

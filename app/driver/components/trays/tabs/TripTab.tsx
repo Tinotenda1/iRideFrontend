@@ -7,16 +7,15 @@ import {
   Linking,
   Modal,
   Platform,
-  SafeAreaView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 
 import { ms, s, vs } from "@/utils/responsive";
 import { ActionConfirmationModal } from "../../../../../components/ActionConfirmationModal";
+import { CancelRideTray } from "../../../../../components/CancelRideTray"; // Adjust path as necessary
 import { IRAvatar } from "../../../../../components/IRAvatar";
 import { IRButton } from "../../../../../components/IRButton";
 import { theme } from "../../../../../constants/theme";
@@ -124,26 +123,29 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
     setConfirmModal({ visible: false, type: null });
   };
 
-  const handleConfirmCancel = useCallback(async () => {
-    if (!isMounted.current || isCancelling) return;
-    setIsCancelling(true);
-    setIsActionLoading(true);
+  const handleConfirmCancel = useCallback(
+    async (reason: string) => {
+      if (!isMounted.current || isCancelling) return;
+      setIsCancelling(true);
+      setIsActionLoading(true);
 
-    try {
-      const success = await onCancel(cancelReason);
-      if (success && isMounted.current) {
-        setShowCancelModal(false);
-        setCancelReason("");
+      try {
+        const success = await onCancel(reason);
+        if (success && isMounted.current) {
+          setShowCancelModal(false);
+          setCancelReason("");
+        }
+      } catch (error) {
+        console.error("❌ UI Cancel error:", error);
+      } finally {
+        if (isMounted.current) {
+          setIsCancelling(false);
+          setIsActionLoading(false);
+        }
       }
-    } catch (error) {
-      console.error("❌ UI Cancel error:", error);
-    } finally {
-      if (isMounted.current) {
-        setIsCancelling(false);
-        setIsActionLoading(false);
-      }
-    }
-  }, [isCancelling, onCancel, cancelReason]);
+    },
+    [isCancelling, onCancel],
+  );
 
   const handleCallPassenger = () => {
     if (!passenger?.phone) {
@@ -181,15 +183,17 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
 
   if (!passenger) {
     return (
-      <SafeAreaView style={[styles.container, styles.center]}>
+      <View
+        style={[styles.container, styles.center, { paddingVertical: vs(40) }]}
+      >
         <ActivityIndicator color={theme.colors.primary} size="large" />
         <Text style={styles.loadingText}>Loading trip details...</Text>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.topSection}>
         <View style={styles.passengerRow}>
           <View style={styles.personInfo}>
@@ -293,35 +297,37 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
           </View>
         </View>
 
-        <View style={styles.divider} />
-
         {isExpanded && (
-          <View style={styles.earningsRow}>
-            <View>
-              <Text style={styles.addressLabel}>YOUR EARNINGS</Text>
-              <Text style={styles.earningsText}>
-                ${parseFloat(offer).toFixed(2)}
-              </Text>
+          <>
+            <View style={styles.divider} />
+            <View style={styles.earningsRow}>
+              <View>
+                <Text style={styles.addressLabel}>YOUR EARNINGS</Text>
+                <Text style={styles.earningsText}>
+                  ${parseFloat(offer).toFixed(2)}
+                </Text>
+              </View>
+              <View style={styles.paymentBadge}>
+                <Ionicons
+                  name={
+                    rideInfo?.paymentMethod?.toLowerCase() === "ecocash"
+                      ? "wallet-outline"
+                      : "cash-outline"
+                  }
+                  size={ms(16)}
+                  color="#475569"
+                />
+                <Text style={styles.paymentText}>
+                  {rideInfo?.paymentMethod?.toUpperCase() || "CASH"}
+                </Text>
+              </View>
             </View>
-            <View style={styles.paymentBadge}>
-              <Ionicons
-                name={
-                  rideInfo?.paymentMethod?.toLowerCase() === "ecocash"
-                    ? "wallet-outline"
-                    : "cash-outline"
-                }
-                size={ms(16)}
-                color="#475569"
-              />
-              <Text style={styles.paymentText}>
-                {rideInfo?.paymentMethod?.toUpperCase() || "CASH"}
-              </Text>
-            </View>
-          </View>
+          </>
         )}
       </View>
 
       <View style={styles.footer}>
+        <View style={styles.divider} />
         {status === "arrived" ? (
           <IRButton
             title="START TRIP"
@@ -382,64 +388,13 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
       </Modal>
 
       {/* Cancel Modal */}
-      <Modal
+      <CancelRideTray
         visible={showCancelModal}
-        transparent
-        animationType="slide"
-        statusBarTranslucent
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalIndicator} />
-            <Text style={styles.modalTitle}>Cancel trip?</Text>
-            <Text style={styles.modalSubtitle}>Please select a reason</Text>
-            <View style={styles.reasonContainer}>
-              {PREDEFINED_REASONS.map((reason) => (
-                <TouchableOpacity
-                  key={reason}
-                  style={[
-                    styles.reasonChip,
-                    cancelReason === reason && styles.reasonChipActive,
-                  ]}
-                  onPress={() => setCancelReason(reason)}
-                >
-                  <Text
-                    style={[
-                      styles.reasonChipText,
-                      cancelReason === reason && styles.reasonChipTextActive,
-                    ]}
-                  >
-                    {reason}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TextInput
-              style={styles.reasonInput}
-              placeholder="Other reason..."
-              value={cancelReason}
-              onChangeText={setCancelReason}
-              multiline
-            />
-            <View style={styles.modalActions}>
-              <IRButton
-                title="Keep Trip"
-                onPress={() => {
-                  setShowCancelModal(false);
-                  setCancelReason("");
-                }}
-                disabled={isActionLoading}
-              />
-              <IRButton
-                title="Confirm Cancellation"
-                variant="ghost"
-                onPress={handleConfirmCancel}
-                loading={isActionLoading}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+        loading={isCancelling}
+        type="driver"
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={handleConfirmCancel}
+      />
 
       <ActionConfirmationModal
         visible={confirmModal.visible}
@@ -469,20 +424,22 @@ const DriverTripTab: React.FC<DriverTripTabProps> = ({
         }
         onClose={() => setConfirmModal({ visible: false, type: null })}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   // ... your existing styles ...
   container: {
-    flex: 1,
+    // Removed flex: 1
     backgroundColor: theme.colors.surface,
-    paddingHorizontal: s(16),
-    paddingTop: vs(10),
-    marginBottom: vs(8),
+    paddingHorizontal: s(24),
+    paddingTop: vs(20),
+    paddingBottom: vs(32),
   },
-  topSection: { flex: 1 },
+  topSection: {
+    // Removed flex: 1
+  },
   center: { justifyContent: "center", alignItems: "center" },
   loadingText: {
     marginTop: vs(12),

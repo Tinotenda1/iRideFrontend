@@ -13,16 +13,16 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useRideBooking } from "../../../../app/context/RideBookingContext";
 import { ActionConfirmationModal } from "../../../../components/ActionConfirmationModal";
 import CancelButton from "../../../../components/CancelButton";
+import { CancelRideTray } from "../../../../components/CancelRideTray";
 import { IRAvatar } from "../../../../components/IRAvatar";
 import { IRButton } from "../../../../components/IRButton";
+import TripStatusModal from "../../../../components/TripStatusModal";
 import { theme } from "../../../../constants/theme";
 import { getApiBaseUrl } from "../../../../utils/api";
 import { getUserInfo } from "../../../../utils/storage";
@@ -268,9 +268,8 @@ const TripTab: React.FC<TripTabProps> = ({
   }
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      edges={["bottom"]}
+    <View
+      style={[styles.container]}
       onLayout={(e) => {
         const height = e.nativeEvent.layout.height;
         onContentHeight?.(height);
@@ -445,7 +444,7 @@ const TripTab: React.FC<TripTabProps> = ({
         )}
       </View>
 
-      {/* Modals remain unchanged as they don't affect inline tray height */}
+      {/* Image preview modal (unchanged) */}
       <Modal
         visible={!!previewImage}
         transparent
@@ -482,83 +481,29 @@ const TripTab: React.FC<TripTabProps> = ({
         </TouchableOpacity>
       </Modal>
 
-      <Modal visible={showCancelModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalIndicator} />
-            <Text style={styles.modalTitle}>Cancel ride?</Text>
-            <Text style={styles.modalSubtitle}>
-              Please let us know why you are cancelling
-            </Text>
-            <View style={styles.reasonContainer}>
-              {PREDEFINED_REASONS.map((reason) => (
-                <TouchableOpacity
-                  key={reason}
-                  style={[
-                    styles.reasonChip,
-                    cancelReason === reason && styles.reasonChipActive,
-                  ]}
-                  onPress={() => setCancelReason(reason)}
-                >
-                  <Text
-                    style={[
-                      styles.reasonChipText,
-                      cancelReason === reason && styles.reasonChipTextActive,
-                    ]}
-                  >
-                    {reason}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TextInput
-              style={styles.reasonInput}
-              placeholder="Other reason..."
-              value={cancelReason}
-              onChangeText={setCancelReason}
-              multiline
-            />
-            <View style={styles.modalActions}>
-              <IRButton
-                title="Keep ride"
-                onPress={() => setShowCancelModal(false)}
-              />
-              <IRButton
-                title="Confirm Cancellation"
-                variant="ghost"
-                onPress={handleConfirmCancel}
-                loading={isCancelling}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Cancel ride tray */}
+      <CancelRideTray
+        visible={showCancelModal}
+        loading={isCancelling}
+        type="passenger"
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={handleConfirmCancel}
+      />
 
-      <Modal visible={!!remoteCancelData} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.remoteModalPadding]}>
-            <View style={styles.alertCircle}>
-              <Ionicons
-                name="alert-circle"
-                size={ms(36)}
-                color={theme.colors.red}
-              />
-            </View>
-            <Text style={styles.modalTitle}>Trip Cancelled</Text>
-            <Text style={styles.modalSubtitle}>
-              The driver has cancelled this request.
-            </Text>
-            <View style={styles.reasonDisplayBox}>
-              <Text style={styles.reasonLabel}>Reason:</Text>
-              <Text style={styles.reasonValue}>
-                {remoteCancelData?.reason || "No reason provided"}
-              </Text>
-            </View>
-            <IRButton title="Back to Home" onPress={handleCloseRemoteModal} />
-          </View>
-        </View>
-      </Modal>
+      {/* Remote cancel notification using the reusable TripStatusModal */}
+      <TripStatusModal
+        visible={!!remoteCancelData}
+        type="cancellation"
+        title="Trip Cancelled"
+        message={
+          remoteCancelData?.reason
+            ? `The driver cancelled this request: ${remoteCancelData.reason}`
+            : "The driver has cancelled this request. Please try booking another ride."
+        }
+        onClose={handleCloseRemoteModal}
+      />
 
+      {/* Drop modal – already uses ActionConfirmationModal, which should handle safe area internally */}
       <ActionConfirmationModal
         visible={showDropModal}
         title="End trip early?"
@@ -569,7 +514,7 @@ const TripTab: React.FC<TripTabProps> = ({
         onConfirm={handleDropMeHere}
         onClose={() => setShowDropModal(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -579,6 +524,7 @@ const styles = createStyles({
     paddingTop: vs(15),
     backgroundColor: theme.colors.surface,
     paddingHorizontal: s(16),
+    // paddingBottom is applied dynamically via insets
   },
   topSection: {
     // Removed flex: 1
@@ -694,103 +640,6 @@ const styles = createStyles({
   footer: {
     //marginTop: vs(10),
     //paddingBottom: vs(20),
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: theme.colors.black,
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: ms(32),
-    borderTopRightRadius: ms(32),
-    padding: s(24),
-    paddingBottom: vs(40),
-  },
-  modalIndicator: {
-    width: s(40),
-    height: vs(4),
-    backgroundColor: theme.colors.background,
-    borderRadius: ms(2),
-    alignSelf: "center",
-    marginBottom: vs(20),
-  },
-  modalTitle: {
-    fontSize: ms(24),
-    fontWeight: "800",
-    color: "#1e293b",
-    marginBottom: vs(4),
-  },
-  modalSubtitle: { fontSize: ms(15), color: "#64748b", marginBottom: vs(20) },
-  reasonContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: s(8),
-    marginBottom: vs(16),
-  },
-  reasonChip: {
-    paddingHorizontal: s(14),
-    paddingVertical: vs(10),
-    borderRadius: ms(12),
-    backgroundColor: theme.colors.background,
-    borderWidth: 1.5,
-    borderColor: "transparent",
-  },
-  reasonChipActive: {
-    backgroundColor: theme.colors.background,
-    borderColor: theme.colors.primary,
-  },
-  reasonChipText: { fontSize: ms(13), fontWeight: "600", color: "#475569" },
-  reasonChipTextActive: { color: theme.colors.primary },
-  reasonInput: {
-    width: "100%",
-    backgroundColor: theme.colors.background,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: ms(16),
-    padding: s(16),
-    fontSize: ms(15),
-    color: "#1e293b",
-    minHeight: vs(80),
-    textAlignVertical: "top",
-    marginBottom: vs(24),
-  },
-  modalActions: { width: "100%", gap: vs(12) },
-  remoteModalPadding: {
-    alignItems: "center",
-    borderTopLeftRadius: ms(40),
-    borderTopRightRadius: ms(40),
-  },
-  alertCircle: {
-    width: ms(64),
-    height: ms(64),
-    borderRadius: ms(32),
-    backgroundColor: theme.colors.background,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: vs(16),
-  },
-  reasonDisplayBox: {
-    width: "100%",
-    backgroundColor: theme.colors.background,
-    padding: s(20),
-    borderRadius: ms(20),
-    marginBottom: vs(30),
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  reasonLabel: {
-    fontSize: ms(12),
-    fontWeight: "700",
-    color: "#94a3b8",
-    textTransform: "uppercase",
-    marginBottom: vs(4),
-  },
-  reasonValue: {
-    fontSize: ms(16),
-    color: "#334155",
-    fontWeight: "600",
-    fontStyle: "italic",
   },
   ongoingBadge: {
     flexDirection: "row",

@@ -10,7 +10,11 @@ import React, {
 } from "react";
 import { Alert } from "react-native";
 import { api } from "../../utils/api";
-import { getUserInfo } from "../../utils/storage";
+import {
+  clearLastRideStatus,
+  getUserInfo,
+  saveLastRideStatus,
+} from "../../utils/storage";
 import { Place } from "../passenger/components/map/LocationSearch";
 import { getPassengerSocket } from "../passenger/socketConnectionUtility/passengerSocketService";
 
@@ -207,7 +211,19 @@ export const RideBookingProvider: React.FC<{ children: ReactNode }> = ({
   }, [rideData.status]);
 
   const updateRideData = useCallback((updates: Partial<RideBookingData>) => {
-    setRideData((prev) => ({ ...prev, ...updates }));
+    setRideData((prev) => {
+      const newData = { ...prev, ...updates };
+
+      // If status is changing, mirror it to local storage
+      if (updates.status) {
+        if (updates.status === "idle") {
+          clearLastRideStatus();
+        } else {
+          saveLastRideStatus(updates.status);
+        }
+      }
+      return newData;
+    });
   }, []);
 
   const clearRideData = useCallback(() => {

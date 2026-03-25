@@ -83,6 +83,7 @@ const DriverMap: React.FC<Props> = ({
   const { rideData } = useRideBooking();
   const hasFitted = useRef(false);
   const lastCameraUpdate = useRef(0);
+  const hasAutoCenteredOnTrip = useRef(false);
   const markerRef = useRef<React.ComponentRef<typeof MarkerAnimated> | null>(
     null,
   );
@@ -111,7 +112,7 @@ const DriverMap: React.FC<Props> = ({
   useEffect(() => {
     const cleanup = watchDriverLocation(
       (location) => {
-        // 1. Smoothly animate the marker
+        // Smoothly animate the marker
         markerRef.current?.animateMarkerToCoordinate(
           {
             latitude: location.latitude,
@@ -135,14 +136,36 @@ const DriverMap: React.FC<Props> = ({
         });
 
         const now = Date.now();
+        const currentStatus = rideData?.status || "";
 
-        // FIXED: Camera now follows whenever the user hasn't panned away,
-        // regardless of rideData.status.
-        if (!showRecenter && now - lastCameraUpdate.current > 2500) {
+        // Define Navigation Mode
+        const isNavigating = ["matched", "arrived", "on_trip"].includes(
+          currentStatus,
+        );
+
+        // Reset the one-time trigger if the trip ends or resets
+        if (currentStatus !== "on_trip") {
+          hasAutoCenteredOnTrip.current = false;
+        }
+
+        // Logic: Force a recenter if we just entered 'on_trip'
+        // OR follow normally if the user hasn't panned away
+        const forceRecenter =
+          currentStatus === "on_trip" && !hasAutoCenteredOnTrip.current;
+
+        if (
+          forceRecenter ||
+          (!showRecenter && now - lastCameraUpdate.current > 2000)
+        ) {
+          if (forceRecenter) {
+            hasAutoCenteredOnTrip.current = true;
+            onRecenter(); // Syncs the parent state (showRecenter = false)
+          }
+
           lastCameraUpdate.current = now;
 
           const speed = location.speed ?? 0;
-          let targetZoom = speed > 20 ? 15 : speed > 10 ? 17 : 18;
+          let targetZoom = isNavigating ? (speed > 20 ? 17 : 19) : 18;
 
           mapRef.current?.animateCamera(
             {
@@ -150,24 +173,19 @@ const DriverMap: React.FC<Props> = ({
                 latitude: location.latitude,
                 longitude: location.longitude,
               },
-              heading: location.heading ?? 0,
-              // Apply 3D pitch if on trip, otherwise stay flat (0)
-              pitch: ["matched", "arrived", "on_trip"].includes(
-                rideData?.status || "",
-              )
-                ? 45
-                : 0,
+              heading: isNavigating ? (location.heading ?? 0) : 0,
+              pitch: isNavigating ? 45 : 0,
               zoom: targetZoom,
             },
-            { duration: 2000 },
+            { duration: forceRecenter ? 1000 : 2000 },
           );
         }
       },
-      (err) => console.warn(err),
+      (err) => console.warn("Driver Location Watch Error:", err),
     );
 
     return () => cleanup();
-  }, [animatedLocation, rideData?.status, showRecenter]);
+  }, [animatedLocation, rideData?.status, showRecenter, onRecenter]);
 
   const pickupCoord = useMemo(() => {
     if (rideData?.activeTrip?.ride?.pickup) {

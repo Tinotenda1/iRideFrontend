@@ -18,13 +18,13 @@ import {
   clearPersistentNotifications,
   showPersistentNotification,
 } from "../utils/persistentNotification";
-import {
-  getDriverSocketStatus
-} from "./driver/socketConnectionUtility/driverSocketService";
+import { getLastRideStatus } from "../utils/storage";
+import { getDriverSocketStatus } from "./driver/socketConnectionUtility/driverSocketService";
 import {
   connectPassenger,
   getPassengerSocketStatus,
 } from "./passenger/socketConnectionUtility/passengerSocketService";
+import { useSessionRestoration } from "./services/useSessionRestoration";
 
 export default function RootLayout() {
   return (
@@ -35,9 +35,45 @@ export default function RootLayout() {
 }
 
 function RootContent() {
-  const appState = useRef<AppStateStatus>(AppState.currentState);
   const [reconnecting, setReconnecting] = useState(false);
   const [reconnectError, setReconnectError] = useState<string | null>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
+  const { restoreSession } = useSessionRestoration();
+
+  // Session restore
+  useEffect(() => {
+    const hydrateApp = async () => {
+      try {
+        const localStatus = await getLastRideStatus();
+
+        const criticalStatuses = ["matched", "arrived", "on_trip", "on_rating"];
+
+        console.log("[Hydration] Local stored status:", localStatus);
+
+        if (localStatus && criticalStatuses.includes(localStatus)) {
+          console.log(
+            `[Hydration] 🔄 Restoration STARTED (status: ${localStatus})`,
+          );
+
+          const restored = await restoreSession();
+
+          console.log("[Hydration] ✅ Restoration COMPLETED");
+          console.log("[Hydration] 📦 Restored payload:", restored);
+        } else {
+          console.log(
+            "[Hydration] ⏭️ No restoration needed (idle or no active ride)",
+          );
+        }
+      } catch (err) {
+        console.error("❌ [Hydration] Restoration FAILED:", err);
+      } finally {
+        setIsHydrated(true);
+        console.log("[Hydration] 🚀 App hydration complete");
+      }
+    };
+
+    hydrateApp();
+  }, []);
 
   useEffect(() => {
     const requestPermission = async () => {
@@ -208,6 +244,17 @@ function RootContent() {
 
     return () => subscription.remove();
   }, [handleAppStateChange, initialSocketConnection]);
+
+  if (!isHydrated) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#ffffff" />
+        <Text style={{ color: "#fff", marginTop: 10 }}>
+          Restoring your session...
+        </Text>
+      </View>
+    );
+  }
 
   if (reconnectError) {
     return (

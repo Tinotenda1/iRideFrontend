@@ -1,5 +1,6 @@
 // app/driver/components/trays/OnlineTab.tsx
-import { ms, s, vs } from "@/utils/responsive"; // Imported your utility
+import { theme } from "@/constants/theme";
+import { ms, s, vs } from "@/utils/responsive";
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 
@@ -28,8 +29,7 @@ const OnlineTab: React.FC<OnlineTabProps> = ({ isOnline }) => {
     ).start();
   }, []);
 
-  // ✅ Colors and text depending on online status
-  const indicatorColor = isOnline ? "#00D26A" : "#EF4444";
+  const indicatorColor = isOnline ? theme.colors.primary : theme.colors.red;
   const statusText = isOnline ? "ONLINE" : "OFFLINE";
   const mainMessage = isOnline
     ? "Searching for riders nearby..."
@@ -76,15 +76,15 @@ const OnlineTab: React.FC<OnlineTabProps> = ({ isOnline }) => {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    // Removed flex: 1 to allow dynamic height measurement
     backgroundColor: "#FFFFFF",
-    justifyContent: "space-between",
     paddingHorizontal: s(28),
-    paddingTop: vs(40),
-    paddingBottom: vs(24),
+    paddingTop: vs(32), // Adjusted slightly for the tray top
+    paddingBottom: vs(32), // Ensure consistent padding at the bottom
   },
   content: {
-    flex: 1,
+    // Removed flex: 1 so it doesn't push the footer to the screen bottom
+    marginBottom: vs(32),
   },
   statusRow: {
     flexDirection: "row",

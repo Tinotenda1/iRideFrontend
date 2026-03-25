@@ -36,15 +36,19 @@ export default function UpdateProfileImage() {
 
   const resolveImagePath = (path: string | null | undefined) => {
     if (!path) return null;
-    if (
-      path.startsWith("file://") ||
-      path.startsWith("content://") ||
-      path.startsWith("data:")
-    ) {
-      return path;
-    }
+
+    // If it's a web URL, we are golden.
     if (path.startsWith("http")) return path;
 
+    // If it's a local URI, it might be a 'ghost' path from an old version
+    if (path.startsWith("file://") || path.startsWith("content://")) {
+      // Logic: If this is an onboarding flow and we want to move to
+      // backend-only, we could return null here to force a fresh upload,
+      // OR just return it and let the Image component try to render it.
+      return path;
+    }
+
+    // This is the "Modern" way: Appending your API URL to a relative path
     try {
       const baseUrl = getApiBaseUrl();
       const normalizedBase = baseUrl.endsWith("/")
@@ -53,7 +57,6 @@ export default function UpdateProfileImage() {
       const cleanPath = path.startsWith("/") ? path : `/${path}`;
       return `${normalizedBase}${cleanPath}`;
     } catch (e) {
-      console.error("❌ Error resolving image path:", e);
       return null;
     }
   };

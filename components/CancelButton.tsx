@@ -1,19 +1,21 @@
-import { ms, vs } from "@/utils/responsive"; // Added responsiveness utility
+import { ms, vs } from "@/utils/responsive";
 import React from "react";
 import {
   ActivityIndicator,
   StyleProp,
+  StyleSheet,
   Text,
   TouchableOpacity,
   ViewStyle,
 } from "react-native";
-import { createStyles } from "../utils/styles"; // Assuming path based on previous components
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface CancelButtonProps {
   onPress: () => void;
   isLoading?: boolean;
   label?: string;
   style?: StyleProp<ViewStyle>;
+  containerStyle?: StyleProp<ViewStyle>; // Added to control the outer wrapper
 }
 
 const CancelButton: React.FC<CancelButtonProps> = ({
@@ -21,13 +23,21 @@ const CancelButton: React.FC<CancelButtonProps> = ({
   isLoading = false,
   label = "Cancel Request",
   style,
+  containerStyle,
 }) => {
+  const insets = useSafeAreaInsets();
+
   return (
     <TouchableOpacity
-      style={[styles.button, style]}
+      activeOpacity={0.7}
       onPress={onPress}
       disabled={isLoading}
-      activeOpacity={0.7}
+      style={[
+        styles.button,
+        // Dynamically add padding to account for the bottom hardware/software bar
+        { marginBottom: Math.max(insets.bottom, vs(16)) },
+        style,
+      ]}
     >
       {isLoading ? (
         <ActivityIndicator color="#FF3B30" size={ms(20)} />
@@ -38,18 +48,19 @@ const CancelButton: React.FC<CancelButtonProps> = ({
   );
 };
 
-const styles = createStyles({
+const styles = StyleSheet.create({
   button: {
     width: "100%",
-    padding: vs(14),
+    paddingVertical: vs(14),
+    paddingHorizontal: ms(20),
     borderRadius: ms(50),
     backgroundColor: "#F2F2F2",
     alignItems: "center",
-    //marginBottom: vs(20),
+    justifyContent: "center",
   },
   text: {
     color: "#FF3B30",
-    fontWeight: "600",
+    fontWeight: "700",
     fontSize: ms(16),
   },
 });

@@ -18,8 +18,7 @@ import {
   disconnectDriver,
   handleDriverResponse,
   onNewRideRequest,
-  onReconnectState,
-  onStatusChange,
+  onStatusChange
 } from "./socketConnectionUtility/driverSocketService";
 
 type Screen = "home" | "wallet" | "revenue" | "notifications";
@@ -111,6 +110,10 @@ const DriverDashboard: React.FC = () => {
     initDriver();
   }, []);
 
+  /* ===========================
+      BACKEND RESTORE PUSH
+  =========================== */
+  /*
   useEffect(() => {
     // Make sure the driver socket is connected first
     const unsubscribe = onReconnectState((data) => {
@@ -135,6 +138,7 @@ const DriverDashboard: React.FC = () => {
 
     return () => unsubscribe();
   }, [restoreSession]);
+  */
 
   const handleCloseModal = () => {
     setModalConfig((prev) => ({ ...prev, visible: false }));

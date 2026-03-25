@@ -296,7 +296,7 @@ const DriverHome: React.FC<Props> = ({
   if (manuallyOffline) {
     // Only show full offline UI if user intentionally went offline
     return (
-      <View style={[styles.offlineContainer, { marginBottom: trayPadding }]}>
+      <View style={[styles.offlineContainer]}>
         <View style={styles.offlineIcon}>
           <Ionicons name="moon-outline" size={ms(60)} color="#94a3b8" />
         </View>
@@ -376,7 +376,6 @@ const styles = StyleSheet.create({
 
   offlineContainer: {
     flex: 1,
-    marginBottom: vs(50),
     backgroundColor: "#0f172a",
     justifyContent: "center",
     alignItems: "center",

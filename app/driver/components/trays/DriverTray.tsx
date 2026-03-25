@@ -1,5 +1,4 @@
 // app/driver/components/trays/DriverTray.tsx
-
 import { LinearGradient } from "expo-linear-gradient";
 import React, {
   forwardRef,
@@ -22,11 +21,11 @@ import {
   View,
 } from "react-native";
 
-import RatingModal from "../../../../components/RatingModal";
 import { submitUserRating } from "../../../../utils/ratingSubmittion";
 import { createStyles } from "../../../../utils/styles";
 import { useRideBooking } from "../../../context/RideBookingContext";
 
+import RatingModal from "../../../../components/RatingModal";
 import {
   getDriverSocket,
   onMatchedRide,
@@ -35,11 +34,10 @@ import {
 } from "../../socketConnectionUtility/driverSocketService";
 
 import { theme } from "@/constants/theme";
-import { ms, vs } from "@/utils/responsive"; // Added responsiveness utility
+import { ms, vs } from "@/utils/responsive";
 import { getUserInfo } from "@/utils/storage";
-import TripStatusModal, {
-  ModalType,
-} from "../../../../components/TripStatusModal";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ModalType } from "../../../../components/TripStatusModal";
 import { notifyRideEvent } from "../../../../utils/persistentNotification";
 import OnlineTab from "./tabs/OnlineTab";
 import TripTab from "./tabs/TripTab";
@@ -56,12 +54,6 @@ type DriverStatus = "welcome" | "online" | "active";
 
 const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
 
-// Applied vertical scaling to height constants
-const HEIGHT_WELCOME = vs(windowHeight * 0.35);
-const HEIGHT_ONLINE = vs(windowHeight * 0.3);
-const HEIGHT_ACTIVE_COMPACT = vs(windowHeight * 0.24);
-const HEIGHT_ACTIVE_EXPANDED = vs(windowHeight * 0.38);
-
 if (
   Platform.OS === "android" &&
   UIManager.setLayoutAnimationEnabledExperimental
@@ -71,8 +63,16 @@ if (
 
 const DriverTray = forwardRef<any, DriverTrayProps>(
   ({ onStatusChange, onHeightChange, onMatch, isOnline }, ref) => {
+    const insets = useSafeAreaInsets();
     const [status, setStatus] = useState<DriverStatus>("welcome");
     const [isTripExpanded, setIsTripExpanded] = useState(false);
+
+    const [tabHeights, setTabHeights] = useState({
+      welcome: vs(windowHeight * 0.35),
+      online: vs(windowHeight * 0.3),
+      activeCompact: vs(windowHeight * 0.24),
+      activeExpanded: vs(windowHeight * 0.38),
+    });
 
     const { rideData, updateRideData } = useRideBooking();
 
@@ -82,6 +82,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
     const translateY = useRef(new Animated.Value(windowHeight)).current;
     const transitionAnim = useRef(new Animated.Value(0)).current;
     const [isEndingTrip, setIsEndingTrip] = useState(false);
+    const bottomInset = insets.bottom > 0 ? insets.bottom : vs(10);
     const [statusModal, setStatusModal] = useState<{
       visible: boolean;
       type: ModalType;
@@ -152,30 +153,34 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
       [onStatusChange, transitionAnim, heightAnim],
     );
 
-    /* ---------------- Height Listener ---------------- */
+    /* ---------------- Height Listener (Pure Output) ---------------- */
 
     useEffect(() => {
       const listenerId = heightAnim.addListener(({ value }) => {
-        let actualHeight = HEIGHT_WELCOME;
+        let pureHeight = tabHeights.welcome;
 
         if (value <= 1) {
-          actualHeight =
-            HEIGHT_WELCOME + value * (HEIGHT_ONLINE - HEIGHT_WELCOME);
+          pureHeight =
+            tabHeights.welcome +
+            value * (tabHeights.online - tabHeights.welcome);
         } else if (value <= 2) {
-          actualHeight =
-            HEIGHT_ONLINE +
-            (value - 1) * (HEIGHT_ACTIVE_COMPACT - HEIGHT_ONLINE);
+          pureHeight =
+            tabHeights.online +
+            (value - 1) * (tabHeights.activeCompact - tabHeights.online);
         } else {
-          actualHeight =
-            HEIGHT_ACTIVE_COMPACT +
-            (value - 2) * (HEIGHT_ACTIVE_EXPANDED - HEIGHT_ACTIVE_COMPACT);
+          pureHeight =
+            tabHeights.activeCompact +
+            (value - 2) *
+              (tabHeights.activeExpanded - tabHeights.activeCompact);
         }
 
-        onHeightChange?.(actualHeight);
+        // We emit the pure content height.
+        // The parent (Map) will add the inset to its own padding.
+        onHeightChange?.(pureHeight + bottomInset); // we add the bottom inset to the height
       });
 
       return () => heightAnim.removeListener(listenerId);
-    }, [heightAnim, onHeightChange]);
+    }, [heightAnim, onHeightChange, tabHeights]);
 
     /* ---------------- State Resumption ---------------- */
     useEffect(() => {
@@ -204,7 +209,6 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
 
     /* ---------------- External Action Handlers ---------------- */
 
-    /* ---------------- Cancellation Listener ---------------- */
     useEffect(() => {
       const unsubscribeCancel = onRideCancelled((data: any) => {
         if (AppState.currentState !== "active") {
@@ -259,7 +263,6 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
       [updateRideData, handleTransition],
     );
 
-    /* ---------------- Socket Listeners ---------------- */
     useEffect(() => {
       const unsubscribeComplete = onRideCompletedByPassenger((data) => {
         handleTripEndedByPassenger(data);
@@ -310,8 +313,6 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
       return () => unsubscribe();
     }, [openTray, handleTransition, updateRideData, onMatch]);
 
-    /* ---------------- Ref API ---------------- */
-
     useImperativeHandle(ref, () => ({
       openTray,
       closeTray,
@@ -319,8 +320,6 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
       startTrip: () => handleTransition("active", false),
       goOffline: () => handleTransition("welcome"),
     }));
-
-    /* ---------------- Trip Actions ---------------- */
 
     const handleDriverCancelTrip = async (reason: string) => {
       const rId = rideData.activeTrip?.rideId;
@@ -391,13 +390,13 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
 
       handleTransition("active", false);
     };
+
     const handleEndTrip = async () => {
       const rId = rideData.activeTrip?.rideId;
 
       if (!rId || isEndingTrip) return;
 
       const MAX_RETRIES = 3;
-
       let attempt = 0;
       let success = false;
 
@@ -407,55 +406,36 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
 
         while (attempt < MAX_RETRIES && !success) {
           attempt++;
-
           try {
-            console.log(`🏁 Ending trip (Attempt ${attempt})`);
-
             const response = await fetch(
               `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/rides/driver_ends_ride`,
               {
                 method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ rideId: rId }),
               },
             );
 
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
-
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const result = await response.json();
-
-            if (!result?.success) {
-              throw new Error("Server rejected request");
-            }
-
-            console.log("✅ Trip ended by driver");
+            if (!result?.success) throw new Error("Server rejected request");
 
             updateRideData({ status: "on_rating" });
-
             handleTransition("online");
-
             success = true;
             return;
           } catch (err) {
             console.error(`❌ End trip failed (Attempt ${attempt})`, err);
-
-            if (attempt < MAX_RETRIES) {
+            if (attempt < MAX_RETRIES)
               await new Promise((r) => setTimeout(r, 700));
-            }
           }
         }
 
         Alert.alert(
           "Connection Problem",
-          "We could not end the trip. Please check your internet connection and try again, or ask the passenger to end the trip from their app.",
+          "We could not end the trip. Please check your internet connection.",
           [{ text: "OK" }],
         );
-
-        console.warn("⚠️ End trip failed after all retries");
       } finally {
         setIsEndingTrip(false);
       }
@@ -482,11 +462,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         );
 
         if (!success) {
-          Alert.alert(
-            "Rating Failed",
-            "We couldn't submit your rating for the passenger. Please try again.",
-            [{ text: "OK" }],
-          );
+          Alert.alert("Rating Failed", "We couldn't submit your rating.");
           return;
         }
 
@@ -496,8 +472,7 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         });
         setRatingVisible(false);
       } catch (error) {
-        console.error("Critical rating error (driver side):", error);
-        Alert.alert("Error", "An unexpected error occurred while rating.");
+        console.error("Critical rating error:", error);
       } finally {
         setIsSubmitting(false);
       }
@@ -523,10 +498,10 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
     const currentTrayHeight = heightAnim.interpolate({
       inputRange: [0, 1, 2, 3],
       outputRange: [
-        HEIGHT_WELCOME,
-        HEIGHT_ONLINE,
-        HEIGHT_ACTIVE_COMPACT,
-        HEIGHT_ACTIVE_EXPANDED,
+        tabHeights.welcome,
+        tabHeights.online,
+        tabHeights.activeCompact,
+        tabHeights.activeExpanded,
       ],
     });
 
@@ -543,7 +518,13 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
         )}
 
         <Animated.View
-          style={[styles.container, { transform: [{ translateY }] }]}
+          style={[
+            styles.container,
+            {
+              transform: [{ translateY }],
+              paddingBottom: bottomInset,
+            },
+          ]}
         >
           <Animated.View style={{ height: currentTrayHeight, width: "100%" }}>
             <LinearGradient
@@ -553,20 +534,38 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
 
             <View style={styles.contentContainer}>
               <View style={styles.tabsWrapper}>
-                {/* Welcome */}
+                {/* Welcome Tab */}
                 <Animated.View
+                  onLayout={(e) => {
+                    const height = e?.nativeEvent?.layout?.height;
+                    if (height) {
+                      setTabHeights((prev) => ({
+                        ...prev,
+                        welcome: height,
+                      }));
+                    }
+                  }}
                   style={[
-                    StyleSheet.absoluteFill,
+                    styles.tabContainer,
                     { transform: [{ translateX: welcomeTranslateX }] },
                   ]}
                 >
                   <WelcomeTab onGoOnline={() => handleTransition("online")} />
                 </Animated.View>
 
-                {/* Online */}
+                {/* Online Tab */}
                 <Animated.View
+                  onLayout={(e) => {
+                    const height = e?.nativeEvent?.layout?.height;
+                    if (height) {
+                      setTabHeights((prev) => ({
+                        ...prev,
+                        online: height,
+                      }));
+                    }
+                  }}
                   style={[
-                    StyleSheet.absoluteFill,
+                    styles.tabContainer,
                     { transform: [{ translateX: onlineTranslateX }] },
                   ]}
                 >
@@ -576,10 +575,20 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
                   />
                 </Animated.View>
 
-                {/* Active */}
+                {/* Active/Trip Tab */}
                 <Animated.View
+                  onLayout={(e) => {
+                    const height = e?.nativeEvent?.layout?.height;
+                    if (height) {
+                      setTabHeights((prev) =>
+                        isTripExpanded
+                          ? { ...prev, activeExpanded: height }
+                          : { ...prev, activeCompact: height },
+                      );
+                    }
+                  }}
                   style={[
-                    StyleSheet.absoluteFill,
+                    styles.tabContainer,
                     { transform: [{ translateX: activeTranslateX }] },
                   ]}
                 >
@@ -592,28 +601,19 @@ const DriverTray = forwardRef<any, DriverTrayProps>(
                     onToggleExpand={(val) => handleTransition("active", val)}
                   />
                 </Animated.View>
-                <TripStatusModal
-                  visible={statusModal.visible}
-                  type={statusModal.type}
-                  title={statusModal.title}
-                  message={statusModal.message}
-                  onClose={() => {
-                    setStatusModal((prev) => ({ ...prev, visible: false }));
-                  }}
-                />
-                <RatingModal
-                  visible={ratingVisible}
-                  title="Rate Your Passenger"
-                  userName={rideData.activeTrip?.passenger?.name}
-                  userImage={rideData.activeTrip?.passenger?.profilePic}
-                  subtitle="Your feedback helps keep the community safe."
-                  onSelectRating={handleRatingSubmit}
-                  isLoading={isSubmitting}
-                />
               </View>
             </View>
           </Animated.View>
         </Animated.View>
+        <RatingModal
+          visible={ratingVisible}
+          title="Trip Completed!"
+          subtitle="How was your experience with the passenger?"
+          userName={rideData.activeTrip?.passenger?.name}
+          userImage={rideData.activeTrip?.passenger?.profilePic}
+          isLoading={isSubmitting}
+          onSelectRating={handleRatingSubmit}
+        />
       </>
     );
   },
@@ -636,17 +636,20 @@ const styles = createStyles({
     elevation: 24,
     overflow: "hidden",
   },
-
   background: {
     ...StyleSheet.absoluteFillObject,
   },
-
   contentContainer: {
     flex: 1,
   },
-
   tabsWrapper: {
     flex: 1,
+  },
+  tabContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
   },
 });
 

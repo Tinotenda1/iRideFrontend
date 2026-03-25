@@ -1,5 +1,5 @@
 // app/driver/components/trays/tabs/WelcomeTab.tsx
-import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
+import { ms, s, vs } from "@/utils/responsive";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { getUserInfo, UserInfo } from "../../../../../utils/storage";
@@ -40,7 +40,7 @@ const WelcomeTab: React.FC<WelcomeTabProps> = ({ onGoOnline }) => {
             <Text style={styles.greeting}>Hello, {driverName}</Text>
             <Text style={styles.subGreeting}>
               You are currently offline. Go online to start receiving ride
-              requests and earning with iRide.
+              requests and earning with Drift.
             </Text>
           </>
         )}
@@ -58,15 +58,15 @@ const WelcomeTab: React.FC<WelcomeTabProps> = ({ onGoOnline }) => {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    // Removed flex: 1 for dynamic height measurement
     backgroundColor: "#FFFFFF",
-    justifyContent: "space-between",
     paddingHorizontal: s(28),
-    paddingTop: vs(48),
-    paddingBottom: vs(24),
+    paddingTop: vs(40),
+    paddingBottom: vs(32),
   },
   content: {
-    flex: 1,
+    // Removed flex: 1 so content doesn't stretch
+    marginBottom: vs(32),
   },
   greeting: {
     fontSize: ms(32),
@@ -84,7 +84,6 @@ const styles = StyleSheet.create({
   },
   footer: {
     alignItems: "center",
-    marginTop: vs(20),
   },
   footerLine: {
     width: s(30),

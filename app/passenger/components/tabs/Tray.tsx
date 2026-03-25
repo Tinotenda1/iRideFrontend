@@ -20,6 +20,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { hp, SCREEN_WIDTH, vs } from "@/utils/responsive";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRideBooking } from "../../../../app/context/RideBookingContext";
 import { theme } from "../../../../constants/theme";
 import { createStyles } from "../../../../utils/styles";
@@ -120,6 +121,7 @@ const Tray = forwardRef<any, any>((props, ref) => {
   } = props;
 
   const { rideData, updateRideData } = useRideBooking();
+  const insets = useSafeAreaInsets();
 
   const [currentTab, setCurrentTab] = useState<TabType>("input");
   const [isExpanded, setIsExpanded] = useState(false);
@@ -164,10 +166,12 @@ const Tray = forwardRef<any, any>((props, ref) => {
         }
         const measured = tabHeightsRef.current[tab];
         const fallback = FALLBACK_HEIGHTS[tab];
-        return Math.max(
+        const baseHeight = Math.max(
           200,
           Math.min(measured || fallback, SCREEN_HEIGHT * 0.92),
         );
+
+        return baseHeight + insets.bottom;
       };
 
       const index = TAB_INDEX[tab];
@@ -232,6 +236,7 @@ const Tray = forwardRef<any, any>((props, ref) => {
   const containerStyle = useAnimatedStyle(() => ({
     height: animatedHeight.value,
     transform: [{ translateY: translateY.value }],
+    paddingBottom: insets.bottom, // 👈 THIS
   }));
 
   // -----------------------------
@@ -365,7 +370,7 @@ const styles = createStyles({
   },
   background: { ...StyleSheet.absoluteFillObject },
   contentContainer: { flex: 1 },
-  tabsWrapper: { flex: 1, overflow: "hidden" },
+  tabsWrapper: { flex: 1 },
 });
 
 export default Tray;
