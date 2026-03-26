@@ -2,13 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    Image,
-    ScrollView,
-    StatusBar,
-    Text,
-    TextStyle,
-    TouchableOpacity,
-    View,
+  Image,
+  ScrollView,
+  StatusBar,
+  Text,
+  TextStyle,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -20,8 +20,8 @@ import { ROUTES } from "../../../utils/routes";
 
 // ---------- Tabs ----------
 import {
-    compressImage,
-    compressMultipleImages,
+  compressImage,
+  compressMultipleImages,
 } from "@/utils/imageCompression";
 import { getUserInfo, updateUserInfo } from "@/utils/storage";
 import InputTray from "../../../components/universalInputTray";
@@ -115,6 +115,7 @@ const DriverOnboarding = () => {
   const [carAngle, setCarAngle] = useState<string | null>(null);
   const [vehicleType, setVehicleType] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [agreedToTerms, setAgreedToTerms] = useState(false); // Add this
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -361,6 +362,8 @@ const DriverOnboarding = () => {
         return isVehicleStepValid;
       case "vehicleType":
         return isVehicleTypeStepValid; // Validation check
+      case "submit":
+        return agreedToTerms;
       default:
         return true;
     }
@@ -424,7 +427,7 @@ const DriverOnboarding = () => {
         initialValue={vehicleType} // Pass this so it stays selected if they go back
       />
     ),
-    submit: <SubmitTab />,
+    submit: <SubmitTab agreed={agreedToTerms} onToggle={setAgreedToTerms} />,
   };
 
   return (

@@ -90,7 +90,7 @@ const styles = createStyles({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: ms(10),
-    elevation: 3,
+    elevation: 1,
   },
   cardUnselected: {
     backgroundColor: "#F7F7F7",

@@ -11,7 +11,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import legalData from "../../assets/legalContent.json";
 import { IRButton } from "../../components/IRButton";
+import { LegalModal } from "../../components/LegalModal";
 import PhoneInput from "../../components/PhoneInput";
 import { theme } from "../../constants/theme";
 import { api } from "../../utils/api";
@@ -22,6 +24,17 @@ export default function GetStarted() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [countryCode, setCountryCode] = useState("+263");
   const [loading, setLoading] = useState<"whatsapp" | "sms" | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [activeLegal, setActiveLegal] = useState({ title: "", content: "" });
+
+  // MODAL TRIGGER FUNCTION
+  const openLegal = (type: "privacyPolicy" | "termsOfService") => {
+    setActiveLegal({
+      title: type === "privacyPolicy" ? "Privacy Policy" : "Terms & Conditions",
+      content: legalData[type],
+    });
+    setModalVisible(true);
+  };
 
   const handleVerify = async (method: "sms" | "whatsapp") => {
     if (!phoneNumber.trim()) {
@@ -54,6 +67,12 @@ export default function GetStarted() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <LegalModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        title={activeLegal.title}
+        content={activeLegal.content}
+      />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -117,8 +136,21 @@ export default function GetStarted() {
         <View style={styles.disclaimerContainer}>
           <Text style={styles.disclaimerText}>
             By continuing, you agree to Drift{"'"}s{" "}
-            <Text style={styles.disclaimerLink}>Privacy Policy</Text> and{" "}
-            <Text style={styles.disclaimerLink}>Terms & Conditions</Text>.
+            {/* 4. ATTACH THE onPress EVENTS */}
+            <Text
+              style={styles.disclaimerLink}
+              onPress={() => openLegal("privacyPolicy")}
+            >
+              Privacy Policy
+            </Text>{" "}
+            and{" "}
+            <Text
+              style={styles.disclaimerLink}
+              onPress={() => openLegal("termsOfService")}
+            >
+              Terms & Conditions
+            </Text>
+            .
           </Text>
         </View>
       </KeyboardAvoidingView>

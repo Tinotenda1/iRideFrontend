@@ -1,5 +1,4 @@
-// app/driver/components/trays/RideRequestTray.tsx
-import { ms, s, vs } from "@/utils/responsive"; // Added responsiveness utility
+import { ms, s, vs } from "@/utils/responsive";
 import { Ionicons } from "@expo/vector-icons";
 import {
   forwardRef,
@@ -20,7 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import MapView from "react-native-maps";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IRAvatar } from "../../../../components/IRAvatar";
 import { IRButton } from "../../../../components/IRButton";
 import { theme } from "../../../../constants/theme";
@@ -34,8 +33,9 @@ import { OfferFareControl } from "../DriverOfferFareControl";
 import RideRequestMap from "../maps/RideRequestMap";
 
 const { height: windowHeight } = Dimensions.get("window");
-const OPEN_HEIGHT = vs(windowHeight * 0.8);
-const MAP_MIN_HEIGHT = vs(windowHeight * 0.35); // Adjusted slightly for better responsive flow
+
+// Detect small screens (e.g., iPhone SE, older Androids)
+const isSmallScreen = windowHeight < 700;
 
 export interface RideRequestTrayRef {
   open: (
@@ -58,7 +58,7 @@ interface Props {
 
 const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
   ({ driverId, onOfferSubmitted, onClose }, ref) => {
-    const mapRef = useRef<MapView>(null);
+    const insets = useSafeAreaInsets();
     const [isOpen, setIsOpen] = useState(false);
     const [rideId, setRideId] = useState<string | null>(null);
     const [selectedRideData, setSelectedRideData] = useState<any>(null);
@@ -73,6 +73,12 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     const priorityDurationRef = useRef<number>(0);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    // Responsive Heights
+    const OPEN_HEIGHT = isSmallScreen
+      ? windowHeight * 0.9
+      : windowHeight * 0.82;
+    const MAP_MIN_HEIGHT = isSmallScreen ? vs(160) : vs(220);
 
     const baseOffer = selectedRideData?.offer ?? 0;
     const minOffer = selectedRideData?.priceRange?.min ?? baseOffer;
@@ -93,15 +99,13 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
       pickup4seater: "4 SEATER PICKUP",
     };
 
-    const vehicleType = selectedRideData?.vehicleType;
-    const vehicleLabel = vehicleTypeLabels[vehicleType] || "STANDARD";
+    const vehicleLabel =
+      vehicleTypeLabels[selectedRideData?.vehicleType] || "STANDARD";
     const baseHeaderText = `NEW REQUEST - ${vehicleLabel}`;
 
     const headerText =
       isPriority && secondsLeft > 0
-        ? `${baseHeaderText} (EXCLUSIVE WINDOW • 00:${secondsLeft
-            .toString()
-            .padStart(2, "0")})`
+        ? `${baseHeaderText} (EXCLUSIVE • 00:${secondsLeft.toString().padStart(2, "0")})`
         : baseHeaderText;
 
     useEffect(() => {
@@ -115,10 +119,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     const handleClose = useCallback(() => {
       try {
         const socket = getDriverSocket();
-        socket?.emit("driver:ride_tray_status", {
-          rideId,
-          status: "closed",
-        });
+        socket?.emit("driver:ride_tray_status", { rideId, status: "closed" });
       } catch (err) {
         console.warn("Tray close socket emit failed", err);
       }
@@ -170,36 +171,25 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
 
     useEffect(() => {
       if (!isOpen || !rideId || currentStatus !== "idle") return;
+      if (selectedRideData?.broadcastType !== "priority" || !expiresAt) return;
 
-      const isPriorityRide = selectedRideData?.broadcastType === "priority";
-      if (!isPriorityRide || !expiresAt) return;
+      const remainingMs = expiresAt - Date.now();
+      const duration = Math.max(0, remainingMs);
+      progressAnim.setValue(duration / priorityDurationRef.current);
 
-      const updateProgress = () => {
-        const remainingMs = expiresAt - Date.now();
-        const duration = Math.max(0, remainingMs);
+      Animated.timing(progressAnim, {
+        toValue: 0,
+        duration,
+        easing: Easing.linear,
+        useNativeDriver: false,
+      }).start();
 
-        progressAnim.setValue(duration / priorityDurationRef.current);
-
-        Animated.timing(progressAnim, {
-          toValue: 0,
-          duration,
-          easing: Easing.linear,
-          useNativeDriver: false,
-        }).start();
-
-        setSecondsLeft(Math.ceil(duration / 1000));
-
-        intervalRef.current = setInterval(() => {
-          const rem = expiresAt - Date.now();
-          const newSeconds = Math.max(0, Math.ceil(rem / 1000));
-          setSecondsLeft(newSeconds);
-
-          if (newSeconds <= 0) {
-            clearTimers();
-          }
-        }, 1000);
-      };
-      updateProgress();
+      intervalRef.current = setInterval(() => {
+        const rem = expiresAt - Date.now();
+        const newSeconds = Math.max(0, Math.ceil(rem / 1000));
+        setSecondsLeft(newSeconds);
+        if (newSeconds <= 0) clearTimers();
+      }, 1000);
 
       return () => {
         clearTimers();
@@ -215,9 +205,7 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     ]);
 
     const submitOffer = () => {
-      if (!rideId || !selectedRideData || (currentStatus as string) !== "idle")
-        return;
-
+      if (!rideId || !selectedRideData || currentStatus !== "idle") return;
       onOfferSubmitted(rideId, currentOffer, baseOffer);
       setCurrentStatus("submitted" as any);
       clearTimers();
@@ -253,8 +241,6 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
     });
 
     const rating = parseFloat(selectedRideData?.passengerRating || "5");
-    const fullStars = Math.floor(rating);
-    const hasHalfStar = rating - fullStars >= 0.5;
 
     return (
       <>
@@ -263,7 +249,15 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
           activeOpacity={1}
           onPress={handleClose}
         />
-        <View style={styles.container}>
+        <View
+          style={[
+            styles.container,
+            {
+              height: OPEN_HEIGHT,
+              paddingBottom: Math.max(insets.bottom, vs(20)),
+            },
+          ]}
+        >
           {currentStatus === "idle" && isPriority && secondsLeft > 0 && (
             <Animated.View
               style={[
@@ -272,22 +266,18 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
               ]}
             />
           )}
+
           <View style={styles.headerArea}>
+            <View style={styles.dragHandle} />
             <Text style={styles.timerDigits}>{headerText}</Text>
           </View>
 
           <ScrollView
             showsVerticalScrollIndicator={false}
             style={styles.scrollArea}
-            contentContainerStyle={{ flexGrow: 1 }}
+            contentContainerStyle={{ paddingBottom: vs(20) }}
           >
-            <View
-              style={{
-                minHeight: MAP_MIN_HEIGHT,
-                borderRadius: ms(16),
-                overflow: "hidden",
-              }}
-            >
+            <View style={[styles.mapWrapper, { height: MAP_MIN_HEIGHT }]}>
               <RideRequestMap
                 rideData={selectedRideData}
                 driverLocation={currentDriverLocation || undefined}
@@ -304,48 +294,20 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                       : undefined
                   }
                   name={selectedRideData.passengerName}
-                  size={ms(54)}
+                  size={ms(50)}
                 />
-
                 <View style={styles.profileInfo}>
-                  <Text style={styles.passengerName}>
+                  <Text style={styles.passengerName} numberOfLines={1}>
                     {selectedRideData.passengerName || "Passenger"}
                   </Text>
                   <View style={styles.ratingRow}>
-                    {Array.from({ length: 5 }).map((_, index) => {
-                      if (index < fullStars) {
-                        return (
-                          <Ionicons
-                            key={index}
-                            name="star"
-                            size={ms(12)}
-                            color={theme.colors.warning}
-                          />
-                        );
-                      }
-                      if (index === fullStars && hasHalfStar) {
-                        return (
-                          <Ionicons
-                            key={index}
-                            name="star-half"
-                            size={ms(12)}
-                            color={theme.colors.warning}
-                          />
-                        );
-                      }
-                      return (
-                        <Ionicons
-                          key={index}
-                          name="star-outline"
-                          size={ms(12)}
-                          color={theme.colors.warning}
-                        />
-                      );
-                    })}
-                    <Text
-                      style={[styles.ratingValueText, { marginLeft: s(4) }]}
-                    >
-                      {rating.toFixed(2)}
+                    <Ionicons
+                      name="star"
+                      size={ms(12)}
+                      color={theme.colors.warning}
+                    />
+                    <Text style={styles.ratingValueText}>
+                      {rating.toFixed(1)}
                     </Text>
                     <View style={styles.dotSeparator} />
                     <Text style={styles.tripCountText}>
@@ -355,38 +317,10 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                 </View>
 
                 <View style={styles.priceContainer}>
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <Text style={styles.mainPrice}>
-                      ${baseOffer?.toFixed(2)}
-                    </Text>
-                    <Text style={{ marginHorizontal: s(6), color: "#999" }}>
-                      •
-                    </Text>
-                    <Text style={styles.paymentMethodText}>
-                      {(selectedRideData.paymentMethod || "CASH").toUpperCase()}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.offerBadge,
-                      { backgroundColor: theme.colors.background },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.badgeText,
-                        {
-                          color:
-                            selectedRideData.offerType === "good"
-                              ? theme.colors.primary
-                              : theme.colors.warning,
-                        },
-                      ]}
-                    >
-                      {selectedRideData.offerType?.toUpperCase() || "NEW"}
-                    </Text>
-                  </View>
+                  <Text style={styles.mainPrice}>${baseOffer?.toFixed(2)}</Text>
+                  <Text style={styles.paymentMethodText}>
+                    {(selectedRideData.paymentMethod || "CASH").toUpperCase()}
+                  </Text>
                 </View>
               </View>
 
@@ -399,21 +333,17 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                       { backgroundColor: theme.colors.primary },
                     ]}
                   />
-                  <View style={styles.addressTextContainer}>
-                    <Text style={styles.addressText} numberOfLines={1}>
-                      {selectedRideData.pickup?.address}
-                    </Text>
-                  </View>
+                  <Text style={styles.addressText} numberOfLines={1}>
+                    {selectedRideData.pickup?.address}
+                  </Text>
                 </View>
-                <View style={[styles.addressRow, { marginTop: vs(12) }]}>
+                <View style={[styles.addressRow, { marginTop: vs(10) }]}>
                   <View
                     style={[styles.dot, { backgroundColor: theme.colors.red }]}
                   />
-                  <View style={styles.addressTextContainer}>
-                    <Text style={styles.addressText} numberOfLines={1}>
-                      {selectedRideData.destination?.address}
-                    </Text>
-                  </View>
+                  <Text style={styles.addressText} numberOfLines={1}>
+                    {selectedRideData.destination?.address}
+                  </Text>
                 </View>
               </View>
 
@@ -421,31 +351,26 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                 <Ionicons
                   name="information-circle"
                   size={ms(14)}
-                  color={theme.colors.background}
+                  color="#64748B"
                 />
                 <Text style={styles.noteText}>
-                  {selectedRideData.additionalInfo ||
-                    "No special instructions provided."}
+                  {selectedRideData.additionalInfo || "No instructions."}
                 </Text>
               </View>
             </View>
           </ScrollView>
 
           <View style={styles.bottomSection}>
-            {(currentStatus as string) === "submitted" ||
-            (currentStatus as string) === "submitting" ? (
+            {["submitted", "submitting"].includes(currentStatus as string) ? (
               <View style={styles.successState}>
                 <View style={styles.checkCircle}>
                   <Ionicons
                     name="checkmark"
-                    size={ms(32)}
+                    size={ms(30)}
                     color={theme.colors.primary}
                   />
                 </View>
-                <Text style={styles.successTitle}>Offer Submitted</Text>
-                <Text style={styles.successSub}>
-                  Rider is reviewing your ${currentOffer.toFixed(2)} offer.
-                </Text>
+                <Text style={styles.successTitle}>Offer Sent</Text>
               </View>
             ) : (
               <>
@@ -456,8 +381,8 @@ const RideRequestTray = forwardRef<RideRequestTrayRef, Props>(
                   onOfferChange={setCurrentOffer}
                 />
                 <IRButton
-                  title={`ACCEPT FOR $${currentOffer.toFixed(2)}`}
-                  loading={(currentStatus as string) === "submitting"}
+                  title={`ACCEPT $${currentOffer.toFixed(2)}`}
+                  loading={currentStatus === "submitting"}
                   onPress={submitOffer}
                 />
               </>
@@ -474,21 +399,27 @@ const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(15, 23, 42, 0.7)",
-    zIndex: 998,
+    zIndex: 9998,
+    elevation: 9998,
   },
   container: {
     position: "absolute",
     bottom: 0,
     width: "100%",
-    height: OPEN_HEIGHT,
     backgroundColor: "#FFF",
     paddingHorizontal: s(20),
-    paddingBottom: vs(24),
     zIndex: 9999,
     elevation: 9999,
     borderTopLeftRadius: ms(24),
     borderTopRightRadius: ms(24),
     overflow: "hidden",
+  },
+  dragHandle: {
+    width: s(35),
+    height: vs(4),
+    backgroundColor: "#E2E8F0",
+    borderRadius: ms(2),
+    marginBottom: vs(8),
   },
   topProgressBar: {
     position: "absolute",
@@ -499,160 +430,94 @@ const styles = StyleSheet.create({
   },
   headerArea: {
     alignItems: "center",
-    paddingVertical: vs(12),
+    paddingTop: vs(12),
+    paddingBottom: vs(8),
   },
   timerDigits: {
-    fontSize: ms(12),
+    fontSize: ms(11),
     fontWeight: "800",
     color: "#64748B",
-    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
-  scrollArea: {
-    flex: 1,
+  scrollArea: { flex: 1 },
+  mapWrapper: {
+    borderRadius: ms(16),
+    overflow: "hidden",
+    marginBottom: vs(12),
   },
-  middleSection: {
-    flex: 1,
-    paddingTop: vs(15),
-  },
+  middleSection: { flex: 1 },
   profileRow: {
     flexDirection: "row",
     alignItems: "center",
+    marginBottom: vs(10),
   },
-  profileInfo: {
-    flex: 1,
-    marginLeft: s(12),
-    justifyContent: "center",
-  },
-  passengerName: {
-    fontSize: ms(18),
-    fontWeight: "800",
-    color: "#0F172A",
-    marginBottom: vs(2),
-  },
-  ratingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+  profileInfo: { flex: 1, marginLeft: s(10) },
+  passengerName: { fontSize: ms(17), fontWeight: "800", color: "#0F172A" },
+  ratingRow: { flexDirection: "row", alignItems: "center", marginTop: vs(2) },
   ratingValueText: {
     fontSize: ms(11),
     fontWeight: "700",
     color: "#64748b",
-    marginLeft: s(4),
+    marginLeft: s(3),
   },
-  tripCountText: {
-    fontSize: ms(11),
-    color: "#94a3b8",
-    fontWeight: "600",
-  },
+  tripCountText: { fontSize: ms(11), color: "#94a3b8", fontWeight: "600" },
   dotSeparator: {
     width: s(3),
     height: s(3),
-    borderRadius: ms(1.5),
+    borderRadius: 1.5,
     backgroundColor: "#cbd5e1",
-    marginHorizontal: s(6),
+    marginHorizontal: s(5),
   },
-  priceContainer: {
-    alignItems: "flex-end",
-    justifyContent: "center",
-  },
+  priceContainer: { alignItems: "flex-end" },
   mainPrice: {
-    fontSize: ms(24),
+    fontSize: ms(22),
     fontWeight: "900",
     color: theme.colors.primary,
   },
-  offerBadge: {
-    paddingHorizontal: s(6),
-    paddingVertical: vs(2),
-    borderRadius: ms(4),
-  },
-  badgeText: {
-    fontSize: ms(9),
-    fontWeight: "900",
-  },
-  paymentMethodText: {
-    fontSize: ms(13),
-    fontWeight: "600",
-    color: "#555",
-  },
-  addressSection: {
-    paddingLeft: s(8),
-    marginVertical: vs(10),
-    position: "relative",
-  },
+  paymentMethodText: { fontSize: ms(11), fontWeight: "600", color: "#64748B" },
+  addressSection: { marginVertical: vs(10), paddingLeft: s(5) },
   timelineLine: {
     position: "absolute",
-    left: s(11.5),
-    top: vs(20),
-    bottom: vs(20),
-    width: 1.5,
+    left: s(8),
+    top: vs(15),
+    bottom: vs(15),
+    width: 1,
     backgroundColor: "#E2E8F0",
     borderStyle: "dashed",
   },
-  addressRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: s(10),
-  },
-  dot: {
-    width: s(8),
-    height: s(8),
-    borderRadius: ms(4),
-    marginTop: vs(8),
-  },
-  addressTextContainer: {
-    flex: 1,
-    paddingVertical: vs(4),
-  },
+  addressRow: { flexDirection: "row", alignItems: "center", gap: s(10) },
+  dot: { width: s(7), height: s(7), borderRadius: 3.5 },
   addressText: {
-    fontSize: ms(14),
+    fontSize: ms(13),
     fontWeight: "600",
     color: "#334155",
-    lineHeight: ms(18),
+    flex: 1,
   },
   noteContainer: {
     flexDirection: "row",
-    gap: s(5),
-    backgroundColor: "#F1F5F9",
+    gap: s(6),
+    backgroundColor: "#F8FAFC",
     padding: s(10),
     borderRadius: ms(10),
-    alignItems: "flex-start",
   },
   noteText: {
-    fontSize: ms(12),
+    fontSize: ms(11),
     color: "#64748B",
     fontStyle: "italic",
     flex: 1,
-    lineHeight: ms(16),
   },
-  bottomSection: {
-    gap: vs(10),
-    paddingTop: vs(10),
-  },
-  successState: {
-    alignItems: "center",
-    paddingVertical: vs(15),
-  },
+  bottomSection: { gap: vs(8), marginTop: vs(10) },
+  successState: { alignItems: "center", paddingVertical: vs(10) },
   checkCircle: {
-    width: s(56),
-    height: s(56),
-    borderRadius: ms(28),
+    width: ms(44),
+    height: ms(44),
+    borderRadius: ms(22),
     backgroundColor: "#E6FBF0",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: vs(10),
+    marginBottom: vs(5),
   },
-  successTitle: {
-    fontSize: ms(18),
-    fontWeight: "800",
-    color: "#0F172A",
-  },
-  successSub: {
-    fontSize: ms(14),
-    color: "#64748B",
-    marginTop: vs(2),
-    textAlign: "center",
-  },
+  successTitle: { fontSize: ms(16), fontWeight: "800", color: "#0F172A" },
 });
-
 RideRequestTray.displayName = "RideRequestTray";
 export default RideRequestTray;

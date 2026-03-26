@@ -8,7 +8,7 @@ import TripStatusModal, { ModalType } from "../../components/TripStatusModal";
 import { useSessionRestoration } from "../services/useSessionRestoration";
 import DriverHeader from "./components/DriverHeader";
 import Sidebar from "./components/DriverSideBar";
-import DriverSettingsTray from "./components/trays/DriverSettingsTray";
+import DriverRideSettings from "./components/trays/DriverSettingsTray";
 import DriverTray from "./components/trays/DriverTray";
 import RideRequestTray from "./components/trays/RideRequestTray";
 import { watchDriverLocation } from "./driverLocationUtility/driverLocation";
@@ -18,7 +18,7 @@ import {
   disconnectDriver,
   handleDriverResponse,
   onNewRideRequest,
-  onStatusChange
+  onStatusChange,
 } from "./socketConnectionUtility/driverSocketService";
 
 type Screen = "home" | "wallet" | "revenue" | "notifications";
@@ -290,7 +290,6 @@ const DriverDashboard: React.FC = () => {
         setManualOffline={setManualOffline}
       />
       <View style={styles.content}>{renderScreen()}</View>
-      <DriverSettingsTray ref={settingsTrayRef} onClose={() => {}} />
       <DriverTray
         ref={driverTrayRef}
         onStatusChange={(status) => console.log("Tray Status:", status)}
@@ -316,6 +315,10 @@ const DriverDashboard: React.FC = () => {
         title={modalConfig.title}
         message={modalConfig.message}
         onClose={handleCloseModal}
+      />
+      <DriverRideSettings
+        ref={settingsTrayRef}
+        onClose={() => console.log("Tray closed")}
       />
     </View>
   );

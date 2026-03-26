@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     paddingHorizontal: s(24),
     paddingTop: vs(20),
-    paddingBottom: vs(32),
+    //paddingBottom: vs(32),
   },
   topSection: {
     // Removed flex: 1

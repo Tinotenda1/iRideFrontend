@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -61,19 +60,17 @@ export const LogoutButton: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity
-        onPress={handleLogout}
-        style={styles.touchable}
-        disabled={isLoading}
-      >
+      <TouchableOpacity onPress={handleLogout} disabled={isLoading}>
         <View style={styles.content}>
           <Ionicons
             name="log-out-outline"
-            size={ms(18)} // Responsive icon size
-            color="#666"
-            style={{ marginRight: s(8) }} // Responsive margin
+            size={ms(20)}
+            color={theme.colors.black}
+            style={{
+              marginRight: s(0), // Removed margin since the label is gone
+              transform: [{ scaleX: -1 }], // This flips the icon horizontally
+            }}
           />
-          <Text style={styles.text}>Logout</Text>
         </View>
       </TouchableOpacity>
     </View>
@@ -82,7 +79,14 @@ export const LogoutButton: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: vs(16), // Responsive vertical padding
+    height: vs(50),
+    width: vs(50),
+    borderRadius: ms(50),
+    backgroundColor: theme.colors.background,
+    borderWidth: 2,
+    borderColor: theme.colors.black,
+    alignItems: "center",
+    justifyContent: "center",
   },
   touchable: {
     paddingHorizontal: s(16), // Responsive horizontal padding

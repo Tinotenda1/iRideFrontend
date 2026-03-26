@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import {
   Animated,
+  Linking,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -76,19 +77,16 @@ export default React.forwardRef(function Sidebar(
 
   const menuItems = [
     {
-      label: "Home",
-      screen: userType === "passenger" ? "/passenger" : "/driver",
-      icon: "home" as const,
+      label: "Performance",
+      screen: "/performance",
+      icon: "pie-chart" as const,
     },
-    { label: "Ride History", screen: "/ride-history", icon: "time" as const },
     {
-      label: "Payment Methods",
-      screen: "/payment-methods",
+      label: "Drift Wallet",
+      screen: "/wallet",
       icon: "card" as const,
     },
     { label: "Promotions", screen: "/promotions", icon: "gift" as const },
-    { label: "Support", screen: "/support", icon: "help-circle" as const },
-    { label: "Settings", screen: "/settings", icon: "settings" as const },
   ];
 
   const safelyDisconnectDriver = () => {
@@ -172,34 +170,65 @@ export default React.forwardRef(function Sidebar(
 
           {/* Footer */}
           <View style={styles.footerContent}>
-            <IRButton
-              title="Login as Passenger"
-              variant="primary"
-              size="md"
-              fullWidth
-              onPress={() => {
-                safelyDisconnectDriver();
-
-                const dashboardRoute =
-                  userType === "passenger"
-                    ? ROUTES.DRIVER.HOME
-                    : ROUTES.PASSENGER.HOME;
-
-                console.log("🔁 Switching role → driver disconnected");
-
-                router.replace({
-                  pathname: dashboardRoute,
-                  params: { switchingFromDriver: true },
-                } as never);
-              }}
-            />
-            <View style={{ marginTop: vs(12) }}>
+            <View style={styles.footerActionsRow}>
               <TouchableOpacity
                 onPress={() => {
                   safelyDisconnectDriver();
                 }}
+                style={styles.circularLogout}
               >
                 <LogoutButton />
+              </TouchableOpacity>
+              <IRButton
+                title="Login as Passenger"
+                variant="primary"
+                size="md"
+                style={{ flex: 1 }}
+                onPress={() => {
+                  safelyDisconnectDriver();
+                  const dashboardRoute =
+                    userType === "passenger"
+                      ? ROUTES.DRIVER.HOME
+                      : ROUTES.PASSENGER.HOME;
+
+                  console.log("🔁 Switching role → driver disconnected");
+
+                  router.replace({
+                    pathname: dashboardRoute,
+                    params: { switchingFromDriver: true },
+                  } as never);
+                }}
+              />
+            </View>
+
+            {/* Social Support Icons */}
+            <View style={styles.socialRow}>
+              <TouchableOpacity
+                onPress={() => {
+                  const message = encodeURIComponent("*Drift Support*\n\n");
+                  Linking.openURL(
+                    `whatsapp://send?phone=263777937111&text=${message}`,
+                  );
+                }}
+                style={styles.socialIcon}
+              >
+                <Ionicons name="logo-whatsapp" size={ms(24)} color="#25D366" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => Linking.openURL("https://facebook.com/driftapp")}
+                style={styles.socialIcon}
+              >
+                <Ionicons name="logo-facebook" size={ms(24)} color="#1877F2" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() =>
+                  Linking.openURL("https://linkedin.com/company/driftapp")
+                }
+                style={styles.socialIcon}
+              >
+                <Ionicons name="logo-linkedin" size={ms(24)} color="#0A66C2" />
               </TouchableOpacity>
             </View>
 
@@ -274,7 +303,6 @@ const styles = createStyles({
     flex: 1,
     fontWeight: "500",
   },
-  footerContent: { padding: ms(theme.spacing.lg) },
   appInfo: { alignItems: "center", marginTop: vs(theme.spacing.lg) },
   versionText: {
     ...typedTypography.caption,
@@ -288,5 +316,35 @@ const styles = createStyles({
     fontSize: ms(12),
     color: theme.colors.textSecondary,
     fontWeight: "500",
+  },
+  footerContent: {
+    padding: ms(theme.spacing.lg),
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  footerActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: s(12),
+  },
+  circularLogout: {
+    width: ms(50),
+    height: ms(50),
+    borderRadius: ms(25),
+    borderWidth: 1,
+    borderColor: theme.colors.black,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: theme.colors.background,
+  },
+  socialRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: s(25),
+    marginTop: vs(20),
+  },
+  socialIcon: {
+    padding: s(8),
   },
 });

@@ -63,8 +63,8 @@ const RideTab: React.FC<TabProps> = ({
       {
         id: "4seater",
         icon: require("../../../../assets/cars/4seat.png"),
-        label: "4 Seater",
-        seats: 4,
+        label: "5 Seater",
+        seats: 5,
       },
       {
         id: "7seater",
@@ -81,8 +81,8 @@ const RideTab: React.FC<TabProps> = ({
       {
         id: "pickup4seater",
         icon: require("../../../../assets/cars/pickup4.png"),
-        label: "4 Seater Pickup",
-        seats: 4,
+        label: "5 Seater Pickup",
+        seats: 5,
       },
     ],
     [],

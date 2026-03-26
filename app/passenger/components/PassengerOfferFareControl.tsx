@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     borderRadius: ms(30),
     alignItems: "center",
     justifyContent: "center",
-    elevation: 0.5,
+    //elevation: 0.5,
   },
   adjustText: {
     fontSize: ms(24),

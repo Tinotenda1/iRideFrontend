@@ -1,3 +1,4 @@
+import { LinearGradient } from "expo-linear-gradient";
 import { Clock, Navigation, Search, Trash2 } from "lucide-react-native";
 import React, { useEffect } from "react";
 import {
@@ -152,7 +153,6 @@ interface LocationInputTabProps {
 const LocationInputTab: React.FC<LocationInputTabProps> = ({
   onFocus,
   onSuggestionSelect,
-  // onContentHeight removed from usage to use fallback height only
 }) => {
   const { rideData, updateRideData, loading, hideRecentDestination } =
     useRideBooking();
@@ -245,8 +245,8 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      {/* Removed onLayout to ensure this tab uses the parent's fallback height only */}
       <View style={styles.container}>
+        {/* INPUT SECTION - 100% Solid */}
         <View style={styles.inputSection}>
           <View style={styles.lineDecorator}>
             <View style={styles.dotPickup} />
@@ -282,35 +282,43 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
           </View>
         </View>
 
+        {/* THE FADE ZONE - Sits immediately after solid input */}
+        <LinearGradient
+          colors={[theme.colors.surface, `${theme.colors.surface}00`]}
+          style={styles.immediateGradient}
+          pointerEvents="none"
+        />
+
+        {/* SCROLLABLE LIST - Pulled up to scroll behind the gradient */}
         <Animated.ScrollView
           style={styles.scrollableSuggestions}
           showsVerticalScrollIndicator={false}
           nestedScrollEnabled={true}
+          contentContainerStyle={styles.scrollContent}
         >
           <View style={styles.suggestionsContainer}>
-            {recentDestinations.length > 0 && (
-              <Text style={styles.sectionTitle}>Recent Destinations</Text>
-            )}
-
             {loading && recentDestinations.length === 0 ? (
               <View style={styles.loaderContainer}>
                 <ActivityIndicator color={theme.colors.primary} />
               </View>
             ) : recentDestinations.length > 0 ? (
-              recentDestinations.map((item: Place, index: number) => (
-                <SwipeableDestinationItem
-                  key={item.id || index}
-                  item={item}
-                  index={index}
-                  isLast={index === recentDestinations.length - 1}
-                  armedRowId={armedRowId}
-                  setArmedRowId={setArmedRowId}
-                  onPress={() => handleSelect("destination", item)}
-                  onDelete={async () => {
-                    if (item.id) await hideRecentDestination(item.id);
-                  }}
-                />
-              ))
+              <>
+                {/*<Text style={styles.sectionTitle}>Recent Destinations</Text>*/}
+                {recentDestinations.map((item: Place, index: number) => (
+                  <SwipeableDestinationItem
+                    key={item.id || index}
+                    item={item}
+                    index={index}
+                    isLast={index === recentDestinations.length - 1}
+                    armedRowId={armedRowId}
+                    setArmedRowId={setArmedRowId}
+                    onPress={() => handleSelect("destination", item)}
+                    onDelete={async () => {
+                      if (item.id) await hideRecentDestination(item.id);
+                    }}
+                  />
+                ))}
+              </>
             ) : !loading ? (
               <View style={styles.driftWelcomeContainer}>
                 <Text style={styles.driftTitle}>Ready to drift somewhere?</Text>
@@ -332,7 +340,6 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
             ) : (
               <View style={styles.errorContainer}>
                 <View style={styles.errorIconCircle}>
-                  <View style={styles.statusDot} />
                   <Navigation
                     size={20}
                     color={theme.colors.textSecondary + "80"}
@@ -350,17 +357,24 @@ const LocationInputTab: React.FC<LocationInputTabProps> = ({
 
 const styles = createStyles({
   root: {
-    // Container-only styles
+    flex: 1,
   },
   container: {
+    flex: 1,
     backgroundColor: theme.colors.surface,
-    paddingBottom: vs(theme.spacing.xl),
   },
   inputSection: {
     flexDirection: "row",
     paddingHorizontal: s(theme.spacing.md),
     paddingTop: vs(theme.spacing.md),
+    paddingBottom: 0, // No padding to prevent the straight cut
     backgroundColor: theme.colors.surface,
+    zIndex: 12, // Keeps input solid above everything
+  },
+  immediateGradient: {
+    height: vs(35), // The width of the fade
+    width: "100%",
+    zIndex: 11, // Above ScrollView, below/after InputSection
   },
   lineDecorator: {
     alignItems: "center",
@@ -390,6 +404,7 @@ const styles = createStyles({
     backgroundColor: theme.colors.background,
     borderRadius: ms(12),
     paddingHorizontal: s(theme.spacing.md),
+    marginBottom: vs(5),
   },
   inputContainer: {
     height: vs(50),
@@ -409,17 +424,23 @@ const styles = createStyles({
     marginLeft: s(theme.spacing.xs),
   },
   scrollableSuggestions: {
-    maxHeight: vs(300),
+    flex: 1,
+    marginTop: vs(-35), // Pull the list UP by the exact height of the gradient
+    zIndex: 1,
+  },
+  scrollContent: {
+    //paddingTop: vs(20), // Buffer to ensure title isn't initially under the solid section
+    paddingBottom: vs(40),
+    paddingHorizontal: s(theme.spacing.md),
   },
   suggestionsContainer: {
-    marginTop: vs(theme.spacing.lg),
-    paddingHorizontal: s(theme.spacing.md),
+    marginTop: vs(theme.spacing.xs),
   },
   sectionTitle: {
     fontSize: ms(11),
     fontWeight: "800",
     color: theme.colors.textSecondary,
-    marginBottom: vs(theme.spacing.sm),
+    //marginBottom: vs(theme.spacing.sm),
     textTransform: "uppercase",
     letterSpacing: s(1.5),
   },
@@ -473,18 +494,6 @@ const styles = createStyles({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: vs(16),
-  },
-  statusDot: {
-    position: "absolute",
-    top: vs(12),
-    right: s(12),
-    width: ms(8),
-    height: ms(8),
-    borderRadius: ms(4),
-    backgroundColor: theme.colors.red,
-    borderWidth: 2,
-    borderColor: theme.colors.surface,
-    zIndex: 1,
   },
   errorText: {
     fontSize: ms(15),

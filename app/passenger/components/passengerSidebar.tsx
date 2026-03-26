@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import {
   Animated,
+  Linking,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -181,20 +182,7 @@ export default forwardRef(function Sidebar(
   }, [isOpen]);
 
   const menuItems = [
-    {
-      label: "Home",
-      screen: userType === "passenger" ? "/passenger" : "/driver",
-      icon: "home" as const,
-    },
-    { label: "Ride History", screen: "/ride-history", icon: "time" as const },
-    {
-      label: "Payment Methods",
-      screen: "/payment-methods",
-      icon: "card" as const,
-    },
-    { label: "Promotions", screen: "/promotions", icon: "gift" as const },
-    { label: "Support", screen: "/support", icon: "help-circle" as const },
-    { label: "Settings", screen: "/settings", icon: "settings" as const },
+    { label: "Drift History", screen: "/ride-history", icon: "time" as const },
   ];
 
   return (
@@ -266,25 +254,59 @@ export default forwardRef(function Sidebar(
           </ScrollView>
 
           <View style={styles.footerContent}>
-            <IRButton
-              title={
-                ["pending", "rejected", "approved"].includes(backendStatus) ||
-                isDriver
-                  ? "Switch to Driver"
-                  : "Become a Driver"
-              }
-              variant="primary"
-              size="md"
-              fullWidth
-              onPress={handleSwitchMode}
-            />
-            <TouchableOpacity onPress={() => console.log("Logout triggered")}>
-              <LogoutButton />
-            </TouchableOpacity>
+            <View style={styles.footerActionsRow}>
+              <TouchableOpacity
+                onPress={() => console.log("Logout triggered")}
+                style={styles.circularLogout}
+              >
+                <LogoutButton />
+              </TouchableOpacity>
+              <IRButton
+                title={
+                  ["pending", "rejected", "approved"].includes(backendStatus) ||
+                  isDriver
+                    ? "Switch to Driver"
+                    : "Become a Driver"
+                }
+                variant="primary"
+                size="md"
+                onPress={handleSwitchMode}
+                style={{ flex: 1 }} // Take up remaining space
+              />
+            </View>
 
             <View style={styles.appInfo}>
               <Text style={styles.versionText}>Drift v1.0.0</Text>
               <Text style={styles.websiteText}>www.drift.app</Text>
+            </View>
+            <View style={styles.socialRow}>
+              <TouchableOpacity
+                onPress={() => {
+                  const message = encodeURIComponent("*Drift Support*\n\n");
+                  Linking.openURL(
+                    `whatsapp://send?phone=263777937111&text=${message}`,
+                  );
+                }}
+                style={styles.socialIcon}
+              >
+                <Ionicons name="logo-whatsapp" size={ms(24)} color="#25D366" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => Linking.openURL("https://facebook.com/driftapp")} // Replace with your link
+                style={styles.socialIcon}
+              >
+                <Ionicons name="logo-facebook" size={ms(24)} color="#1877F2" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() =>
+                  Linking.openURL("https://linkedin.com/company/driftapp")
+                } // Replace with your link
+                style={styles.socialIcon}
+              >
+                <Ionicons name="logo-linkedin" size={ms(24)} color="#0A66C2" />
+              </TouchableOpacity>
             </View>
           </View>
         </SafeAreaView>
@@ -317,6 +339,7 @@ const styles = createStyles({
     bottom: 0,
     backgroundColor: "black",
     zIndex: 99998,
+    elevation: 99998,
   },
   overlayTouchable: { flex: 1 },
   container: {
@@ -327,6 +350,7 @@ const styles = createStyles({
     height: "100%",
     backgroundColor: theme.colors.background,
     zIndex: 99999,
+    elevation: 99999,
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
     shadowRadius: ms(10),
@@ -364,7 +388,26 @@ const styles = createStyles({
     flex: 1,
     fontWeight: "500",
   },
-  footerContent: { padding: s(theme.spacing.lg) },
+  footerContent: {
+    padding: s(theme.spacing.lg),
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  footerActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: s(12), // Space between the switch button and logout
+  },
+  circularLogout: {
+    width: ms(48), // Match the height of your IRButton
+    height: ms(48),
+    borderRadius: ms(24),
+    borderWidth: 1,
+    borderColor: theme.colors.border, // Circle outline
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+  },
   appInfo: { alignItems: "center", marginTop: vs(theme.spacing.lg) },
   versionText: {
     ...typedTypography.caption,
@@ -378,5 +421,19 @@ const styles = createStyles({
     fontSize: ms(12),
     color: theme.colors.textSecondary,
     fontWeight: "500",
+  },
+  socialRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: s(25),
+    marginTop: vs(20),
+    paddingBottom: vs(10),
+  },
+  socialIcon: {
+    padding: s(8),
+    // Optional: add a light surface background if you want them to pop
+    // backgroundColor: theme.colors.surface,
+    // borderRadius: ms(10),
   },
 });
